@@ -16,11 +16,11 @@
 
 ## Current status
 
-**Current milestone:** PR #3 - Shared Modbus TCP layer and WARP telemetry
+**Current milestone:** PR #4 - Modbus profile engine
 
 **Current phase:** 🔵 In development
 
-PR #2 is merged into `hems` and hardware-validated on the final merge candidate. Current work adds shared read-only Modbus TCP transport and WARP telemetry. Real WARP3 validation is still required before merge; the PR remains draft.
+PR #3 is merged at `0925956a4da30e17b3be0eaf836ce1dc182f8a68`. Physical WARP3 validation was deliberately deferred by the project owner and remains open. Deferred physical WARP validation does not block PR #4. Current work adds a bounded, read-only profile engine and import/export.
 
 ## Milestone overview
 
@@ -28,8 +28,8 @@ PR #2 is merged into `hems` and hardware-validated on the final merge candidate.
 |---|---|---|
 | PR #1 | HEMS CI build matrix and project baseline documentation | 🟢 Completed |
 | PR #2 | HEMS core, configuration model and Web UI skeleton | 🟢 Completed |
-| PR #3 | Shared Modbus TCP layer and WARP telemetry | 🔵 In development |
-| PR #4 | Modbus profile engine and profile import/export | ⚪ Planned |
+| PR #3 | Shared Modbus TCP layer and WARP telemetry | 🟡 Validation |
+| PR #4 | Modbus profile engine and profile import/export | 🔵 In development |
 | PR #5 | Marstek Venus E telemetry | ⚪ Planned |
 | PR #6 | Normalized HEMS state and constraint engine | ⚪ Planned |
 | PR #7 | EV protection policy in Shadow mode | ⚪ Planned |
@@ -224,11 +224,11 @@ for the merged source; no additional hardware reflash is claimed.
 
 ## PR #3 - Shared Modbus TCP layer and WARP telemetry
 
-**Status:** 🔵 In development
+**Status:** 🟡 Validation
 
 **Branch:** `feature/warp-modbus-telemetry`
 
-**Target:** `hems` (draft until real WARP3 validation)
+**Target:** `hems` (merged; physical WARP3 validation deferred)
 
 ### Goal
 
@@ -269,14 +269,40 @@ recovery. Tests do not replace real WARP validation.
 - [x] no write request exists in the WARP provider (interface/framing audit and read-only wire tests);
 - [ ] CI green;
 - [ ] real WARP telemetry validated;
-- [ ] PR merged;
+- [x] PR merged;
 - [ ] post-merge smoke test passed.
+
+---
+
+### Owner-reported reference validation
+
+Passed on the real reference ESP32-S3, 8 MB, `generic_esp32s3_usb`, no PSRAM:
+
+- firmware boot;
+- HEMS/WARP configuration persistence across reboot;
+- DNS failure, TCP connect timeout and TCP connection-refused paths;
+- operational values remained Unknown/null rather than false/zero during failure;
+- repeated failure polling remained stable; approximately 446 failed polls in one soak test;
+- free heap remained healthy and largest free block stable;
+- no concerning heap fragmentation trend was observed;
+- Web UI remained responsive;
+- existing OpenDTU functionality remained operational during the local failure-path test.
+
+Still deferred/open:
+
+- real WARP3 Modbus connection;
+- real vehicle connected/charging states and actual WARP telemetry;
+- physical recovery after WARP communication loss;
+- physical packet capture proving FC2/FC4 only;
+- W5500 behavior against an actual WARP where applicable.
+
+These deferred physical WARP checks do not block PR #4. PR #3 is not fully Completed.
 
 ---
 
 ## PR #4 - Modbus profile engine
 
-**Status:** ⚪ Planned
+**Status:** 🔵 In development
 
 ### Goal
 
