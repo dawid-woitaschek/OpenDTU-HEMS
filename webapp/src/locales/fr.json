@@ -1,5 +1,24 @@
 {
+    "hems": {
+        "Settings": "Paramètres HEMS",
+        "Info": "Informations HEMS",
+        "General": "Général",
+        "Enabled": "HEMS activé",
+        "Mode": "Mode de fonctionnement",
+        "Disabled": "Désactivé",
+        "Monitor": "Monitor",
+        "MonitorHint": "Le mode Monitor ne commande aucun matériel. Aucun appareil externe n’est configuré.",
+        "Status": "État HEMS",
+        "State": "État HEMS",
+        "Decision": "Décision",
+        "None": "Aucune",
+        "ExternalDevices": "Appareils externes",
+        "NoneConfigured": "Aucun configuré",
+        "UnsupportedVersion": "Cette version de configuration HEMS n’est pas prise en charge. HEMS reste désactivé."
+    },
     "menu": {
+        "HemsSettings": "Paramètres HEMS",
+        "HemsInfo": "Informations HEMS",
         "LiveView": "Direct",
         "Settings": "Paramètres",
         "NetworkSettings": "Réseau",
@@ -41,7 +60,7 @@
         "No": "Non"
     },
     "wait": {
-        "NotReady": "OpenDTU-OnBattery is not yet ready",
+        "NotReady": "OpenDTU-HEMS is not yet ready",
         "PleaseWait": "Please wait. You will be automatically redirected to the home page."
     },
     "Error": {
@@ -449,9 +468,9 @@
         "PerformReboot": "Effectuer un redémarrage",
         "Reboot": "Redémarrer !",
         "Cancel": "@:base.Cancel",
-        "RebootOpenDTU": "Redémarrer OpenDTU-OnBattery",
+        "RebootOpenDTU": "Redémarrer OpenDTU-HEMS",
         "RebootQuestion": "Voulez-vous vraiment redémarrer l'appareil ?",
-        "RebootHint": "<b>Astuce :</b> Normalement, il n'est pas nécessaire de procéder à un redémarrage manuel. OpenDTU-OnBattery effectue automatiquement tout redémarrage nécessaire (par exemple, après une mise à jour du firmware). Les paramètres sont également adoptés sans redémarrage. Si vous devez redémarrer en raison d'une erreur, veuillez envisager de la signaler à l'adresse suivante <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/issues\" class=\"alert-link\" target=\"_blank\">Github</a>."
+        "RebootHint": "<b>Astuce :</b> Normalement, il n'est pas nécessaire de procéder à un redémarrage manuel. OpenDTU-HEMS effectue automatiquement tout redémarrage nécessaire (par exemple, après une mise à jour du firmware). Les paramètres sont également adoptés sans redémarrage. Si vous devez redémarrer en raison d'une erreur, veuillez envisager de la signaler à l'adresse suivante <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS/issues\" class=\"alert-link\" target=\"_blank\">Github</a>."
     },
     "dtuadmin": {
         "DtuSettings": "Paramètres du DTU",
@@ -492,7 +511,7 @@
         "NtpSettings": "Paramètres NTP",
         "NtpConfiguration": "Configuration du protocole NTP",
         "TimeServer": "Serveur horaire",
-        "TimeServerHint": "La valeur par défaut convient tant que OpenDTU-OnBattery a un accès direct à Internet.",
+        "TimeServerHint": "La valeur par défaut convient tant que OpenDTU-HEMS a un accès direct à Internet.",
         "Timezone": "Fuseau horaire",
         "TimezoneConfig": "Configuration du fuseau horaire",
         "LocationConfiguration": "Géolocalisation",
@@ -505,10 +524,10 @@
         "CIVIL": "Civil dawn (96°)",
         "ASTONOMICAL": "Astronomical dawn (108°)",
         "ManualTimeSynchronization": "Synchronisation manuelle de l'heure",
-        "CurrentOpenDtuTime": "Heure actuelle de l'OpenDTU-OnBattery",
+        "CurrentOpenDtuTime": "Heure actuelle de l'OpenDTU-HEMS",
         "CurrentLocalTime": "Heure locale actuelle",
         "SynchronizeTime": "Synchroniser l'heure",
-        "SynchronizeTimeHint": "<b>Astuce :</b> Vous pouvez utiliser la synchronisation horaire manuelle pour définir l'heure actuelle d'OpenDTU-OnBattery si aucun serveur NTP n'est disponible. Mais attention, en cas de mise sous tension, l'heure est perdue. Notez également que la précision de l'heure sera faussée, car elle ne peut pas être resynchronisée régulièrement et le microcontrôleur ESP32 ne dispose pas d'une horloge temps réel."
+        "SynchronizeTimeHint": "<b>Astuce :</b> Vous pouvez utiliser la synchronisation horaire manuelle pour définir l'heure actuelle d'OpenDTU-HEMS si aucun serveur NTP n'est disponible. Mais attention, en cas de mise sous tension, l'heure est perdue. Notez également que la précision de l'heure sera faussée, car elle ne peut pas être resynchronisée régulièrement et le microcontrôleur ESP32 ne dispose pas d'une horloge temps réel."
     },
     "networkadmin": {
         "NetworkSettings": "Paramètres réseau",
@@ -675,7 +694,7 @@
         "RestoreHeader": "Restaurer le fichier de configuration",
         "Back": "Retour",
         "UploadSuccess": "Succès du téléversement",
-        "RestoreHint": "<b>Note :</b> Cette opération remplace le fichier de configuration par la configuration restaurée et redémarre OpenDTU-OnBattery pour appliquer tous les paramètres.",
+        "RestoreHint": "<b>Note :</b> Cette opération remplace le fichier de configuration par la configuration restaurée et redémarre OpenDTU-HEMS pour appliquer tous les paramètres.",
         "ResetHeader": "Effectuer une réinitialisation d'usine",
         "FactoryResetButton": "Restaurer les paramètres d'usine",
         "ResetHint": "<b>Note :</b> Cliquez sur \"Restaurer les paramètres d'usine\" pour restaurer et initialiser les paramètres d'usine par défaut et redémarrer.",
@@ -769,20 +788,20 @@
         "InvalidFileType": "Type de fichier invalide. Veuillez sélectionner un fichier firmware avec des extensions valides : {validTypes}"
     },
     "about": {
-        "AboutOpendtu": "À propos d'OpenDTU-OnBattery",
+        "AboutOpendtu": "À propos d'OpenDTU-HEMS",
         "Documentation": "Documentation",
-        "DocumentationBody": "La documentation canonique sur les microprogrammes et le matériel est accessible à l'adresse <a href=\"https://opendtu-onbattery.net\" target=\"_blank\">https://opendtu-onbattery.net</a>.",
+        "DocumentationBody": "La documentation HEMS est disponible dans le <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS/tree/hems/docs\" target=\"_blank\">dépôt du projet</a>. La documentation du firmware et du matériel hérités est disponible sur <a href=\"https://opendtu-onbattery.net\" target=\"_blank\">opendtu-onbattery.net</a>.",
         "ProjectOrigin": "Origine du projet",
-        "ProjectOriginBody1": "Ce projet a été démarré suite à cette discussion <a href=\"https://www.mikrocontroller.net/topic/525778\" target=\"_blank\">(Mikrocontroller.net)</a>.",
+        "ProjectOriginBody1": "OpenDTU-HEMS est basé sur OpenDTU-OnBattery. Ce projet a été démarré suite à cette discussion <a href=\"https://www.mikrocontroller.net/topic/525778\" target=\"_blank\">(Mikrocontroller.net)</a>.",
         "ProjectOriginBody2": "Le protocole Hoymiles a été décrypté grâce aux efforts volontaires de nombreux participants. OpenDTU, entre autres, a été développé sur la base de ce travail. Le projet est sous licence Open Source (<a href=\"https://www.gnu.de/documents/gpl-2.0.de.html\" target=\"_blank\">GNU General Public License version 2</a>).",
         "ProjectOriginBody3": "Le logiciel a été développé au mieux de nos connaissances et de nos convictions. Néanmoins, aucune responsabilité ne peut être acceptée en cas de dysfonctionnement ou de perte de garantie de l'onduleur.",
         "ProjectOriginBody4": "OpenDTU et OpenDTU-OnBattery sont disponible gratuitement. Si vous avez payé pour le logiciel, vous avez probablement été arnaqué.",
         "NewsUpdates": "Actualités et mises à jour",
-        "NewsUpdatesBody": "Les nouvelles mises à jour peuvent être trouvées sur <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/releases\" target=\"_blank\">Github</a>.",
+        "NewsUpdatesBody": "Les nouvelles mises à jour peuvent être trouvées sur <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS/releases\" target=\"_blank\">Github</a>.",
         "ErrorReporting": "Rapport d'erreurs",
-        "ErrorReportingBody": "Veuillez signaler les problèmes en utilisant la fonction fournie par <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/issues\" target=\"_blank\">Github</a>.",
+        "ErrorReportingBody": "Veuillez signaler les problèmes en utilisant la fonction fournie par <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS/issues\" target=\"_blank\">Github</a>.",
         "Discussion": "Discussion",
-        "DiscussionBody": "Discutez avec nous sur <a href=\"https://discord.gg/guGQeeSQmE\" target=\"_blank\">Discord</a> ou sur <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/discussions\" target=\"_blank\">Github</a>."
+        "DiscussionBody": "La communauté du projet amont OpenDTU-OnBattery discute sur <a href=\"https://discord.gg/guGQeeSQmE\" target=\"_blank\">Discord</a> et <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/discussions\" target=\"_blank\">Github</a>."
     },
     "hints": {
         "NoTotals": "Enable and configure features, e.g., by registering an inverter, to show data.",

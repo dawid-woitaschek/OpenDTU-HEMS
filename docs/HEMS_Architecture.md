@@ -847,3 +847,35 @@ Depending on scope, completion should include:
 - communication-loss and stale-data behavior verified for active control features.
 
 The current milestone and detailed acceptance criteria are tracked in [`HEMS_Roadmap.md`](HEMS_Roadmap.md).
+
+## PR #2 implementation boundary
+
+The first runtime skeleton implements only `Disabled` and `Monitor`. It has no
+providers, telemetry snapshots, policy decisions or hardware writes. Monitor
+therefore reports `Decision: None` and `External devices: None configured`.
+
+`HemsController` applies configuration at startup, before the Web API starts,
+and when HEMS settings change. Its mode is atomic because HTTP handlers and the
+main loop run on different tasks. There is no scheduled HEMS task yet: without
+telemetry there is no periodic work, including while disabled. Future read-only
+providers should use the existing cooperative scheduler and non-blocking I/O.
+
+The native configuration system reads/writes `hems.version` and `hems.enabled`
+in `/config.json`. An absent block loads version 1 with HEMS disabled; no change
+to the inherited configuration version or migrations is necessary. Unsupported
+HEMS versions remain effectively disabled and cannot be edited through the
+HEMS API. Explicit migrations must be added when a new schema is introduced.
+The existing configuration backup/restore path includes this block. Downgrading
+to firmware without HEMS support may discard it on the next configuration save;
+back up configuration before downgrading.
+
+The UI uses `/api/hems/config` (authenticated GET/POST) and `/api/hems/status`
+(GET with the existing read-only access policy). Settings only toggle enabled;
+the effective modes are Disabled and Monitor.
+
+Firmware commit/tag links and the opt-in browser-side GitHub comparison use
+`dawid-woitaschek/OpenDTU-HEMS`. The old comparison queried the upstream repository,
+where HEMS commits and the `hems` branch do not exist. This is a branch comparison,
+not an automatic release installer. GitHub rate limits, network failures and
+unpublished local commits can still make version information unavailable. A new
+release/update architecture is outside this milestone.

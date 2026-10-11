@@ -13,6 +13,7 @@
 #include "SerialPortManager.h"
 #include <battery/Controller.h>
 #include <gridcharger/Controller.h>
+#include <hems/Controller.h>
 #include "MqttHandleDtu.h"
 #include "MqttHandleHass.h"
 #include "MqttHandleInverter.h"
@@ -59,7 +60,7 @@ void setup()
     esp_log_level_set("*", ESP_LOG_VERBOSE);
     esp_log_level_set("CORE", ESP_LOG_ERROR);
 
-    ESP_LOGI(TAG, "Starting OpenDTU");
+    ESP_LOGI(TAG, "Starting OpenDTU-HEMS");
 
     // Initialize file system
     ESP_LOGI(TAG, "Mounting FS...");
@@ -128,6 +129,8 @@ void setup()
     MqttHandleHass.init(scheduler);
     MqttHandlePowerLimiter.init(scheduler);
     MqttHandlePowerLimiterHass.init(scheduler);
+
+    HemsController.init();
 
     // Initialize WebApi
     ESP_LOGI(TAG, "Initializing WebApi...");

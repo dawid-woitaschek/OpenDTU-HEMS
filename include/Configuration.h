@@ -11,6 +11,7 @@
 #define CONFIG_FILENAME "/config.json"
 #define CONFIG_VERSION 0x00011e00 // 0.1.30 // make sure to clean all after change
 #define CONFIG_VERSION_ONBATTERY 8
+#define CONFIG_VERSION_HEMS 1
 
 #define WIFI_MAX_SSID_STRLEN 32
 #define WIFI_MAX_PASSWORD_STRLEN 64
@@ -56,6 +57,12 @@
 #define ZENDURE_MAX_CLIENTID_STRLEN 23
 #define ZENDURE_MAX_SECRET_STRLEN   32
 #define ZENDURE_MAX_APPKEY_STRLEN   16
+
+struct HEMS_CONFIG_T {
+    uint32_t Version;
+    bool Enabled;
+};
+using HemsConfig = struct HEMS_CONFIG_T;
 
 struct CHANNEL_CONFIG_T {
     uint16_t MaxChannelPower;
@@ -448,6 +455,7 @@ struct CONFIG_T {
         uint8_t Brightness;
     } Led_Single[PINMAPPING_LED_COUNT];
 
+    HemsConfig Hems;
     SolarChargerConfig SolarCharger;
 
     struct PowerMeterConfig {
@@ -505,6 +513,8 @@ public:
 
     int8_t getIndexForLogModule(const String& moduleName) const;
 
+    static void serializeHemsConfig(HemsConfig const& source, JsonObject& target);
+    static void deserializeHemsConfig(JsonObject const& source, HemsConfig& target);
     static void serializeHttpRequestConfig(HttpRequestConfig const& source, JsonObject& target, bool includeCredentials);
     static void serializeSolarChargerConfig(SolarChargerConfig const& source, JsonObject& target);
     static void serializeSolarChargerMqttConfig(SolarChargerMqttConfig const& source, JsonObject& target);

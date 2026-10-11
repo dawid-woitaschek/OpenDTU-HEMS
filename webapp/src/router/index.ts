@@ -1,3 +1,5 @@
+import HemsAdminView from '@/views/HemsAdminView.vue';
+import HemsInfoView from '@/views/HemsInfoView.vue';
 import AboutView from '@/views/AboutView.vue';
 import BatteryAdminView from '@/views/BatteryAdminView.vue';
 import GridChargerAdminView from '@/views/GridChargerAdminView.vue';
@@ -37,6 +39,16 @@ const router = createRouter({
         });
     },
     routes: [
+        {
+            path: '/settings/hems',
+            name: 'HEMS Settings',
+            component: HemsAdminView,
+        },
+        {
+            path: '/info/hems',
+            name: 'HEMS Info',
+            component: HemsInfoView,
+        },
         {
             path: '/',
             name: 'Home',

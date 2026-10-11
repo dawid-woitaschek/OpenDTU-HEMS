@@ -16,17 +16,18 @@
 
 ## Current status
 
-**Current milestone:** PR #1 - HEMS build infrastructure  
-**Current phase:** 🟡 Validation
+**Current milestone:** PR #2 - HEMS core, configuration model and Web UI skeleton
 
-The current work establishes a reproducible firmware build pipeline before HEMS runtime functionality is added.
+**Current phase:** 🔵 In development
+
+PR #1 is merged into `hems` and validated on the reference device. The current work adds a disabled-by-default HEMS runtime, versioned configuration and the first settings/info pages without external integrations or hardware writes.
 
 ## Milestone overview
 
 | Milestone | Scope | Status |
 |---|---|---|
-| PR #1 | HEMS CI build matrix and project baseline documentation | 🟡 Validation |
-| PR #2 | HEMS core, configuration model and Web UI skeleton | ⚪ Planned |
+| PR #1 | HEMS CI build matrix and project baseline documentation | 🟢 Completed |
+| PR #2 | HEMS core, configuration model and Web UI skeleton | 🔵 In development |
 | PR #3 | Shared Modbus TCP layer and WARP telemetry | ⚪ Planned |
 | PR #4 | Modbus profile engine and profile import/export | ⚪ Planned |
 | PR #5 | Marstek Venus E telemetry | ⚪ Planned |
@@ -45,7 +46,8 @@ The numbering above describes the intended implementation order. Actual GitHub p
 
 ## PR #1 - HEMS build infrastructure
 
-**Status:** 🟡 Validation  
+**Status:** 🟢 Completed
+
 **Branch:** `ci/hems-build-matrix`  
 **GitHub PR:** `#1`
 
@@ -93,18 +95,18 @@ opendtufusionv2_poe
 - [x] upstream OpenDTU-OnBattery tests succeed;
 - [x] architecture document added;
 - [x] living roadmap added;
-- [ ] inherited/upstream artifact messaging reviewed and cleaned up if necessary;
-- [ ] baseline firmware flashed to reference Fusion v2;
-- [ ] configuration remains intact after OTA update;
-- [ ] Web UI smoke test passed;
-- [ ] LAN/Wi-Fi networking smoke test passed;
-- [ ] inverter communication smoke test passed;
-- [ ] configured power-meter integration smoke test passed;
-- [ ] DPL smoke test passed;
-- [ ] MQTT smoke test passed where configured;
-- [ ] reboot smoke test passed;
-- [ ] PR merged into `hems`;
-- [ ] post-merge smoke test completed.
+- [x] inherited/upstream artifact messaging reviewed (HEMS workflow and PR artifact index identify this fork);
+- [x] baseline firmware flashed to reference Fusion v2;
+- [x] configuration remains intact after OTA update;
+- [x] Web UI smoke test passed;
+- [x] LAN/Wi-Fi networking smoke test passed;
+- [x] inverter communication smoke test passed;
+- [x] configured power-meter integration smoke test passed;
+- [x] DPL smoke test passed;
+- [x] MQTT smoke test passed where configured;
+- [x] reboot smoke test passed;
+- [x] PR merged into `hems`;
+- [x] post-merge smoke test completed.
 
 ### Reference hardware for validation
 
@@ -150,7 +152,11 @@ PR #1 is complete only after the build pipeline is merged and a generated baseli
 
 ## PR #2 - HEMS core and Web UI skeleton
 
-**Status:** ⚪ Planned
+**Status:** 🔵 In development
+
+**Branch:** `feature/hems-core`
+
+**Target:** `hems`
 
 ### Goal
 
@@ -159,7 +165,7 @@ Introduce the smallest possible real HEMS runtime skeleton without external devi
 ### Planned scope
 
 - HEMS core controller;
-- normalized base types;
+- only the base operating-mode type needed by this milestone;
 - versioned HEMS configuration block;
 - default state: disabled;
 - operating modes initially exposed as `Disabled` and `Monitor` only;

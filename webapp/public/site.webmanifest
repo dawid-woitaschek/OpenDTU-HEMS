@@ -1,6 +1,6 @@
 {
-    "name": "OpenDTU",
-    "short_name": "OpenDTU",
+    "name": "OpenDTU-HEMS",
+    "short_name": "OpenDTU-HEMS",
     "display": "standalone",
     "orientation": "portrait",
     "icons": [

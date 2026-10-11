@@ -37,10 +37,15 @@ def get_build_version():
 
 
 def get_build_branch():
-    try:
-        branch_name = porcelain.active_branch('.').decode('utf-8')  # '.' refers to the repository root dir
-    except Exception as err:
-        branch_name = "master"
+    # GitHub Actions checks out pull requests as a detached synthetic merge commit.
+    # Prefer the workflow-provided source/ref name there, then fall back to the
+    # actual local Git branch for normal/local builds.
+    branch_name = os.getenv("GITHUB_HEAD_REF") or os.getenv("GITHUB_REF_NAME")
+    if not branch_name:
+        try:
+            branch_name = porcelain.active_branch('.').decode('utf-8')  # '.' refers to the repository root dir
+        except Exception:
+            branch_name = "unknown"
     print("Firmware Branch: " + branch_name)
     return branch_name
 
@@ -82,5 +87,6 @@ def do_main():
 
         # Add the created file to the buildfiles - platformio knows how to handle *.c files
         env.AppendUnique(PIOBUILDFILES=[targetfile])
+
 
 do_main()
