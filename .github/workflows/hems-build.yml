@@ -100,3 +100,69 @@ jobs:
           name: opendtu-hems-${{ matrix.environment }}
           path: .pio/build/${{ matrix.environment }}/opendtu-hems-*.bin
           if-no-files-found: error
+
+  generate_pr_artifacts_comment:
+    name: Generate PR artifact index
+    if: github.event_name == 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      pull-requests: read
+
+    steps:
+      - name: Generate artifact links
+        id: artifact-links
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              {
+                owner,
+                repo,
+                run_id: context.runId,
+              }
+            );
+
+            const firmwareArtifacts = artifacts
+              .filter((artifact) => artifact.name.startsWith('opendtu-hems-'))
+              .sort((a, b) => a.name.localeCompare(b.name));
+
+            if (!firmwareArtifacts.length) {
+              core.setFailed('No OpenDTU-HEMS firmware artifacts found');
+              return;
+            }
+
+            let body = '### OpenDTU-HEMS Build Artifacts\n\n';
+            body += 'Firmware built from this pull request:\n\n';
+
+            for (const artifact of firmwareArtifacts) {
+              body += `* [${artifact.name}.zip](https://nightly.link/${owner}/${repo}/actions/artifacts/${artifact.id}.zip)\n`;
+            }
+
+            body += '\n### Notice\n';
+            body += '* Each ZIP contains the OTA binary and the factory binary for that target. Extract the ZIP before flashing.\n';
+            body += '* Use the normal `.bin` for a compatible OTA update. Use `.factory.bin` only for a full factory flash when appropriate.\n';
+            body += `* [Successful HEMS build run](https://github.com/${owner}/${repo}/actions/runs/${context.runId})\n`;
+            body += `* Built from workflow commit \`${context.sha}\`.\n`;
+
+            core.setOutput('body', body);
+
+      - name: Store PR artifact index
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ steps.artifact-links.outputs.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p pr
+          printf '%s\n' "$COMMENT_BODY" > "pr/${PR_NUMBER}.md"
+
+      - name: Upload PR artifact index
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr
+          path: pr/
+          retention-days: 1
+          overwrite: true
