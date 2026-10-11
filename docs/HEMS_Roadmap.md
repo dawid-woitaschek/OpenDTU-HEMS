@@ -342,14 +342,15 @@ Requirements:
 - [x] profile size bounded (6144 bytes, 24 entries, four imported slots);
 - [x] profile schema version handled explicitly (strict v1 only);
 - [x] source/provenance visible in diagnostics/UI;
-- [ ] CI green;
+- [x] CI green (eight HEMS targets, six inherited targets and native tests at `9fdcc9fd26d9104e5efd9637434e5f83b8db57f4`);
 - [ ] reference hardware import test passed;
 - [ ] PR merged.
 
 Implementation and remaining hardware checks: [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md).
 Native parser/decoder/store and existing WARP/Modbus tests, configuration tests,
 Web lint/format/type-check/build and representative no-PSRAM build pass locally.
-CI and physical ESP32 import/export remain separate gates; PR #4 remains draft.
+GitHub CI is green; physical ESP32 import/export remains required. PR #4 remains draft.
+Firmware artifacts: [HEMS build](https://github.com/dawid-woitaschek/OpenDTU-HEMS/actions/runs/38175440344).
 
 ---
 
