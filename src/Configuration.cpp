@@ -42,6 +42,20 @@ double ConfigurationClass::roundedFloat(float val)
     return static_cast<int>(val * 100 + (val > 0 ? 0.5 : -0.5)) / 100.0;
 }
 
+void ConfigurationClass::serializeHemsConfig(HemsConfig const& source, JsonObject& target)
+{
+    target["version"] = source.Version;
+    target["enabled"] = source.Enabled;
+}
+
+void ConfigurationClass::deserializeHemsConfig(JsonObject const& source, HemsConfig& target)
+{
+    // An absent version is legacy/default; malformed versions are unsupported.
+    target.Version = source["version"].isNull() ? CONFIG_VERSION_HEMS
+        : (source["version"].is<uint32_t>() ? source["version"].as<uint32_t>() : 0);
+    target.Enabled = source["enabled"].is<bool>() && source["enabled"].as<bool>();
+}
+
 void ConfigurationClass::serializeHttpRequestConfig(HttpRequestConfig const& source, JsonObject& target, bool includeCredentials)
 {
     JsonObject target_http_config = target["http_request"].to<JsonObject>();
@@ -303,6 +317,9 @@ bool ConfigurationClass::write()
     cfg["version"] = config.Cfg.Version;
     cfg["version_onbattery"] = config.Cfg.VersionOnBattery;
     cfg["save_count"] = config.Cfg.SaveCount;
+
+    JsonObject hems = doc["hems"].to<JsonObject>();
+    serializeHemsConfig(config.Hems, hems);
 
     JsonObject wifi = doc["wifi"].to<JsonObject>();
     wifi["ssid"] = config.WiFi.Ssid;
@@ -769,6 +786,9 @@ bool ConfigurationClass::read()
     config.Cfg.Version = cfg["version"] | CONFIG_VERSION;
     config.Cfg.VersionOnBattery = cfg["version_onbattery"] | version_onbattery;
     config.Cfg.SaveCount = cfg["save_count"] | 0;
+
+    JsonObject hems = doc["hems"];
+    deserializeHemsConfig(hems, config.Hems);
 
     JsonObject wifi = doc["wifi"];
     strlcpy(config.WiFi.Ssid, wifi["ssid"] | WIFI_SSID, sizeof(config.WiFi.Ssid));

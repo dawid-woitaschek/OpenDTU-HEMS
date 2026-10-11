@@ -8,7 +8,7 @@
 
                 <BIconSun v-else width="30" height="30" class="d-inline-block align-text-top text-warning" />
 
-                <span style="margin-left: 0.5rem"> OpenDTU-OnBattery </span>
+                <span style="margin-left: 0.5rem"> OpenDTU-HEMS </span>
                 <span class="text-info mx-2"
                     ><BIconBatteryCharging width="20" height="20" class="d-inline-block align-text-center"
                 /></span>
@@ -102,6 +102,11 @@
                                 }}</router-link>
                             </li>
                             <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/settings/hems">{{
+                                    $t('menu.HemsSettings')
+                                }}</router-link>
+                            </li>
+                            <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/device">{{
                                     $t('menu.DeviceManager')
                                 }}</router-link>
@@ -160,6 +165,11 @@
                             </li>
                             <li>
                                 <hr class="dropdown-divider" />
+                            </li>
+                            <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/info/hems">{{
+                                    $t('menu.HemsInfo')
+                                }}</router-link>
                             </li>
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/info/console">{{
