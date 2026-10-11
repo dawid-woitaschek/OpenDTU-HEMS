@@ -54,8 +54,11 @@ most 1e12; scale must be nonzero. Negative scale is useful for power sign
 conversion. Sentinel is at most 65535 for a 16-bit entry, otherwise uint32.
 Address plus count must not exceed the 65536-address wire space.
 
-Numeric results use double precision; the existing ArduinoJson dependency may
-normalize decimal representations with its usual numeric precision. float32 uses
+Numeric results use double precision. Settings are normalized through the existing
+ArduinoJson canonical decimal representation before conversion to double. This
+avoids promoting compact float parsing noise into range failures at decimal
+scaling boundaries (e.g. 1000 * 0.1 at a maximum of 100). Canonical export retains
+ArduinoJson numeric serialization precision. float32 uses
 IEEE-754 bits, and NaN/infinity are invalid. Decode requires exact payload length;
 range violations, sentinels and malformed payloads produce `valid:false,value:null`.
 Valid numeric zero and boolean false remain valid. Transport errors cannot be
@@ -247,7 +250,7 @@ roadmap-only). Application flash includes the embedded compressed WebApp:
 
 | Measurement | PR #3 baseline | PR #4 local candidate | Delta |
 |---|---:|---:|---:|
-| Application flash | 2602009 B | 2631265 B | +29256 B |
+| Application flash | 2602009 B | 2630965 B | +28956 B |
 | Static RAM | 100096 B | 100128 B | +32 B |
 
 GitHub merge-ref build metadata may shift the final artifact size slightly.

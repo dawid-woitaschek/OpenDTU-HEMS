@@ -23,6 +23,10 @@ int main() {
     std::string example = exampleJson();
     assert(parse(example.data(), example.size(), p, error));
     assert(p.entryCount == 1 && std::abs(p.entries[0].scale - .1) < 1e-7);
+    uint8_t fullSoc[] { 3, 0xe8 }, overSoc[] { 3, 0xe9 };
+    assert(decode(p.entries[0], fullSoc, sizeof(fullSoc)).valid);
+    assert(decode(p.entries[0], fullSoc, sizeof(fullSoc)).number == 100);
+    assert(!decode(p.entries[0], overSoc, sizeof(overSoc)).valid);
     auto checkBad = [&](std::string const& s) { Profile old = p; assert(!parse(s.data(), s.size(), p, error)); assert(error); assert(!memcmp(&old, &p, sizeof(p))); };
     for (auto s : {
         replace(example, "profile/v1", "profile/v2"),

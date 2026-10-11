@@ -89,7 +89,16 @@ bool text(JsonVariantConst value, char* dest, size_t capacity, bool optional = f
 }
 bool numeric(JsonVariantConst value, double& out) {
     if (!value.is<double>() || value.is<bool>()) { return false; }
-    out = value.as<double>(); return std::isfinite(out) && std::abs(out) <= 1e12;
+    if (!std::isfinite(value.as<double>()) || std::abs(value.as<double>()) > 1e12) { return false; }
+    // ArduinoJson stores short decimals as float. Use its canonical decimal
+    // representation, then convert to double, rather than promoting binary float
+    // noise (e.g. 0.1 -> 0.10000000149 and rejecting a legitimate 100% boundary).
+    char decimal[48];
+    size_t length = serializeJson(value, decimal, sizeof(decimal));
+    if (length == 0 || length >= sizeof(decimal)) { return false; }
+    char* end = nullptr;
+    out = strtod(decimal, &end);
+    return end == decimal + length && std::isfinite(out) && std::abs(out) <= 1e12;
 }
 bool equals(JsonVariantConst value, char const* expected) {
     return value.is<char const*>() && !strcmp(value.as<char const*>(), expected);
