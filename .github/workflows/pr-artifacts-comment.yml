@@ -3,7 +3,7 @@ name: Comment on pull request
 # https://github.com/live-codes/pr-comment-from-artifact/blob/main/action.yml
 on:
   workflow_run:
-    workflows: ["OpenDTU-OnBattery Build"] # the workflow that created the artifact
+    workflows: ["OpenDTU-HEMS Build"]
     types:
       - completed
 
@@ -21,21 +21,23 @@ jobs:
       uses: actions/github-script@v9
       with:
         script: |
-          var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
               repo: context.repo.repo,
               run_id: context.payload.workflow_run.id,
           });
-          var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
-            return artifact.name == "pr";
-          })[0];
-          var download = await github.rest.actions.downloadArtifact({
+          const matchArtifact = artifacts.data.artifacts.find((artifact) => artifact.name == "pr");
+          if (!matchArtifact) {
+            core.setFailed("No PR artifact index found");
+            return;
+          }
+          const download = await github.rest.actions.downloadArtifact({
               owner: context.repo.owner,
               repo: context.repo.repo,
               artifact_id: matchArtifact.id,
               archive_format: 'zip',
           });
-          var fs = require('fs');
+          const fs = require('fs');
           fs.writeFileSync('${{github.workspace}}/pr.zip', Buffer.from(download.data));
 
     - name: "Extract artifact"
