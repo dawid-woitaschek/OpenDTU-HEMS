@@ -114,7 +114,7 @@ HttpRequestResult HttpGetter::performGetRequest()
     }
 
     upTmpHttpClient->setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    upTmpHttpClient->setUserAgent("OpenDTU-OnBattery");
+    upTmpHttpClient->setUserAgent("OpenDTU-HEMS");
     upTmpHttpClient->setConnectTimeout(_config.Timeout);
     upTmpHttpClient->setTimeout(_config.Timeout);
     for (auto const& h : _additionalHeaders) {

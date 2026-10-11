@@ -421,7 +421,7 @@
             "Cancel": "@:base.Cancel",
             "RebootOpenDTU": "Uruchom ponownie OpenDTU",
             "RebootQuestion": "Czy na pewno chcesz zrestartować DTU?",
-            "RebootHint": "<b>Uwaga:</b> Zwykle nie ma potrzeby ponownego uruchamiania OpenDTU, ponieważ w razie potrzeby automatycznie uruchamia się ponownie (na przykład po aktualizacji oprogramowania sprzętowego). Zmiany w konfiguracji są zapamiętywane natychmiast, bez konieczności ponownego uruchamiania. Jeśli konieczne jest ponowne uruchomienie komputera z powodu błędu. Zgłoś to nam, klikając <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/issues\" class=\"alert-link\" target=\"_blank\">https://github.com/hoylabs/OpenDTU-OnBattery/issues</a>."
+            "RebootHint": "<b>Uwaga:</b> Zwykle nie ma potrzeby ponownego uruchamiania OpenDTU, ponieważ w razie potrzeby automatycznie uruchamia się ponownie (na przykład po aktualizacji oprogramowania sprzętowego). Zmiany w konfiguracji są zapamiętywane natychmiast, bez konieczności ponownego uruchamiania. Jeśli konieczne jest ponowne uruchomienie komputera z powodu błędu. Zgłoś to nam, klikając <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS/issues\" class=\"alert-link\" target=\"_blank\">https://github.com/dawid-woitaschek/OpenDTU-HEMS/issues</a>."
         },
         "dtuadmin": {
             "DtuSettings": "Ustawienia DTU",
@@ -646,16 +646,16 @@
             "Documentation": "Dokumentacja",
             "DocumentationBody": "Dokumentacja oprogramowania sprzętowego i sprzętu jest dostępna tutaj: <a href=\"https://www.opendtu.solar\" target=\"_blank\">https://www.opendtu.solar</a>",
             "ProjectOrigin": "Pochodzenie projektu",
-            "ProjectOriginBody1": "Ten projekt rozpoczął się od <a href=\"https://www.mikrocontroller.net/topic/525778\" target=\"_blank\">tego wątku. (Mikrocontroller.net)</a>",
+            "ProjectOriginBody1": "OpenDTU-OnBattery: Ten projekt rozpoczął się od <a href=\"https://www.mikrocontroller.net/topic/525778\" target=\"_blank\">tego wątku. (Mikrocontroller.net)</a>",
             "ProjectOriginBody2": "Protokół Hoymiles został odszyfrowany dzięki dobrowolnemu wkładowi wielu programistów. Dzięki tej pracy powstał między innymi OpenDTU. Projekt rozpowszechniany jest na licencji Open Source (<a href=\"https://www.gnu.de/documents/gpl-2.0.de.html\" target=\"_blank\">GNU Powszechna Licencja Publiczna wersja 2</a>).",
             "ProjectOriginBody3": "Oprogramowanie zostało opracowane zgodnie z naszą najlepszą wiedzą i przekonaniem. Jednakże nie ponosimy żadnej odpowiedzialności za nieprawidłowe działanie lub utratę gwarancji na falownik.",
             "ProjectOriginBody4": "OpenDTU jest dostępne za darmo. Jeśli zapłaciłeś za to oprogramowanie, prawdopodobnie zostałeś oszukany.",
             "NewsUpdates": "Nowości i aktualizacje",
-            "NewsUpdatesBody": "Nowe aktualizacje są dostępne na Githubie: <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery\" target=\"_blank\">https://github.com/hoylabs/OpenDTU-OnBattery</a>",
+            "NewsUpdatesBody": "Nowe aktualizacje są dostępne na Githubie: <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS\" target=\"_blank\">https://github.com/dawid-woitaschek/OpenDTU-HEMS</a>",
             "ErrorReporting": "Raportowanie błędów",
-            "ErrorReportingBody": "Prosimy o zgłaszanie wszelkich problemów związanych z korzystaniem z funkcji platformy <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/issues\" target=\"_blank\">Github</a>",
+            "ErrorReportingBody": "Prosimy o zgłaszanie wszelkich problemów związanych z korzystaniem z funkcji platformy <a href=\"https://github.com/dawid-woitaschek/OpenDTU-HEMS/issues\" target=\"_blank\">Github</a>",
             "Discussion": "Dyskusje",
-            "DiscussionBody": "Możesz rozpocząć z nami dyskusję na <a href=\"https://discord.gg/guGQeeSQmE\" target=\"_blank\">Discord</a> o <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/discussions\" target=\"_blank\">Github</a>"
+            "DiscussionBody": "OpenDTU-OnBattery: Możesz rozpocząć z nami dyskusję na <a href=\"https://discord.gg/guGQeeSQmE\" target=\"_blank\">Discord</a> o <a href=\"https://github.com/hoylabs/OpenDTU-OnBattery/discussions\" target=\"_blank\">Github</a>"
         },
         "hints": {
             "RadioProblem": "Nie można komunikować się z wybranym modułem radiowym. Sprawdź połączenia z radiem.",

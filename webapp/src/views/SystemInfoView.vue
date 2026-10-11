@@ -102,10 +102,10 @@ export default defineComponent({
             }
 
             const fetchUrl =
-                'https://api.github.com/repos/hoylabs/OpenDTU-OnBattery/compare/' +
-                this.systemDataList.git_hash +
+                'https://api.github.com/repos/dawid-woitaschek/OpenDTU-HEMS/compare/' +
+                encodeURIComponent(this.systemDataList.git_hash) +
                 '...' +
-                this.systemDataList.git_branch;
+                encodeURIComponent(this.systemDataList.git_branch);
 
             fetch(fetchUrl)
                 .then((response) => {
