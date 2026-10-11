@@ -58,9 +58,12 @@
 #define ZENDURE_MAX_SECRET_STRLEN   32
 #define ZENDURE_MAX_APPKEY_STRLEN   16
 
+#include <hems/warp/Settings.h>
+
 struct HEMS_CONFIG_T {
     uint32_t Version;
     bool Enabled;
+    WarpConfig Warp;
 };
 using HemsConfig = struct HEMS_CONFIG_T;
 
@@ -515,6 +518,7 @@ public:
 
     static void serializeHemsConfig(HemsConfig const& source, JsonObject& target);
     static void deserializeHemsConfig(JsonObject const& source, HemsConfig& target);
+    static bool deserializeWarpConfig(JsonVariantConst source, WarpConfig& target);
     static void serializeHttpRequestConfig(HttpRequestConfig const& source, JsonObject& target, bool includeCredentials);
     static void serializeSolarChargerConfig(SolarChargerConfig const& source, JsonObject& target);
     static void serializeSolarChargerMqttConfig(SolarChargerMqttConfig const& source, JsonObject& target);

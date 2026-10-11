@@ -46,6 +46,10 @@ void ConfigurationClass::serializeHemsConfig(HemsConfig const& source, JsonObjec
 {
     target["version"] = source.Version;
     target["enabled"] = source.Enabled;
+    JsonObject warp = target["warp"].to<JsonObject>();
+    warp["enabled"] = source.Warp.Enabled;
+    warp["host"] = source.Warp.Host;
+    warp["port"] = source.Warp.Port;
 }
 
 void ConfigurationClass::deserializeHemsConfig(JsonObject const& source, HemsConfig& target)
@@ -54,6 +58,26 @@ void ConfigurationClass::deserializeHemsConfig(JsonObject const& source, HemsCon
     target.Version = source["version"].isNull() ? CONFIG_VERSION_HEMS
         : (source["version"].is<uint32_t>() ? source["version"].as<uint32_t>() : 0);
     target.Enabled = source["enabled"].is<bool>() && source["enabled"].as<bool>();
+    // Additive version-1 extension: PR #2 and legacy configs have no warp block.
+    // Malformed provider settings disable WARP without disabling valid HEMS.
+    deserializeWarpConfig(source["warp"], target.Warp);
+}
+
+bool ConfigurationClass::deserializeWarpConfig(JsonVariantConst source, WarpConfig& target)
+{
+    target = {};
+    if (source.isNull()) { return true; }
+    if (!source.is<JsonObjectConst>() || !source["enabled"].is<bool>()
+            || !source["host"].is<char const*>() || !source["port"].is<uint16_t>()
+            || source["port"].as<uint16_t>() == 0) { return false; }
+    auto host = source["host"].as<char const*>();
+    bool enabled = source["enabled"].as<bool>();
+    // Reject truncation/URLs/whitespace; allow an empty host only while disabled.
+    if ((host[0] != '\0' || enabled) && !validWarpHost(host)) { return false; }
+    target.Enabled = enabled;
+    strlcpy(target.Host, host, sizeof(target.Host));
+    target.Port = source["port"].as<uint16_t>();
+    return true;
 }
 
 void ConfigurationClass::serializeHttpRequestConfig(HttpRequestConfig const& source, JsonObject& target, bool includeCredentials)

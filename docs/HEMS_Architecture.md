@@ -879,3 +879,18 @@ where HEMS commits and the `hems` branch do not exist. This is a branch comparis
 not an automatic release installer. GitHub rate limits, network failures and
 unpublished local commits can still make version information unavailable. A new
 release/update architecture is outside this milestone.
+
+## PR #3 implementation boundary
+
+The controller now dispatches a WARP-specific read-only provider through the
+existing scheduler. A small shared Modbus TCP client uses bounded lwIP socket
+operations in one isolated worker, outside the scheduler and snapshot mutex.
+It has no write interface and shares the native Wi-Fi/W5500 networking stack.
+WARP telemetry does not feed DPL or any policy. Optional meter features are
+queried before measurements; failures/staleness become null API values.
+The normalized store, generic profiles and device control remain future work.
+
+The version-1 configuration gains an optional disabled-by-default WARP block.
+This additive change preserves PR #2 configurations without migration.
+See [HEMS_WARP.md](HEMS_WARP.md) for provenance, timing/state semantics, resource
+bounds, tests and the required physical validation gate.

@@ -130,7 +130,7 @@ void setup()
     MqttHandlePowerLimiter.init(scheduler);
     MqttHandlePowerLimiterHass.init(scheduler);
 
-    HemsController.init();
+    HemsController.init(scheduler);
 
     // Initialize WebApi
     ESP_LOGI(TAG, "Initializing WebApi...");

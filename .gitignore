@@ -8,3 +8,5 @@ webapp_dist/
 /.idea
 /test/test_overscaling
 /test/test_chargedistributor
+/test/test_warp
+/test/test_modbus_client

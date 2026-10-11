@@ -16,19 +16,19 @@
 
 ## Current status
 
-**Current milestone:** PR #2 - HEMS core, configuration model and Web UI skeleton
+**Current milestone:** PR #3 - Shared Modbus TCP layer and WARP telemetry
 
 **Current phase:** 🔵 In development
 
-PR #1 is merged into `hems` and validated on the reference device. The current work adds a disabled-by-default HEMS runtime, versioned configuration and the first settings/info pages without external integrations or hardware writes.
+PR #2 is merged into `hems` and hardware-validated on the final merge candidate. Current work adds shared read-only Modbus TCP transport and WARP telemetry. Real WARP3 validation is still required before merge; the PR remains draft.
 
 ## Milestone overview
 
 | Milestone | Scope | Status |
 |---|---|---|
 | PR #1 | HEMS CI build matrix and project baseline documentation | 🟢 Completed |
-| PR #2 | HEMS core, configuration model and Web UI skeleton | 🔵 In development |
-| PR #3 | Shared Modbus TCP layer and WARP telemetry | ⚪ Planned |
+| PR #2 | HEMS core, configuration model and Web UI skeleton | 🟢 Completed |
+| PR #3 | Shared Modbus TCP layer and WARP telemetry | 🔵 In development |
 | PR #4 | Modbus profile engine and profile import/export | ⚪ Planned |
 | PR #5 | Marstek Venus E telemetry | ⚪ Planned |
 | PR #6 | Normalized HEMS state and constraint engine | ⚪ Planned |
@@ -152,7 +152,7 @@ PR #1 is complete only after the build pipeline is merged and a generated baseli
 
 ## PR #2 - HEMS core and Web UI skeleton
 
-**Status:** 🔵 In development
+**Status:** 🟢 Completed
 
 **Branch:** `feature/hems-core`
 
@@ -199,22 +199,36 @@ External devices   None configured
 
 ### Acceptance criteria
 
-- [ ] legacy configuration loads without HEMS settings;
-- [ ] HEMS defaults to disabled;
-- [ ] HEMS config persists across reboot;
-- [ ] Settings page works;
-- [ ] Info page works;
-- [ ] existing OpenDTU functionality remains unchanged while HEMS is disabled;
-- [ ] CI green;
-- [ ] reference Fusion smoke test passed;
-- [ ] PR merged;
-- [ ] post-merge smoke test passed.
+- [x] legacy configuration loads without HEMS settings (also covered by PR #3 native JSON tests);
+- [x] HEMS defaults to disabled;
+- [x] HEMS config persists across reboot;
+- [x] Settings page works;
+- [x] Info page works;
+- [x] existing OpenDTU functionality remains unchanged while HEMS is disabled;
+- [x] CI green;
+- [x] reference Fusion smoke test passed;
+- [x] PR merged;
+- [x] final PR merge candidate hardware validation passed;
+
+A redundant post-merge reflash was intentionally skipped and is not claimed.
+
+Validation used the final PR head combined with the same `hems` base on the
+reference ESP32-S3 (`generic_esp32s3_usb`, no PSRAM). Configuration persistence,
+Disabled/Monitor transitions, reboot, export, UI, MQTT, Power Meter, Hoymiles
+communication and basic DPL checks passed, as did repository links, branch metadata
+and GitHub firmware comparison. Squash merge `4ec14c32dc3ad40fd94490c61051c45596b03ea2`
+introduced no additional functional source changes. GitHub Actions is authoritative
+for the merged source; no additional hardware reflash is claimed.
 
 ---
 
 ## PR #3 - Shared Modbus TCP layer and WARP telemetry
 
-**Status:** ⚪ Planned
+**Status:** 🔵 In development
+
+**Branch:** `feature/warp-modbus-telemetry`
+
+**Target:** `hems` (draft until real WARP3 validation)
 
 ### Goal
 
@@ -222,7 +236,7 @@ Add the first external HEMS device integration using a read-only WARP3 Modbus TC
 
 ### Planned scope
 
-- select and validate an asynchronous Modbus TCP implementation;
+- bounded read-only Modbus TCP client using the pinned ESP32/lwIP stack;
 - shared Modbus connection/request layer;
 - WARP provider configuration;
 - read-only WARP telemetry;
@@ -240,14 +254,19 @@ Add the first external HEMS device integration using a read-only WARP3 Modbus TC
 - connection status;
 - data age.
 
+Implementation details, register provenance and the physical validation checklist
+are in [HEMS_WARP.md](HEMS_WARP.md). Deterministic native tests cover decoding,
+read-only requests, optional meters, invalid responses, timeouts, freshness and
+recovery. Tests do not replace real WARP validation.
+
 ### Acceptance criteria
 
 - [ ] Modbus layer builds on all official HEMS CI targets;
 - [ ] W5500/Ethernet path verified where available;
 - [ ] network timeout does not block DPL;
-- [ ] WARP unreachable state handled correctly;
-- [ ] stale WARP data becomes unknown rather than false/zero;
-- [ ] no write request exists in the WARP provider;
+- [x] WARP unreachable semantics handled correctly (native fixtures/loopback; physical gate remains open);
+- [x] stale WARP data becomes unknown rather than false/zero (native state and mocked UI tests);
+- [x] no write request exists in the WARP provider (interface/framing audit and read-only wire tests);
 - [ ] CI green;
 - [ ] real WARP telemetry validated;
 - [ ] PR merged;

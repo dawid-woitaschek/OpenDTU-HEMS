@@ -17,6 +17,29 @@
                 </div>
                 <div class="alert alert-secondary" role="alert">{{ $t('hems.MonitorHint') }}</div>
             </CardElement>
+            <CardElement :text="$t('hems.Warp')" textVariant="text-bg-primary">
+                <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
+                <InputElement :label="$t('hems.WarpEnabled')" v-model="hemsConfig.warp.enabled" type="checkbox" wide />
+                <template v-if="hemsConfig.warp.enabled">
+                    <InputElement
+                        :label="$t('hems.Host')"
+                        v-model="hemsConfig.warp.host"
+                        type="text"
+                        maxlength="253"
+                        wide
+                    />
+                    <InputElement
+                        :label="$t('hems.Port')"
+                        v-model="hemsConfig.warp.port"
+                        type="number"
+                        min="1"
+                        max="65535"
+                        step="1"
+                        wide
+                    />
+                    <div class="alert alert-secondary" role="alert">{{ $t('hems.WarpSetupHint') }}</div>
+                </template>
+            </CardElement>
             <FormFooter @reload="getConfig" />
         </form>
         <div v-else-if="!dataLoading" class="alert alert-warning" role="alert">
