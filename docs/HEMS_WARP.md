@@ -130,8 +130,9 @@ Recovery automatically clears errors and restores valid data.
 
 UI refreshes every 3 seconds and shows unknown for null values or a failed DTU
 status fetch. It displays translated charging states/errors, meter capability,
-data age, last success and poll counts. Logs record enable transitions,
-availability/recovery and changed errors, not every successful poll.
+data age, last success and poll counts. Enabled state is visible in the API/UI;
+worker logs record availability/recovery and changed errors, outside the snapshot
+mutex, not every successful poll.
 No frequent flash writes occur.
 
 ## Automated tests

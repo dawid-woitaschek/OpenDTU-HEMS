@@ -18,7 +18,6 @@ void Provider::configure(WarpConfig const& config, bool monitor)
     ++_generation;
     _polled = false;
     _state.reset(config.Enabled, _enabled);
-    ESP_LOGI(TAG, "Read-only telemetry %s", _enabled ? "enabled" : "disabled");
 }
 
 Snapshot Provider::snapshot() const
@@ -77,6 +76,8 @@ void Provider::worker()
             }
         }
         _client.close();
+        bool available = false;
+        bool changedError = false;
         {
             std::lock_guard<std::mutex> lock(_mutex);
             _busy = false;
@@ -85,12 +86,15 @@ void Provider::worker()
             _lastPollMs = millis();
             auto previous = _state.snapshot(millis());
             _state.apply(sample, result, millis());
-            if (result && !previous.valid) {
-                ESP_LOGI(TAG, "Read-only telemetry available/recovered");
-            } else if (!result && (previous.error != result.error || previous.exception != result.exception)) {
-                ESP_LOGW(TAG, "Read-only poll failed: %s (Modbus exception %u)",
-                        Modbus::errorName(result.error), result.exception);
-            }
+            available = result && !previous.valid;
+            changedError = !result && (previous.error != result.error || previous.exception != result.exception);
+        }
+        // Logging can wait for a sink; keep it outside the snapshot mutex too.
+        if (available) {
+            ESP_LOGI(TAG, "Read-only telemetry available/recovered");
+        } else if (changedError) {
+            ESP_LOGW(TAG, "Read-only poll failed: %s (Modbus exception %u)",
+                    Modbus::errorName(result.error), result.exception);
         }
     }
 }
