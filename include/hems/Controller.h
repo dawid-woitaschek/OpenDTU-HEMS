@@ -3,6 +3,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <hems/warp/Provider.h>
+#include <TaskSchedulerDeclarations.h>
 
 namespace Hems {
 
@@ -10,12 +12,15 @@ enum class Mode : uint8_t { Disabled, Monitor };
 
 class Controller {
 public:
-    void init();
+    void init(Scheduler& scheduler);
     void updateSettings();
     Mode getMode() const;
+    Warp::Snapshot getWarpSnapshot() const;
 
 private:
     std::atomic<Mode> _mode { Mode::Disabled };
+    Task _loopTask;
+    Warp::Provider _warp;
 };
 
 } // namespace Hems

@@ -85,6 +85,10 @@ jobs:
       - name: Build firmware
         run: pio run -e ${{ matrix.environment }}
 
+      - name: Test HEMS configuration compatibility
+        if: matrix.environment == 'generic_esp32s3_usb'
+        run: python test/test_hems_config.py .pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
+
       - name: Prepare firmware artifacts
         shell: bash
         run: |

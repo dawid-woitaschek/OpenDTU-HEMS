@@ -4,6 +4,7 @@
 
 - [HEMS architecture](HEMS_Architecture.md) - design principles, hardware baseline, provider model, Modbus profiles, safety model, optimizer direction and test strategy.
 - [HEMS development roadmap](HEMS_Roadmap.md) - current milestone, PR-by-PR implementation order and acceptance criteria.
+- [Read-only WARP telemetry](HEMS_WARP.md) - configuration, provenance, transport/state behavior, tests and required hardware validation.
 
 ## OpenDTU-OnBattery base documentation
 
