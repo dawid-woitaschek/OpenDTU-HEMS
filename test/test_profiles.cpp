@@ -72,7 +72,10 @@ int main() {
     JsonDocument doc; serialize(p, doc.to<JsonObject>());
     std::string normalized; serializeJson(doc, normalized);
     Profile detached = p; JsonDocument detachedDocument; serialize(detached, detachedDocument.to<JsonObject>());
-    detached = {};
+    for (auto* s : { detached.id, detached.vendor, detached.model, detached.source, detached.revision,
+            detached.description, detached.author, detached.license, detached.entries[0].key, detached.entries[0].unit }) {
+        memset(s, 'x', strlen(s));
+    }
     std::string detachedJson; serializeJson(detachedDocument, detachedJson); assert(detachedJson == normalized);
     assert(parse(normalized.data(), normalized.size(), roundtrip, error));
     assert(!strcmp(roundtrip.id, p.id) && !strcmp(roundtrip.license, p.license));
