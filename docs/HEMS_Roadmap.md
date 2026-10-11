@@ -314,7 +314,7 @@ Create a reusable, vendor-neutral register profile mechanism for storage and fut
 - profile metadata and provenance;
 - transport defaults;
 - telemetry definitions;
-- semantic storage mode definitions;
+- telemetry-only v1; semantic control/failsafe definitions deliberately deferred to PR #8;
 - validation;
 - built-in profile registry;
 - import/export;
@@ -337,14 +337,19 @@ Requirements:
 
 ### Acceptance criteria
 
-- [ ] malformed profiles rejected;
-- [ ] imported profile cannot silently activate writes;
-- [ ] profile size bounded;
-- [ ] profile schema version handled explicitly;
-- [ ] source/provenance visible in diagnostics/UI;
+- [x] malformed profiles rejected (production native parser tests);
+- [x] imported profile cannot activate writes (no write path; control fields rejected);
+- [x] profile size bounded (6144 bytes, 24 entries, four imported slots);
+- [x] profile schema version handled explicitly (strict v1 only);
+- [x] source/provenance visible in diagnostics/UI;
 - [ ] CI green;
 - [ ] reference hardware import test passed;
 - [ ] PR merged.
+
+Implementation and remaining hardware checks: [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md).
+Native parser/decoder/store and existing WARP/Modbus tests, configuration tests,
+Web lint/format/type-check/build and representative no-PSRAM build pass locally.
+CI and physical ESP32 import/export remain separate gates; PR #4 remains draft.
 
 ---
 

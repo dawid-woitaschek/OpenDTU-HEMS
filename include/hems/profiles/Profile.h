@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#pragma once
+#include <ArduinoJson.h>
+#include <hems/modbus/Protocol.h>
+
+namespace Hems::Profiles {
+inline constexpr char Schema[] = "opendtu-hems-modbus-profile/v1";
+constexpr size_t MaxJson = 6144;
+constexpr size_t MaxJsonMemory = 12288;
+constexpr size_t MaxEntries = 24;
+constexpr size_t MaxImported = 4;
+constexpr size_t MaxId = 48;
+constexpr size_t MaxText = 96;
+constexpr size_t MaxKey = 32;
+
+enum class Type : uint8_t { Bool, Uint16, Int16, Uint32, Int32, Float32 };
+struct Entry {
+    char key[MaxKey + 1] {};
+    char unit[17] {};
+    Modbus::ReadFunction space = Modbus::ReadFunction::InputRegisters;
+    Type type = Type::Uint16;
+    uint16_t address = 0; // normalized zero-based wire address
+    uint8_t count = 1;
+    bool littleBytes = false;
+    bool lowWordFirst = false;
+    double scale = 1, offset = 0, minimum = 0, maximum = 0;
+    bool hasMinimum = false, hasMaximum = false, hasInvalidRaw = false;
+    uint32_t invalidRaw = 0;
+};
+struct Profile {
+    char id[MaxId + 1] {};
+    char vendor[MaxText + 1] {}, model[MaxText + 1] {}, source[MaxText + 1] {};
+    char revision[MaxText + 1] {}, description[MaxText + 1] {};
+    char author[MaxText + 1] {}, license[MaxText + 1] {};
+    uint16_t port = 502;
+    uint8_t unit = 1, addressBase = 0, entryCount = 0;
+    Entry entries[MaxEntries] {};
+};
+static_assert(sizeof(Profile) <= 4096, "Profile model must fit the no-PSRAM transient budget");
+struct Value { bool valid = false; bool boolean = false; double number = 0; Type type = Type::Uint16; };
+// Allocations are capped including ArduinoJson string allocations and reallocation.
+class BoundedAllocator : public ArduinoJson::Allocator {
+public:
+    void* allocate(size_t size) override;
+    void deallocate(void* pointer) override;
+    void* reallocate(void* pointer, size_t size) override;
+    size_t used = 0, peak = 0;
+};
+bool parse(char const* json, size_t size, Profile& output, char const*& error);
+void serialize(Profile const& profile, JsonObject root);
+Value decode(Entry const& entry, uint8_t const* payload, size_t size);
+char const* typeName(Type type);
+char const* spaceName(Modbus::ReadFunction space);
+bool validId(char const* id);
+char const* exampleJson();
+} // namespace Hems::Profiles

@@ -10,3 +10,7 @@ webapp_dist/
 /test/test_chargedistributor
 /test/test_warp
 /test/test_modbus_client
+
+/work/
+/test/test_profiles
+/test/test_modbus_profiles

@@ -41,3 +41,18 @@ JSON helper tests from the repository root:
 ```bash
 python test/test_hems_config.py .pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 ```
+
+## HEMS profile tests
+
+Profile tests compile the production parser, decoder and transaction model with
+ArduinoJson 7.4.3 (the existing firmware dependency). After a representative
+PlatformIO build, `make test` uses its installed headers by default. For a
+standalone native checkout, obtain that pinned dependency and run:
+
+```bash
+make test ARDUINOJSON=/path/to/ArduinoJson/src
+```
+
+CI checks out the same `v7.4.3` version before `make test`. Store tests use an
+in-memory backend with injected commit failure; real LittleFS/power-cut and heap
+behavior remain hardware validation. No writes or device activation are exercised.
