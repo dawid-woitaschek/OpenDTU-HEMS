@@ -15,6 +15,7 @@ struct Reader {
     bool zeroAc = false;
     bool invalidSoc = false;
     bool charging = true;
+    uint16_t faultFlag = 0;
 
     Modbus::Result maybeFail()
     {
@@ -27,8 +28,11 @@ struct Reader {
     {
         auto result = maybeFail();
         if (!result) { return result; }
-        assert(count == 1 && address == 10);
-        uint16_t raw = invalidSoc ? 1001 : 1000;
+        assert(count == 1);
+        uint16_t raw = 0;
+        if (address == 10) { raw = invalidSoc ? 1001 : 1000; }
+        else if (address == 41) { raw = faultFlag; }
+        else { assert(false); }
         target[0] = raw >> 8;
         target[1] = raw & 0xff;
         return result;
@@ -84,7 +88,6 @@ static void testAcOnly()
     profile.entries[0].minimum = 0;
     profile.entries[0].hasMaximum = true;
     profile.entries[0].maximum = 100;
-    // Example device uses the opposite sign; the profile converts it to HEMS convention.
     profile.entries[1] = entry("ac_power_w", Modbus::ReadFunction::InputRegisters, 20,
             Profiles::Type::Int16, -1);
     profile.entries[2] = entry("vendor_extra", Modbus::ReadFunction::InputRegisters, 99);
@@ -92,7 +95,7 @@ static void testAcOnly()
     Reader reader;
     Storage::Sample sample;
     assert(Storage::poll(reader, profile, sample));
-    assert(reader.calls == 2); // Unknown profile keys are not polled.
+    assert(reader.calls == 2);
     assert(sample.recognizedValues == 2 && sample.validValues == 2);
     assert(sample.socPct.valid && sample.socPct.value == 100);
     assert(sample.acPowerW.valid && sample.acPowerW.value == -500);
@@ -101,7 +104,7 @@ static void testAcOnly()
     reader.calls = 0;
     reader.zeroAc = true;
     assert(Storage::poll(reader, profile, sample));
-    assert(sample.acPowerW.valid && sample.acPowerW.value == 0); // zero is not unknown
+    assert(sample.acPowerW.valid && sample.acPowerW.value == 0);
 
     reader.calls = 0;
     reader.invalidSoc = true;
@@ -128,22 +131,32 @@ static void testDcOnly()
     assert(!sample.acPowerW.valid && !sample.socPct.valid);
 }
 
-static void testDiscrete()
+static void testDiscreteAndNumericFlags()
 {
     Profiles::Profile profile;
-    profile.entryCount = 1;
+    profile.entryCount = 2;
     profile.entries[0] = entry("charging", Modbus::ReadFunction::DiscreteInputs, 40, Profiles::Type::Bool);
+    profile.entries[1] = entry("fault_active", Modbus::ReadFunction::HoldingRegisters, 41, Profiles::Type::Uint16);
 
     Reader reader;
     Storage::Sample sample;
     assert(Storage::poll(reader, profile, sample));
     assert(sample.charging.valid && sample.charging.value);
-    assert(sample.recognizedValues == 1 && sample.validValues == 1);
+    assert(sample.faultActive.valid && !sample.faultActive.value);
+    assert(sample.recognizedValues == 2 && sample.validValues == 2);
 
     reader.calls = 0;
     reader.charging = false;
+    reader.faultFlag = 1;
     assert(Storage::poll(reader, profile, sample));
-    assert(sample.charging.valid && !sample.charging.value); // false is valid, not unknown
+    assert(sample.charging.valid && !sample.charging.value);
+    assert(sample.faultActive.valid && sample.faultActive.value);
+
+    reader.calls = 0;
+    reader.faultFlag = 2;
+    assert(Storage::poll(reader, profile, sample));
+    assert(sample.charging.valid && !sample.faultActive.valid);
+    assert(sample.validValues == 1); // arbitrary enums are not coerced to true
 }
 
 static void testInvalidAndFailures()
@@ -195,9 +208,9 @@ static void testState()
 
     state.apply({}, { Modbus::Error::Timeout, 0, false }, 3000);
     snapshot = state.snapshot(3000);
-    assert(!snapshot.valid && !snapshot.reachable); // failure invalidates operational reachability immediately
+    assert(!snapshot.valid && !snapshot.reachable);
     assert(snapshot.successfulPolls == 1 && snapshot.failedPolls == 1);
-    assert(snapshot.sample.socPct.valid && snapshot.sample.socPct.value == 50); // diagnostic sample retained
+    assert(snapshot.sample.socPct.valid && snapshot.sample.socPct.value == 50);
 
     snapshot = state.snapshot(17000);
     assert(snapshot.stale && !snapshot.valid && !snapshot.reachable);
@@ -223,7 +236,7 @@ int main()
     assert(!Storage::supportedKey("manufacturer_magic"));
     testAcOnly();
     testDcOnly();
-    testDiscrete();
+    testDiscreteAndNumericFlags();
     testInvalidAndFailures();
     testState();
     testSettings();
