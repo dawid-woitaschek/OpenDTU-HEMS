@@ -33,6 +33,35 @@
                         <a
                             class="nav-link dropdown-toggle"
                             href="#"
+                            id="navbarHemsDropdown"
+                            role="button"
+                            data-bs-toggle="dropdown"
+                            aria-expanded="false"
+                        >
+                            HEMS
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="navbarHemsDropdown">
+                            <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/hems">{{
+                                    $t('menu.HemsInfo')
+                                }}</router-link>
+                            </li>
+                            <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/hems/settings">{{
+                                    $t('menu.HemsSettings')
+                                }}</router-link>
+                            </li>
+                            <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/hems/profiles">{{
+                                    $t('profiles.Title')
+                                }}</router-link>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a
+                            class="nav-link dropdown-toggle"
+                            href="#"
                             id="navbarScrollingDropdown"
                             role="button"
                             data-bs-toggle="dropdown"
@@ -102,11 +131,6 @@
                                 }}</router-link>
                             </li>
                             <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/hems">{{
-                                    $t('menu.HemsSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/settings/device">{{
                                     $t('menu.DeviceManager')
                                 }}</router-link>
@@ -161,14 +185,6 @@
                             <li>
                                 <router-link @click="onClick" class="dropdown-item" to="/info/mqtt">{{
                                     $t('menu.MQTT')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <hr class="dropdown-divider" />
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/info/hems">{{
-                                    $t('menu.HemsInfo')
                                 }}</router-link>
                             </li>
                             <li>
