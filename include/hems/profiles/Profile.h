@@ -14,6 +14,8 @@ constexpr size_t MaxText = 96;
 constexpr size_t MaxKey = 32;
 
 enum class Type : uint8_t { Bool, Uint16, Int16, Uint32, Int32, Float32 };
+enum class Capability : uint8_t { Storage = 1 };
+inline constexpr uint8_t capabilityBit(Capability capability) { return static_cast<uint8_t>(capability); }
 struct Entry {
     char key[MaxKey + 1] {};
     char unit[17] {};
@@ -33,9 +35,13 @@ struct Profile {
     char revision[MaxText + 1] {}, description[MaxText + 1] {};
     char author[MaxText + 1] {}, license[MaxText + 1] {};
     uint16_t port = 502;
-    uint8_t unit = 1, addressBase = 0, entryCount = 0;
+    uint8_t unit = 1, addressBase = 0, entryCount = 0, capabilities = 0;
     Entry entries[MaxEntries] {};
 };
+inline bool hasCapability(Profile const& profile, Capability capability)
+{
+    return (profile.capabilities & capabilityBit(capability)) != 0;
+}
 static_assert(sizeof(Profile) <= 4096, "Profile model must fit the no-PSRAM transient budget");
 struct Value { bool valid = false; bool boolean = false; double number = 0; Type type = Type::Uint16; };
 // Allocations are capped including ArduinoJson string allocations and reallocation.
