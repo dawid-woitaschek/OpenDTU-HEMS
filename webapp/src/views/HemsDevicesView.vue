@@ -33,6 +33,50 @@
                 </template>
                 <FormFooter @reload="getConfig" />
             </CardElement>
+
+            <CardElement :text="'Storage — ' + $t('profiles.ReadOnly')" textVariant="text-bg-primary" add-space>
+                <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
+                <InputElement label="Storage" v-model="hemsConfig.storage.enabled" type="checkbox" wide />
+                <template v-if="hemsConfig.storage.enabled">
+                    <InputElement
+                        :label="$t('hems.Host')"
+                        v-model="hemsConfig.storage.host"
+                        type="text"
+                        maxlength="253"
+                        wide
+                    />
+                    <div class="row mb-3">
+                        <label for="hems-storage-profile" class="col-sm-4 col-form-label">{{ $t('profiles.Title') }}</label>
+                        <div class="col-sm-8">
+                            <select id="hems-storage-profile" class="form-select" v-model="hemsConfig.storage.profile">
+                                <option value=""></option>
+                                <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
+                                    {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <InputElement
+                        :label="$t('hems.Port') + ' (0 = profile)'"
+                        v-model="hemsConfig.storage.port"
+                        type="number"
+                        min="0"
+                        max="65535"
+                        step="1"
+                        wide
+                    />
+                    <InputElement
+                        :label="$t('base.Unit') + ' ID (0 = profile)'"
+                        v-model="hemsConfig.storage.unit"
+                        type="number"
+                        min="0"
+                        max="247"
+                        step="1"
+                        wide
+                    />
+                </template>
+                <FormFooter @reload="getConfig" />
+            </CardElement>
         </form>
         <div v-else-if="!dataLoading" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
@@ -55,12 +99,19 @@ import type { HemsConfig } from '@/types/HemsConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
+type ProfileSummary = {
+    id: string;
+    vendor: string;
+    model: string;
+};
+
 export default defineComponent({
     components: { BasePage, BootstrapAlert, CardElement, FormFooter, HemsProfilePanel, InputElement },
     data() {
         return {
             dataLoading: true,
             hemsConfig: {} as HemsConfig,
+            profiles: [] as ProfileSummary[],
             alert: {} as AlertResponse,
         };
     },
@@ -70,12 +121,18 @@ export default defineComponent({
     methods: {
         getConfig() {
             this.dataLoading = true;
-            fetch('/api/hems/config', { headers: authHeader() })
-                .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data: HemsConfig) => {
-                    this.hemsConfig = data;
-                    this.dataLoading = false;
-                });
+            Promise.all([
+                fetch('/api/hems/config', { headers: authHeader() }).then((response) =>
+                    handleResponse(response, this.$emitter, this.$router)
+                ),
+                fetch('/api/hems/profiles', { headers: authHeader() }).then((response) =>
+                    handleResponse(response, this.$emitter, this.$router)
+                ),
+            ]).then(([config, profileData]) => {
+                this.hemsConfig = config as HemsConfig;
+                this.profiles = profileData.profiles as ProfileSummary[];
+                this.dataLoading = false;
+            });
         },
         saveConfig() {
             const formData = new FormData();
