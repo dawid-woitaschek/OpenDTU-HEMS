@@ -5,7 +5,7 @@
 namespace Hems::Storage {
 namespace {
 
-NumberValue* field(Sample& sample, char const* key)
+NumberValue* numberField(Sample& sample, char const* key)
 {
     if (!strcmp(key, "soc_pct")) { return &sample.socPct; }
     if (!strcmp(key, "ac_power_w")) { return &sample.acPowerW; }
@@ -21,26 +21,44 @@ NumberValue* field(Sample& sample, char const* key)
     return nullptr;
 }
 
+BoolValue* boolField(Sample& sample, char const* key)
+{
+    if (!strcmp(key, "charging")) { return &sample.charging; }
+    if (!strcmp(key, "discharging")) { return &sample.discharging; }
+    if (!strcmp(key, "fault_active")) { return &sample.faultActive; }
+    if (!strcmp(key, "alarm_active")) { return &sample.alarmActive; }
+    return nullptr;
+}
+
 } // namespace
 
 bool supportedKey(char const* key)
 {
     if (!key) { return false; }
     Sample sample;
-    return field(sample, key) != nullptr;
+    return numberField(sample, key) != nullptr || boolField(sample, key) != nullptr;
 }
 
 bool apply(Sample& sample, char const* key, Profiles::Value const& value)
 {
-    auto* target = key ? field(sample, key) : nullptr;
-    if (!target) { return false; }
-    ++sample.recognizedValues;
-    // v1 storage semantics are numeric. A mismatched bool remains explicit unknown.
-    if (!value.valid || value.type == Profiles::Type::Bool) { return true; }
-    target->valid = true;
-    target->value = value.number;
-    ++sample.validValues;
-    return true;
+    if (!key) { return false; }
+    if (auto* target = numberField(sample, key)) {
+        ++sample.recognizedValues;
+        if (!value.valid || value.type == Profiles::Type::Bool) { return true; }
+        target->valid = true;
+        target->value = value.number;
+        ++sample.validValues;
+        return true;
+    }
+    if (auto* target = boolField(sample, key)) {
+        ++sample.recognizedValues;
+        if (!value.valid || value.type != Profiles::Type::Bool) { return true; }
+        target->valid = true;
+        target->value = value.boolean;
+        ++sample.validValues;
+        return true;
+    }
+    return false;
 }
 
 } // namespace Hems::Storage
