@@ -41,6 +41,10 @@ bool supportedKey(char const* key)
 
 bool supportsProfile(Profiles::Profile const& profile)
 {
+    // Semantic overlap alone is not a device identity. A wallbox may expose
+    // "charging", temperature or fault codes too. Require an explicit consumer
+    // capability and at least one semantic the storage provider can normalize.
+    if (!Profiles::hasCapability(profile, Profiles::Capability::Storage)) { return false; }
     for (uint8_t i = 0; i < profile.entryCount; ++i) {
         if (supportedKey(profile.entries[i].key)) { return true; }
     }
