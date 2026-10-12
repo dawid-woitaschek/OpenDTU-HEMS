@@ -34,9 +34,9 @@
                 <FormFooter @reload="getConfig" />
             </CardElement>
 
-            <CardElement :text="'Storage — ' + $t('profiles.ReadOnly')" textVariant="text-bg-primary" add-space>
+            <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
                 <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
-                <InputElement label="Storage" v-model="hemsConfig.storage.enabled" type="checkbox" wide />
+                <InputElement :label="$t('storage.Enabled')" v-model="hemsConfig.storage.enabled" type="checkbox" wide />
                 <template v-if="hemsConfig.storage.enabled">
                     <InputElement
                         :label="$t('hems.Host')"
@@ -46,7 +46,7 @@
                         wide
                     />
                     <div class="row mb-3">
-                        <label for="hems-storage-profile" class="col-sm-4 col-form-label">{{ $t('profiles.Title') }}</label>
+                        <label for="hems-storage-profile" class="col-sm-4 col-form-label">{{ $t('storage.Profile') }}</label>
                         <div class="col-sm-8">
                             <select id="hems-storage-profile" class="form-select" v-model="hemsConfig.storage.profile">
                                 <option value=""></option>
@@ -57,7 +57,7 @@
                         </div>
                     </div>
                     <InputElement
-                        :label="$t('hems.Port') + ' (0 = profile)'"
+                        :label="$t('storage.Port')"
                         v-model="hemsConfig.storage.port"
                         type="number"
                         min="0"
@@ -66,7 +66,7 @@
                         wide
                     />
                     <InputElement
-                        :label="$t('base.Unit') + ' ID (0 = profile)'"
+                        :label="$t('storage.UnitId')"
                         v-model="hemsConfig.storage.unit"
                         type="number"
                         min="0"
@@ -74,6 +74,7 @@
                         step="1"
                         wide
                     />
+                    <div class="alert alert-secondary" role="alert">{{ $t('storage.SetupHint') }}</div>
                 </template>
                 <FormFooter @reload="getConfig" />
             </CardElement>
@@ -130,7 +131,9 @@ export default defineComponent({
                 ),
             ]).then(([config, profileData]) => {
                 this.hemsConfig = config as HemsConfig;
-                this.profiles = profileData.profiles as ProfileSummary[];
+                this.profiles = (profileData.profiles as ProfileSummary[]).filter(
+                    (profile) => profile.id !== 'example.synthetic'
+                );
                 this.dataLoading = false;
             });
         },

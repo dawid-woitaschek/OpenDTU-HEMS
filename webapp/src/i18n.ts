@@ -1,6 +1,7 @@
 import { createI18n } from 'vue-i18n';
 import messages from '@intlify/unplugin-vue-i18n/messages';
 import type { I18nOptions, IntlDateTimeFormat, IntlNumberFormat } from 'vue-i18n';
+import { hemsSupplementMessages } from './hemsMessages';
 
 export const allLocales = [
     { code: 'en', name: 'English' },
@@ -82,6 +83,10 @@ export const i18n = createI18n({
     messages,
     datetimeFormats: dateTimeFormats,
     numberFormats: numberFormats,
+});
+
+Object.entries(hemsSupplementMessages).forEach(([locale, supplemental]) => {
+    i18n.global.mergeLocaleMessage(locale, supplemental);
 });
 
 const dynamicLocales = await loadAvailLocales();

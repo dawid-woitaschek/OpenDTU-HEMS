@@ -224,6 +224,41 @@ static void testSettings()
     assert(!Modbus::validHost("-storage.local"));
     assert(validStorageProfileId("vendor.model-v1"));
     assert(!validStorageProfileId("Vendor Model"));
+
+    JsonDocument doc;
+    auto object = doc.to<JsonObject>();
+    object["enabled"] = true;
+    object["host"] = "storage.local";
+    object["profile"] = "vendor.model-v1";
+    object["port"] = 0;
+    object["unit"] = 0;
+    StorageConfig config;
+    assert(deserializeStorageConfig(doc.as<JsonVariantConst>(), config));
+    assert(config.Enabled && !strcmp(config.Host, "storage.local") && !strcmp(config.Profile, "vendor.model-v1"));
+    assert(config.Port == 0 && config.Unit == 0);
+
+    JsonDocument roundTrip;
+    serializeStorageConfig(config, roundTrip.to<JsonObject>());
+    StorageConfig decoded;
+    assert(deserializeStorageConfig(roundTrip.as<JsonVariantConst>(), decoded));
+    assert(decoded.Enabled && !strcmp(decoded.Host, config.Host) && !strcmp(decoded.Profile, config.Profile));
+
+    object["unit"] = 248;
+    assert(!deserializeStorageConfig(doc.as<JsonVariantConst>(), decoded));
+    object["unit"] = 1;
+    object["host"] = "http://storage";
+    assert(!deserializeStorageConfig(doc.as<JsonVariantConst>(), decoded));
+    object["host"] = "storage.local";
+    object["profile"] = "Vendor Model";
+    assert(!deserializeStorageConfig(doc.as<JsonVariantConst>(), decoded));
+
+    doc.clear();
+    object = doc.to<JsonObject>();
+    object["enabled"] = false;
+    object["host"] = "";
+    object["profile"] = "";
+    assert(deserializeStorageConfig(doc.as<JsonVariantConst>(), decoded));
+    assert(!decoded.Enabled && decoded.Host[0] == '\0' && decoded.Profile[0] == '\0');
 }
 
 int main()
@@ -240,5 +275,5 @@ int main()
     testInvalidAndFailures();
     testState();
     testSettings();
-    std::cout << "Generic storage semantic/poller/state tests passed\n";
+    std::cout << "Generic storage semantic/poller/state/settings tests passed\n";
 }
