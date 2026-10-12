@@ -57,9 +57,12 @@ export const hemsSupplementMessages = {
             Profile: 'Modbus-Profil',
             SelectProfile: 'Speicherprofil auswählen…',
             NoProfiles: 'Kein geeignetes Speicherprofil importiert',
-            NoProfilesHint: 'Es ist kein Speicherprofil verfügbar. Importiere unten zuerst ein kompatibles Modbus-Profil.',
-            ProfileRequired: 'Speicher-Telemetrie kann ohne Speicherprofil nicht aktiviert werden. Wähle zuerst ein Profil aus.',
-            ProfileUnavailable: 'Das ausgewählte Speicherprofil ist nicht verfügbar. Wähle ein vorhandenes Speicherprofil aus.',
+            NoProfilesHint:
+                'Es ist kein Speicherprofil verfügbar. Importiere unten zuerst ein kompatibles Modbus-Profil.',
+            ProfileRequired:
+                'Speicher-Telemetrie kann ohne Speicherprofil nicht aktiviert werden. Wähle zuerst ein Profil aus.',
+            ProfileUnavailable:
+                'Das ausgewählte Speicherprofil ist nicht verfügbar. Wähle ein vorhandenes Speicherprofil aus.',
             Port: 'TCP-Port (0 = Profilvorgabe)',
             UnitId: 'Modbus Unit-ID (0 = Profilvorgabe)',
             SetupHint: 'Geräteprofil und Host auswählen. TCP-Port und Unit-ID können aus dem Profil übernommen werden.',
@@ -103,12 +106,16 @@ export const hemsSupplementMessages = {
             Profile: 'Profil Modbus',
             SelectProfile: 'Sélectionner un profil de stockage…',
             NoProfiles: 'Aucun profil de stockage compatible importé',
-            NoProfilesHint: 'Aucun profil de stockage n’est disponible. Importez d’abord un profil Modbus compatible ci-dessous.',
-            ProfileRequired: 'La télémétrie du stockage ne peut pas être activée sans profil de stockage. Sélectionnez d’abord un profil.',
-            ProfileUnavailable: 'Le profil de stockage sélectionné n’est pas disponible. Sélectionnez un profil existant.',
+            NoProfilesHint:
+                'Aucun profil de stockage n’est disponible. Importez d’abord un profil Modbus compatible ci-dessous.',
+            ProfileRequired:
+                'La télémétrie du stockage ne peut pas être activée sans profil de stockage. Sélectionnez d’abord un profil.',
+            ProfileUnavailable:
+                'Le profil de stockage sélectionné n’est pas disponible. Sélectionnez un profil existant.',
             Port: 'Port TCP (0 = valeur du profil)',
             UnitId: 'ID unité Modbus (0 = valeur du profil)',
-            SetupHint: "Sélectionnez un profil d’appareil et un hôte. Le port TCP et l’ID unité peuvent reprendre les valeurs du profil.",
+            SetupHint:
+                'Sélectionnez un profil d’appareil et un hôte. Le port TCP et l’ID unité peuvent reprendre les valeurs du profil.',
             AcPower: 'Puissance CA',
             DcPower: 'Puissance CC',
             BatteryVoltage: 'Tension batterie',
@@ -131,7 +138,7 @@ export const hemsSupplementMessages = {
             NoCapabilities: 'Aucun consommateur HEMS pris en charge',
             StorageCapability: 'Stockage',
             StorageConsumer: 'Stockage',
-            DeleteBlocked: "Supprimez d’abord l’affectation du profil chez le consommateur indiqué.",
+            DeleteBlocked: 'Supprimez d’abord l’affectation du profil chez le consommateur indiqué.',
             MissingStorageProfile:
                 'Le profil de stockage configuré « {id} » n’est pas disponible. Sélectionnez un autre profil ou désactivez la télémétrie du stockage.',
         },
