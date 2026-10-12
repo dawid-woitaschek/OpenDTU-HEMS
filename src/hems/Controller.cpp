@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/Controller.h>
+#include <hems/model/Normalize.h>
 #include <hems/storage/SettingsStore.h>
 #include <Configuration.h>
 
@@ -45,6 +46,18 @@ Warp::Snapshot Controller::getWarpSnapshot() const
 Storage::Snapshot Controller::getStorageSnapshot() const
 {
     return _storage.snapshot();
+}
+
+Model::SystemState Controller::getNormalizedState() const
+{
+    return Model::normalize(_warp.snapshot(), _storage.snapshot());
+}
+
+Constraints::ConstraintSet Controller::getConstraints() const
+{
+    // PR #6 establishes deterministic constraint composition. Policies begin in
+    // PR #7, so the current aggregate intentionally contains no restrictions.
+    return {};
 }
 
 } // namespace Hems
