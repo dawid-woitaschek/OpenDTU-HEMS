@@ -16,11 +16,11 @@
 
 ## Current status
 
-**Current milestone:** PR #4 - Modbus profile engine
+**Current milestone:** PR #5 - Generic Modbus storage telemetry
 
 **Current phase:** 🔵 In development
 
-PR #3 is merged at `0925956a4da30e17b3be0eaf836ce1dc182f8a68`. Physical WARP3 validation was deliberately deferred by the project owner and remains open. Deferred physical WARP validation does not block PR #4. Current work adds a bounded, read-only profile engine and import/export.
+PR #4 is merged at `61c170ea89244cf5d5aaa3dd4beb2260eb650587` and its reference ESP32-S3 import/export gate passed. PR #3 remains 🟡 Validation because the real WARP3 telemetry/recovery/packet-capture/W5500 checks were deliberately deferred by the project owner. Those deferred WARP checks do not block PR #5. Current work adds a manufacturer-neutral, read-only storage provider driven by Modbus profiles; Marstek Venus E 3.0 is the first reference profile/hardware, not a hard-coded provider.
 
 ## Milestone overview
 
@@ -29,8 +29,8 @@ PR #3 is merged at `0925956a4da30e17b3be0eaf836ce1dc182f8a68`. Physical WARP3 va
 | PR #1 | HEMS CI build matrix and project baseline documentation | 🟢 Completed |
 | PR #2 | HEMS core, configuration model and Web UI skeleton | 🟢 Completed |
 | PR #3 | Shared Modbus TCP layer and WARP telemetry | 🟡 Validation |
-| PR #4 | Modbus profile engine and profile import/export | 🔵 In development |
-| PR #5 | Marstek Venus E telemetry | ⚪ Planned |
+| PR #4 | Modbus profile engine and profile import/export | 🟢 Completed |
+| PR #5 | Generic Modbus storage telemetry | 🔵 In development |
 | PR #6 | Normalized HEMS state and constraint engine | ⚪ Planned |
 | PR #7 | EV protection policy in Shadow mode | ⚪ Planned |
 | PR #8 | Storage write layer and manual control tests | ⚪ Planned |
@@ -296,13 +296,15 @@ Still deferred/open:
 - physical packet capture proving FC2/FC4 only;
 - W5500 behavior against an actual WARP where applicable.
 
-These deferred physical WARP checks do not block PR #4. PR #3 is not fully Completed.
+These deferred physical WARP checks do not block PR #5. PR #3 is not fully Completed.
 
 ---
 
 ## PR #4 - Modbus profile engine
 
-**Status:** 🔵 In development
+**Status:** 🟢 Completed
+
+**Merge:** `61c170ea89244cf5d5aaa3dd4beb2260eb650587`
 
 ### Goal
 
@@ -342,46 +344,76 @@ Requirements:
 - [x] profile size bounded (6144 bytes, 24 entries, four imported slots);
 - [x] profile schema version handled explicitly (strict v1 only);
 - [x] source/provenance visible in diagnostics/UI;
-- [x] CI green (eight HEMS targets, six inherited targets and native tests at `9fdcc9fd26d9104e5efd9637434e5f83b8db57f4`);
-- [ ] reference hardware import test passed;
-- [ ] PR merged.
+- [x] CI green on the final functional and documentation heads;
+- [x] reference hardware import/export/persistence/decoder/replacement/delete test passed;
+- [x] repeated profile operations showed healthy heap/largest-block behavior;
+- [x] WARP settings and existing MQTT/Power Meter/Hoymiles/DPL functionality remained operational;
+- [x] PR merged.
 
-Implementation and remaining hardware checks: [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md).
-Native parser/decoder/store and existing WARP/Modbus tests, configuration tests,
-Web lint/format/type-check/build and representative no-PSRAM build pass locally.
-GitHub CI is green; physical ESP32 import/export remains required. PR #4 remains draft.
-Firmware artifacts: [HEMS build](https://github.com/dawid-woitaschek/OpenDTU-HEMS/actions/runs/38175440344).
+The intrusive power-cut-during-rename and interrupted/concurrent-upload cases were not physically forced. Their bounded cleanup/preservation behavior remains covered by deterministic tests and implementation review and is accepted as residual risk for this read-only milestone.
+
+Detailed normative schema, examples, API, resource bounds and validation record: [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md).
 
 ---
 
-## PR #5 - Marstek Venus E telemetry
+## PR #5 - Generic Modbus storage telemetry
 
-**Status:** ⚪ Planned
+**Status:** 🔵 In development
+
+**Branch:** `feature/modbus-storage-telemetry`
+
+**Target:** `hems`
 
 ### Goal
 
-Integrate the first AC-coupled storage system read-only.
+Add a manufacturer-neutral, read-only Modbus storage provider driven entirely by imported/built-in profiles. AC- and DC-coupled storage systems must fit the same runtime abstraction; device-specific register addresses, data types, byte/word order and scaling belong in profiles rather than provider code.
+
+Marstek Venus E 3.0 is the first reference profile and later reference hardware. It must not become a special-case architecture dependency.
 
 ### Planned scope
 
-- verify the actual Venus E register map;
-- create first Marstek profile/provider;
-- SoC telemetry;
-- charge/discharge power telemetry;
-- operating/fault state where available;
-- data age and communication status;
-- storage Web UI;
-- no write operations.
+- generic Modbus storage provider using the shared bounded Modbus TCP client;
+- profile-selected read-only FC2/FC3/FC4 telemetry;
+- semantic storage keys such as SoC, AC/DC power, voltage/current, temperature, energy totals, operating state and fault/alarm codes where a profile provides them;
+- missing optional telemetry remains unknown/null rather than false/zero;
+- common sign convention: positive storage power = charging, negative = discharging;
+- reachability, freshness/data age, last error and poll diagnostics;
+- no blocking provider I/O in DPL or HEMS policy paths;
+- storage configuration/status Web UI;
+- HEMS navigation split into a dedicated top-level area for overview, settings and profile/device administration before storage UI grows further;
+- existing `/info/hems` and `/settings/hems` links remain compatible through aliases/redirects;
+- first Marstek Venus E 3.0 read-only profile based on documented/community provenance plus explicitly recorded target-specific observations where available;
+- no Modbus writes, no storage control, no Shadow/Active policy execution.
+
+### Architecture boundary
+
+```text
+Modbus profile
+    ↓
+Generic Modbus Storage Provider
+    ↓
+Storage telemetry snapshot
+    ↓
+PR #6 normalized HEMS state / constraints
+```
+
+The provider must not contain `if Marstek`, `if Victron`, `if Deye`, or equivalent manufacturer-specific register logic. A different compatible storage device should be supportable by supplying another profile unless the generic schema itself demonstrably lacks a required primitive.
 
 ### Acceptance criteria
 
-- [ ] all used registers have documented provenance;
-- [ ] no guessed or inferred write registers;
-- [ ] telemetry sign convention verified;
-- [ ] long-running read-only polling stable;
-- [ ] communication loss handled safely;
+- [ ] provider contains no manufacturer-specific register addresses or mode logic;
+- [ ] profile selection controls register mapping and decoding;
+- [ ] both AC-only and DC-only telemetry fixtures are supported without requiring the other side;
+- [ ] valid zero remains valid; missing/stale/failed values become explicit unknown/null;
+- [ ] storage polling cannot block DPL/scheduler paths;
+- [ ] communication loss/recovery is deterministic and bounded;
+- [ ] no Modbus write request can be emitted by the storage provider;
+- [ ] HEMS overview/settings/profile navigation is coherent and responsive;
+- [ ] legacy HEMS URLs remain usable;
+- [ ] all shipped profile values have documented provenance and unverified assumptions are marked as such;
+- [ ] reference no-PSRAM ESP32 hardware smoke test passes;
 - [ ] CI green;
-- [ ] real Venus E telemetry validated;
+- [ ] real Venus E telemetry validation completed or explicitly remains 🟡 deferred before merge;
 - [ ] PR merged.
 
 ---
