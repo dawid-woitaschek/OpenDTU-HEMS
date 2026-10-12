@@ -16,7 +16,7 @@ Hems::Model::Signal<double> number(Hems::Storage::NumberValue const& value, Hems
     return { value.value, state };
 }
 
-Hems::Model::Signal<bool> boolean(Hems::Storage::BoolValue const& value, Hems::Model::Quality state)
+Hems::Model::Signal<bool> boolSignal(Hems::Storage::BoolValue const& value, Hems::Model::Quality state)
 {
     if (!value.valid || state == Hems::Model::Quality::Unknown) { return {}; }
     return { value.value, state };
@@ -59,10 +59,10 @@ SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& stora
     result.storage.batteryVoltageV = number(sample.batteryVoltageV, storageQuality);
     result.storage.batteryCurrentA = number(sample.batteryCurrentA, storageQuality);
     result.storage.temperatureC = number(sample.temperatureC, storageQuality);
-    result.storage.charging = boolean(sample.charging, storageQuality);
-    result.storage.discharging = boolean(sample.discharging, storageQuality);
-    result.storage.faultActive = boolean(sample.faultActive, storageQuality);
-    result.storage.alarmActive = boolean(sample.alarmActive, storageQuality);
+    result.storage.charging = boolSignal(sample.charging, storageQuality);
+    result.storage.discharging = boolSignal(sample.discharging, storageQuality);
+    result.storage.faultActive = boolSignal(sample.faultActive, storageQuality);
+    result.storage.alarmActive = boolSignal(sample.alarmActive, storageQuality);
 
     // Grid and PV are intentionally left Unknown until their existing OpenDTU
     // sources are adapted into this model. Unknown is a first-class state and

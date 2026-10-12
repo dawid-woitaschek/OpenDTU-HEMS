@@ -43,7 +43,7 @@ $(TEST_HOST): test_host.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $<
 
 $(TEST_HEMS_MODEL): test_hems_model.cpp ../src/hems/model/Normalize.cpp ../src/hems/constraints/Constraints.cpp
-	$(CXX) $(CXXFLAGS) -I../include -o $@ $^
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
 test: all
 	@echo "Running overscaling tests..."
