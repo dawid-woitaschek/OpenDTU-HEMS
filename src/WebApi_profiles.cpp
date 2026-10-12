@@ -3,6 +3,7 @@
 #include <WebApi.h>
 #include <Configuration.h>
 #include <defaults.h>
+#include <hems/Controller.h>
 #include <hems/profiles/FlashStore.h>
 #include <atomic>
 #include <cstring>
@@ -85,6 +86,12 @@ void WebApiProfilesClass::finish(AsyncWebServerRequest* r, bool persist) {
         auto p = allocateProfile(); ok = p && parse(json, upload->received, *p, error);
         if (!p) { error = "Insufficient memory"; }
     }
+    // The storage provider may hold the imported profile. Reload only after the
+    // store mutex is released, otherwise configure() would deadlock on the same store.
+    if (ok && persist) {
+        lock.unlock();
+        HemsController.updateSettings();
+    }
     reply(r, ok ? 200 : 400, error);
 }
 void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
@@ -123,7 +130,13 @@ void WebApiProfilesClass::erase(AsyncWebServerRequest* r) {
     if (!WebApi.checkCredentials(r)) { return; }
     std::unique_lock<std::mutex> lock(operation(), std::try_to_lock);
     if (!lock.owns_lock()) { reply(r, 503, "Profile operation busy"); return; }
-    char const* error; bool ok = store().erase(id(r), error); reply(r, ok ? 200 : 400, error);
+    char const* error;
+    bool ok = store().erase(id(r), error);
+    if (ok) {
+        lock.unlock();
+        HemsController.updateSettings();
+    }
+    reply(r, ok ? 200 : 400, error);
 }
 void WebApiProfilesClass::inspect(AsyncWebServerRequest* r) {
     if (!WebApi.checkCredentials(r)) { return; }
