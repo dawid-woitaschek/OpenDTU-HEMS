@@ -72,9 +72,9 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     storage["reachable"] = storageSnapshot.reachable;
     storage["valid"] = storageSnapshot.valid;
     storage["stale"] = storageSnapshot.stale;
-    storage["status"] = !storageSnapshot.enabled ? "Disabled" : !storageSnapshot.profileLoaded ? "Invalid"
-        : storageSnapshot.stale ? "Stale" : storageSnapshot.valid ? "Connected"
-        : storageSnapshot.reachable ? "Invalid" : "Unreachable";
+    storage["status"] = !storageSnapshot.configured ? "Disabled" : !storageSnapshot.profileLoaded ? "Invalid"
+        : !storageSnapshot.enabled ? "Disabled" : storageSnapshot.stale ? "Stale"
+        : storageSnapshot.valid ? "Connected" : storageSnapshot.reachable ? "Invalid" : "Unreachable";
     storage["error"] = Hems::Modbus::errorName(storageSnapshot.error);
     storage["modbus_exception"] = storageSnapshot.exception;
     storage["successful_polls"] = storageSnapshot.successfulPolls;
