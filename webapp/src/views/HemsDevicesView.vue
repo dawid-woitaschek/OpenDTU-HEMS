@@ -37,7 +37,9 @@
         <div v-else-if="!dataLoading" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
         </div>
-        <HemsProfilePanel v-if="!dataLoading" />
+        <div v-if="!dataLoading" class="mt-5">
+            <HemsProfilePanel />
+        </div>
     </BasePage>
 </template>
 

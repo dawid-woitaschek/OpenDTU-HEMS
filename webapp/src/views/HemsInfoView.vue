@@ -21,7 +21,7 @@
                 </table>
             </div>
         </CardElement>
-        <CardElement v-if="hemsStatus.warp" :text="$t('hems.Warp')" textVariant="text-bg-primary" table>
+        <CardElement v-if="hemsStatus.warp" :text="$t('hems.Warp')" textVariant="text-bg-primary" table add-space>
             <div class="alert alert-info m-3" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
             <div class="table-responsive">
                 <table class="table table-hover table-condensed">
