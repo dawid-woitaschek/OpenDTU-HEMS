@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/storage/Poller.h>
+#include <hems/storage/Settings.h>
+#include <hems/storage/State.h>
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -78,7 +80,7 @@ static void testAcOnly()
     profile.entries[0].minimum = 0;
     profile.entries[0].hasMaximum = true;
     profile.entries[0].maximum = 100;
-    // Example of device-native positive discharge converted to HEMS positive charge.
+    // Example device uses the opposite sign; the profile converts it to HEMS convention.
     profile.entries[1] = entry("ac_power_w", Modbus::ReadFunction::InputRegisters, 20,
             Profiles::Type::Int16, -1);
     profile.entries[2] = entry("vendor_extra", Modbus::ReadFunction::InputRegisters, 99);
@@ -151,6 +153,44 @@ static void testInvalidAndFailures()
     assert(result.error == Modbus::Error::Timeout && !result.responded && reader.calls == 1);
 }
 
+static void testState()
+{
+    Storage::State state;
+    state.reset(true, true, true, 502, 1);
+    auto snapshot = state.snapshot(1000);
+    assert(snapshot.configured && snapshot.enabled && snapshot.profileLoaded);
+    assert(!snapshot.valid && !snapshot.reachable && snapshot.port == 502 && snapshot.unit == 1);
+
+    Storage::Sample sample;
+    sample.socPct = { true, 50 };
+    sample.validValues = 1;
+    sample.recognizedValues = 1;
+    state.apply(sample, { Modbus::Error::None, 0, true }, 2000);
+    snapshot = state.snapshot(2000);
+    assert(snapshot.valid && snapshot.reachable && snapshot.hasUpdate);
+    assert(snapshot.successfulPolls == 1 && snapshot.failedPolls == 0);
+    assert(snapshot.sample.socPct.valid && snapshot.sample.socPct.value == 50);
+
+    state.apply({}, { Modbus::Error::Timeout, 0, false }, 3000);
+    snapshot = state.snapshot(3000);
+    assert(!snapshot.valid && snapshot.reachable); // retained reachability until stale timeout
+    assert(snapshot.successfulPolls == 1 && snapshot.failedPolls == 1);
+    assert(snapshot.sample.socPct.valid && snapshot.sample.socPct.value == 50); // diagnostic sample retained
+
+    snapshot = state.snapshot(17000);
+    assert(snapshot.stale && !snapshot.valid && !snapshot.reachable);
+}
+
+static void testSettings()
+{
+    assert(Modbus::validHost("storage.local"));
+    assert(Modbus::validHost("10.0.1.20"));
+    assert(!Modbus::validHost(""));
+    assert(!Modbus::validHost("-storage.local"));
+    assert(validStorageProfileId("vendor.model-v1"));
+    assert(!validStorageProfileId("Vendor Model"));
+}
+
 int main()
 {
     assert(Storage::supportedKey("soc_pct"));
@@ -160,5 +200,7 @@ int main()
     testAcOnly();
     testDcOnly();
     testInvalidAndFailures();
-    std::cout << "Generic storage semantic/poller tests passed\n";
+    testState();
+    testSettings();
+    std::cout << "Generic storage semantic/poller/state tests passed\n";
 }
