@@ -275,12 +275,22 @@ static void testProfileCapability()
     Profiles::Profile storage;
     storage.entryCount = 1;
     storage.entries[0] = entry("soc_pct", Modbus::ReadFunction::HoldingRegisters, 10, Profiles::Type::Uint16);
+    // A familiar semantic is not identity. Consumer selection must be explicit.
+    assert(!Storage::supportsProfile(storage));
+    storage.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
     assert(Storage::supportsProfile(storage));
 
     Profiles::Profile unrelated;
+    unrelated.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
     unrelated.entryCount = 1;
     unrelated.entries[0] = entry("vehicle_state", Modbus::ReadFunction::HoldingRegisters, 10, Profiles::Type::Uint16);
     assert(!Storage::supportsProfile(unrelated));
+
+    Profiles::Profile wallboxLike;
+    wallboxLike.entryCount = 1;
+    wallboxLike.entries[0] = entry("charging", Modbus::ReadFunction::DiscreteInputs, 40, Profiles::Type::Bool);
+    assert(Storage::supportedKey("charging"));
+    assert(!Storage::supportsProfile(wallboxLike));
 }
 
 int main()
