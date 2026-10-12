@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <hems/storage/Provider.h>
 #include <hems/warp/Provider.h>
 #include <TaskSchedulerDeclarations.h>
 
@@ -16,11 +17,13 @@ public:
     void updateSettings();
     Mode getMode() const;
     Warp::Snapshot getWarpSnapshot() const;
+    Storage::Snapshot getStorageSnapshot() const;
 
 private:
     std::atomic<Mode> _mode { Mode::Disabled };
     Task _loopTask;
     Warp::Provider _warp;
+    Storage::Provider _storage;
 };
 
 } // namespace Hems
