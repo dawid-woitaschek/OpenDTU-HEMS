@@ -1,0 +1,72 @@
+{
+  "schema": "opendtu-hems-modbus-profile/v1",
+  "id": "marstek.venus-e3.observed",
+  "metadata": {
+    "vendor": "Marstek",
+    "model": "Venus E 3.0",
+    "source": "ViperRNMC/marstek_venus_modbus e_v3.yaml plus target observations",
+    "source_revision": "31e71613885d2573b104c47632298920ba99e11b",
+    "description": "Read-only candidate; target SoC and AC-power scaling override community defaults"
+  },
+  "provenance": {
+    "author": "OpenDTU-HEMS contributors; ViperRNMC community mapping",
+    "license": "MIT; adaptation GPL-2.0-or-later"
+  },
+  "transport": {
+    "protocol": "modbus_tcp",
+    "default_port": 502,
+    "unit_id": 1,
+    "address_base": 0
+  },
+  "telemetry": [
+    {
+      "key": "soc_pct",
+      "space": "holding",
+      "address": 34002,
+      "count": 1,
+      "type": "uint16",
+      "scale": 0.01,
+      "unit": "percent",
+      "min": 0,
+      "max": 100
+    },
+    {
+      "key": "ac_power_w",
+      "space": "holding",
+      "address": 30006,
+      "count": 1,
+      "type": "int16",
+      "scale": -1,
+      "unit": "W"
+    },
+    {
+      "key": "battery_voltage_v",
+      "space": "holding",
+      "address": 30100,
+      "count": 1,
+      "type": "uint16",
+      "scale": 0.01,
+      "unit": "V",
+      "min": 0
+    },
+    {
+      "key": "temperature_c",
+      "space": "holding",
+      "address": 35000,
+      "count": 1,
+      "type": "int16",
+      "scale": 0.1,
+      "unit": "C"
+    },
+    {
+      "key": "operating_state",
+      "space": "holding",
+      "address": 35100,
+      "count": 1,
+      "type": "uint16",
+      "scale": 1,
+      "min": 0,
+      "max": 6
+    }
+  ]
+}
