@@ -60,8 +60,10 @@ inline bool deserializeStorageConfig(JsonVariantConst source, StorageConfig& tar
 inline void serializeStorageConfig(StorageConfig const& source, JsonObject target)
 {
     target["enabled"] = source.Enabled;
-    target["host"] = source.Host;
-    target["profile"] = source.Profile;
+    // Force pointer semantics instead of const char[N] literal detection so
+    // ArduinoJson owns copies after this StorageConfig goes out of scope.
+    target["host"] = static_cast<char const*>(source.Host);
+    target["profile"] = static_cast<char const*>(source.Profile);
     target["port"] = source.Port;
     target["unit"] = source.Unit;
 }
