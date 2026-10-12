@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+#include <hems/constraints/Constraints.h>
+#include <hems/model/Normalize.h>
+#include <cassert>
+#include <iostream>
+
+namespace {
+
+void testFreshStorage()
+{
+    Hems::Storage::Snapshot storage;
+    storage.configured = true;
+    storage.enabled = true;
+    storage.reachable = true;
+    storage.valid = true;
+    storage.hasUpdate = true;
+    storage.ageMs = 100;
+    storage.sample.socPct = { true, 52.5 };
+    storage.sample.acPowerW = { true, -740.0 };
+    storage.sample.charging = { true, false };
+    storage.sample.discharging = { true, true };
+    storage.sample.faultActive = { true, false };
+
+    auto state = Hems::Model::normalize({}, storage);
+    assert(state.storage.device.configured);
+    assert(state.storage.device.enabled);
+    assert(state.storage.device.reachable);
+    assert(state.storage.socPct.usable());
+    assert(state.storage.socPct.value == 52.5);
+    assert(state.storage.acPowerW.usable());
+    assert(state.storage.acPowerW.value == -740.0);
+    assert(state.storage.charging.usable());
+    assert(!state.storage.charging.value);
+    assert(state.storage.discharging.usable());
+    assert(state.storage.discharging.value);
+    assert(state.storage.faultActive.usable());
+    assert(!state.storage.faultActive.value);
+    assert(!state.storage.alarmActive.known());
+}
+
+void testFailedPollDoesNotReuseOperationalValues()
+{
+    Hems::Storage::Snapshot storage;
+    storage.configured = true;
+    storage.enabled = true;
+    storage.reachable = false;
+    storage.valid = false;
+    storage.hasUpdate = true;
+    storage.ageMs = 500;
+    storage.sample.socPct = { true, 88.0 };
+    storage.sample.discharging = { true, true };
+
+    auto state = Hems::Model::normalize({}, storage);
+    assert(!state.storage.socPct.known());
+    assert(!state.storage.discharging.known());
+}
+
+void testStaleValuesRemainDiagnosticOnly()
+{
+    Hems::Storage::Snapshot storage;
+    storage.configured = true;
+    storage.enabled = true;
+    storage.stale = true;
+    storage.hasUpdate = true;
+    storage.ageMs = 20000;
+    storage.sample.socPct = { true, 41.0 };
+
+    auto state = Hems::Model::normalize({}, storage);
+    assert(state.storage.socPct.known());
+    assert(!state.storage.socPct.usable());
+    assert(state.storage.socPct.quality == Hems::Model::Quality::Stale);
+    assert(state.storage.socPct.value == 41.0);
+}
+
+void testEvseUnknownsAndFalseStayDistinct()
+{
+    Hems::Warp::Snapshot warp;
+    warp.configured = true;
+    warp.enabled = true;
+    warp.reachable = true;
+    warp.valid = true;
+    warp.hasUpdate = true;
+    warp.sample.allowedCurrentA = 6.0f;
+    warp.sample.vehicleKnown = true;
+    warp.sample.vehicleConnected = false;
+    warp.sample.chargingKnown = true;
+    warp.sample.charging = false;
+    warp.sample.meterAvailable = false;
+
+    auto state = Hems::Model::normalize(warp, {});
+    assert(state.evse.vehicleConnected.usable());
+    assert(!state.evse.vehicleConnected.value);
+    assert(state.evse.charging.usable());
+    assert(!state.evse.charging.value);
+    assert(state.evse.allowedCurrentA.usable());
+    assert(state.evse.allowedCurrentA.value == 6.0);
+    assert(!state.evse.powerW.known());
+}
+
+void testConstraintComposition()
+{
+    Hems::Constraints::ConstraintSet first;
+    first.storage.dischargeAllowed = false;
+    first.storage.maxChargePower = { true, 1800.0 };
+
+    Hems::Constraints::ConstraintSet second;
+    second.storage.chargeAllowed = false;
+    second.storage.maxChargePower = { true, 1200.0 };
+    second.storage.maxDischargePower = { true, 900.0 };
+
+    auto combined = Hems::Constraints::combine(first, second);
+    assert(!combined.storage.chargeAllowed);
+    assert(!combined.storage.dischargeAllowed);
+    assert(combined.storage.maxChargePower.active);
+    assert(combined.storage.maxChargePower.valueW == 1200.0);
+    assert(combined.storage.maxDischargePower.active);
+    assert(combined.storage.maxDischargePower.valueW == 900.0);
+}
+
+} // namespace
+
+int main()
+{
+    testFreshStorage();
+    testFailedPollDoesNotReuseOperationalValues();
+    testStaleValuesRemainDiagnosticOnly();
+    testEvseUnknownsAndFalseStayDistinct();
+    testConstraintComposition();
+    std::cout << "Normalized HEMS state and constraint tests passed\n";
+}
