@@ -173,7 +173,7 @@ static void testState()
 
     state.apply({}, { Modbus::Error::Timeout, 0, false }, 3000);
     snapshot = state.snapshot(3000);
-    assert(!snapshot.valid && snapshot.reachable); // retained reachability until stale timeout
+    assert(!snapshot.valid && !snapshot.reachable); // failure invalidates operational reachability immediately
     assert(snapshot.successfulPolls == 1 && snapshot.failedPolls == 1);
     assert(snapshot.sample.socPct.valid && snapshot.sample.socPct.value == 50); // diagnostic sample retained
 
