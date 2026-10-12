@@ -36,7 +36,12 @@
 
             <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
                 <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
-                <InputElement :label="$t('storage.Enabled')" v-model="hemsConfig.storage.enabled" type="checkbox" wide />
+                <InputElement
+                    :label="$t('storage.Enabled')"
+                    v-model="hemsConfig.storage.enabled"
+                    type="checkbox"
+                    wide
+                />
                 <template v-if="hemsConfig.storage.enabled">
                     <InputElement
                         :label="$t('hems.Host')"
@@ -46,21 +51,15 @@
                         wide
                     />
                     <div class="row mb-3">
-                        <label for="hems-storage-profile" class="col-sm-4 col-form-label">{{ $t('storage.Profile') }}</label>
+                        <label for="hems-storage-profile" class="col-sm-4 col-form-label">{{
+                            $t('storage.Profile')
+                        }}</label>
                         <div class="col-sm-8">
-                            <select
-                                id="hems-storage-profile"
-                                class="form-select"
-                                v-model="hemsConfig.storage.profile"
-                            >
+                            <select id="hems-storage-profile" class="form-select" v-model="hemsConfig.storage.profile">
                                 <option value="" disabled>
                                     {{ profiles.length ? $t('storage.SelectProfile') : $t('storage.NoProfiles') }}
                                 </option>
-                                <option
-                                    v-if="storageProfileUnavailable"
-                                    :value="hemsConfig.storage.profile"
-                                    disabled
-                                >
+                                <option v-if="storageProfileUnavailable" :value="hemsConfig.storage.profile" disabled>
                                     ⚠ {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
                                 </option>
                                 <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
@@ -70,11 +69,7 @@
                             <div v-if="storageProfileUnavailable" class="alert alert-warning mt-2 mb-0" role="alert">
                                 {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
                             </div>
-                            <div
-                                v-else-if="!profiles.length"
-                                class="alert alert-warning mt-2 mb-0"
-                                role="alert"
-                            >
+                            <div v-else-if="!profiles.length" class="alert alert-warning mt-2 mb-0" role="alert">
                                 {{ $t('storage.NoProfilesHint') }}
                             </div>
                         </div>
