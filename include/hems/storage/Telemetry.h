@@ -11,6 +11,11 @@ struct NumberValue {
     double value = 0;
 };
 
+struct BoolValue {
+    bool valid = false;
+    bool value = false;
+};
+
 struct Sample {
     NumberValue socPct;
     NumberValue acPowerW;
@@ -23,6 +28,10 @@ struct Sample {
     NumberValue operatingState;
     NumberValue faultCode;
     NumberValue alarmCode;
+    BoolValue charging;
+    BoolValue discharging;
+    BoolValue faultActive;
+    BoolValue alarmActive;
     uint8_t recognizedValues = 0;
     uint8_t validValues = 0;
 };
