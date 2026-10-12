@@ -6,4 +6,11 @@ export interface HemsConfig {
         host: string;
         port: number;
     };
+    storage: {
+        enabled: boolean;
+        host: string;
+        profile: string;
+        port: number;
+        unit: number;
+    };
 }
