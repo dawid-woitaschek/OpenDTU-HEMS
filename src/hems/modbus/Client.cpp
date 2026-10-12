@@ -166,6 +166,11 @@ Result Client::readInputRegisters(uint16_t address, uint16_t count, uint8_t* pay
     return read(ReadFunction::InputRegisters, address, count, payload);
 }
 
+Result Client::readHoldingRegisters(uint16_t address, uint16_t count, uint8_t* payload)
+{
+    return read(ReadFunction::HoldingRegisters, address, count, payload);
+}
+
 Result Client::readDiscreteInputs(uint16_t address, uint16_t count, uint8_t* payload)
 {
     return read(ReadFunction::DiscreteInputs, address, count, payload);

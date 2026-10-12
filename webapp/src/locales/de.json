@@ -1428,5 +1428,34 @@
             "batteryProtectionHysteresis": "@:powerlimiteradmin.TargetPowerConsumptionHysteresis",
             "packMinSoc": "Minimaler Pack Ladezustand"
         }
+    },
+    "profiles": {
+        "Title": "Modbus-Profile",
+        "Hint": "Nur lesend. Ein Import aktiviert kein Gerät und erlaubt keine Schreibzugriffe. Grenzen: 6 KiB pro JSON-Datei, 4 importierte Profile, 24 Einträge.",
+        "File": "JSON-Profildatei",
+        "Replace": "Vorhandenes importiertes Profil mit derselben ID ausdrücklich ersetzen",
+        "Import": "Importieren",
+        "Validate": "Nur validieren",
+        "Identity": "Profil",
+        "Source": "Quelle / Herkunft",
+        "Actions": "Aktionen",
+        "Builtin": "Integriert",
+        "Imported": "Importiert",
+        "Entries": "Telemetrieeinträge: {count}",
+        "ReadOnly": "Nur lesend",
+        "NoControl": "Steuerungsmetadaten: nein",
+        "View": "Ansehen",
+        "Export": "Exportieren",
+        "Delete": "Löschen",
+        "DecodeHint": "Beispieldaten lokal dekodieren. Es wird keine Netzwerkanfrage an ein Gerät gesendet. Ungültige Ergebnisse sind null.",
+        "Key": "Telemetrieschlüssel",
+        "Hex": "Nutzdaten (Hex, bis zu 4 Bytes)",
+        "Decode": "Beispiel dekodieren",
+        "FileLimit": "Eine .json-Datei mit höchstens 6144 Bytes und gültiger Profil-ID auswählen.",
+        "ConfirmReplace": "Importiertes Profil {id} ersetzen?",
+        "ConfirmDelete": "Importiertes Profil {id} löschen?",
+        "ImportedNotice": "Profil importiert. Kein Gerät aktiviert.",
+        "ValidNotice": "Profil validiert; nichts gespeichert.",
+        "Corrupt": "Ungültige gespeicherte Profile ignoriert: {count}. Ein validierter Import kann diese Plätze nutzen."
     }
 }

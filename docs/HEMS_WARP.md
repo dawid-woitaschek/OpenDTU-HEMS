@@ -2,8 +2,9 @@
 
 Observation only: neither the shared client nor the WARP provider exposes a
 Modbus write function. There are no charging controls, policies, DPL inputs,
-storage integrations or generic profiles. Real WARP3 validation remains required
-before merge; the PR stays draft.
+storage integrations or generic profiles. PR #3 is merged. Real WARP3 validation was deliberately deferred by the project
+owner; PR #3 remains in Validation. See the roadmap for the owner-reported local
+failure-path checks and the outstanding physical WARP checks. These do not block PR #4.
 
 ## Setup and configuration compatibility
 

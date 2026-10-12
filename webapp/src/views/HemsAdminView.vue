@@ -45,10 +45,12 @@
         <div v-else-if="!dataLoading" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
         </div>
+        <HemsProfilePanel v-if="!dataLoading" />
     </BasePage>
 </template>
 
 <script lang="ts">
+import HemsProfilePanel from '@/components/HemsProfilePanel.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -60,7 +62,7 @@ import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
-    components: { BasePage, BootstrapAlert, CardElement, FormFooter, InputElement },
+    components: { HemsProfilePanel, BasePage, BootstrapAlert, CardElement, FormFooter, InputElement },
     data() {
         return {
             dataLoading: true,

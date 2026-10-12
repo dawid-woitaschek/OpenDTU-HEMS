@@ -894,3 +894,18 @@ The version-1 configuration gains an optional disabled-by-default WARP block.
 This additive change preserves PR #2 configurations without migration.
 See [HEMS_WARP.md](HEMS_WARP.md) for provenance, timing/state semantics, resource
 bounds, tests and the required physical validation gate.
+
+## PR #4 implementation boundary
+
+The shipped v1 profile schema is deliberately narrower than the conceptual
+future profile example above. It contains telemetry, transport defaults, metadata
+and provenance only. Unknown fields, including `control` and `failsafe`, are
+rejected. Semantic commands, write sequences and runtime failsafe decisions remain
+PR #8 work and require a deliberate schema evolution. Import cannot enable writes.
+
+Profiles are loaded on demand from four fixed LittleFS slots, separately from
+configuration. No provider, polling task, device activation or DPL input is added.
+The shared transport gains only bounded FC3 holding-register reads; WARP still
+uses precisely FC2/FC4. Diagnostics decode explicit sample bytes without networking.
+See [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md) for the normative v1 rules,
+resource bounds, current Tinkerforge research and remaining hardware validation.

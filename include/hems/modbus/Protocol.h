@@ -14,7 +14,7 @@ enum class Error : uint8_t {
 char const* errorName(Error error);
 
 // The public protocol surface can only construct read requests.
-enum class ReadFunction : uint8_t { DiscreteInputs = 2, InputRegisters = 4 };
+enum class ReadFunction : uint8_t { DiscreteInputs = 2, HoldingRegisters = 3, InputRegisters = 4 };
 constexpr size_t MaxRegisters = 16;
 constexpr size_t MaxFrame = 9 + 2 * MaxRegisters;
 

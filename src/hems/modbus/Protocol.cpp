@@ -28,7 +28,7 @@ bool makeReadRequest(uint8_t* frame, uint16_t transaction, uint8_t unit,
         ReadFunction function, uint16_t address, uint16_t count)
 {
     if (count == 0 || count > MaxRegisters || static_cast<uint32_t>(address) + count > 65536
-            || (function != ReadFunction::DiscreteInputs && function != ReadFunction::InputRegisters)) { return false; }
+            || (function != ReadFunction::DiscreteInputs && function != ReadFunction::InputRegisters && function != ReadFunction::HoldingRegisters)) { return false; }
     uint8_t const request[] = {
         static_cast<uint8_t>(transaction >> 8), static_cast<uint8_t>(transaction),
         0, 0, 0, 6, unit, static_cast<uint8_t>(function),
@@ -43,7 +43,7 @@ Result parseReadResponse(uint8_t const* frame, size_t size, uint16_t transaction
         uint8_t unit, ReadFunction function, uint16_t count, uint8_t* payload)
 {
     if (count == 0 || count > MaxRegisters || size < 9 || size > MaxFrame
-            || (function != ReadFunction::DiscreteInputs && function != ReadFunction::InputRegisters)
+            || (function != ReadFunction::DiscreteInputs && function != ReadFunction::InputRegisters && function != ReadFunction::HoldingRegisters)
             || frame[0] != (transaction >> 8) || frame[1] != (transaction & 0xff)
             || frame[2] != 0 || frame[3] != 0 || frame[4] != 0
             || frame[5] != size - 6 || frame[6] != unit) {
@@ -54,7 +54,7 @@ Result parseReadResponse(uint8_t const* frame, size_t size, uint16_t transaction
         if (size != 9 || frame[8] == 0) { return { Error::Protocol, 0, true }; }
         return { Error::Exception, frame[8], true };
     }
-    size_t bytes = function == ReadFunction::InputRegisters ? count * 2 : (count + 7) / 8;
+    size_t bytes = function != ReadFunction::DiscreteInputs ? count * 2 : (count + 7) / 8;
     if (frame[7] != code || frame[8] != bytes || size != bytes + 9) { return { Error::Protocol, 0, true }; }
     memcpy(payload, frame + 9, bytes);
     return { Error::None, 0, true };

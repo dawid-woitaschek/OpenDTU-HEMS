@@ -1,0 +1,213 @@
+<template>
+    <CardElement :text="$t('profiles.Title')" textVariant="text-bg-primary">
+        <p>{{ $t('profiles.Hint') }}</p>
+        <p class="text-danger" role="alert" v-if="error">{{ error }}</p>
+        <p role="status" v-if="notice">{{ notice }}</p>
+        <p v-if="corrupt">{{ $t('profiles.Corrupt', { count: corrupt }) }}</p>
+        <label for="profile-json" class="form-label">{{ $t('profiles.File') }}</label>
+        <input
+            id="profile-json"
+            class="form-control mb-2"
+            type="file"
+            accept=".json,application/json"
+            @change="selectFile"
+        />
+        <div class="form-check mb-2">
+            <input id="profile-replace" class="form-check-input" type="checkbox" v-model="replace" />
+            <label for="profile-replace" class="form-check-label">{{ $t('profiles.Replace') }}</label>
+        </div>
+        <button class="btn btn-primary me-2" type="button" :disabled="busy || !file" @click="upload(true)">
+            {{ $t('profiles.Import') }}
+        </button>
+        <button class="btn btn-secondary" type="button" :disabled="busy || !file" @click="upload(false)">
+            {{ $t('profiles.Validate') }}
+        </button>
+        <div class="table-responsive mt-3">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>{{ $t('profiles.Identity') }}</th>
+                        <th>{{ $t('profiles.Source') }}</th>
+                        <th>{{ $t('profiles.Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="p in profiles" :key="p.id">
+                        <td>
+                            <strong>{{ p.id }}</strong
+                            ><br />{{ p.vendor }} / {{ p.model }}<br />
+                            {{ $t(p.origin === 'Built-in' ? 'profiles.Builtin' : 'profiles.Imported') }}<br />{{
+                                p.schema
+                            }}<br />
+                            {{ $t('profiles.Entries', { count: p.telemetry_count }) }}<br />{{ $t('profiles.ReadOnly')
+                            }}<br />{{ $t('profiles.NoControl') }}
+                        </td>
+                        <td>{{ p.source }} / {{ p.source_revision }}<br />{{ p.author }}<br />{{ p.license }}</td>
+                        <td>
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm me-1"
+                                :disabled="busy"
+                                @click="view(p.id)"
+                            >
+                                {{ $t('profiles.View') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm me-1"
+                                :disabled="busy"
+                                @click="download(p.id)"
+                            >
+                                {{ $t('profiles.Export') }}
+                            </button>
+                            <button
+                                v-if="p.origin === 'Imported'"
+                                type="button"
+                                class="btn btn-danger btn-sm"
+                                :disabled="busy"
+                                @click="remove(p.id)"
+                            >
+                                {{ $t('profiles.Delete') }}
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <template v-if="selected">
+            <pre class="border p-2 overflow-auto">{{ JSON.stringify(selected, null, 2) }}</pre>
+            <p>{{ $t('profiles.DecodeHint') }}</p>
+            <label for="profile-key">{{ $t('profiles.Key') }}</label>
+            <select id="profile-key" class="form-select mb-2" v-model="decodeKey">
+                <option v-for="entry in selected.telemetry" :key="entry.key" :value="entry.key">{{ entry.key }}</option>
+            </select>
+            <label for="profile-hex">{{ $t('profiles.Hex') }}</label>
+            <input id="profile-hex" class="form-control mb-2" v-model="hex" maxlength="8" />
+            <button type="button" class="btn btn-secondary" :disabled="busy" @click="decodeSample">
+                {{ $t('profiles.Decode') }}
+            </button>
+            <pre role="status" v-if="decoded">{{ decoded }}</pre>
+        </template>
+    </CardElement>
+</template>
+<script setup lang="ts">
+import { onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import CardElement from '@/components/CardElement.vue';
+import { authHeader } from '@/utils/authentication';
+const { t } = useI18n();
+type Summary = {
+    id: string;
+    vendor: string;
+    model: string;
+    origin: string;
+    schema: string;
+    source: string;
+    source_revision: string;
+    author: string;
+    license: string;
+    telemetry_count: number;
+};
+type Profile = { id: string; telemetry: { key: string }[] };
+const profiles = ref<Summary[]>([]),
+    corrupt = ref(0),
+    error = ref(''),
+    notice = ref(''),
+    busy = ref(false);
+const file = ref<File>(),
+    replace = ref(false),
+    selected = ref<Profile>(),
+    decodeKey = ref(''),
+    hex = ref('0000'),
+    decoded = ref('');
+async function api(path: string, options: RequestInit = {}) {
+    const response = await fetch('/api/hems/profiles' + path, { ...options, headers: options.headers ?? authHeader() });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || `${response.status} ${response.statusText}`);
+    return data;
+}
+async function run(action: () => Promise<void>) {
+    busy.value = true;
+    error.value = '';
+    notice.value = '';
+    try {
+        await action();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+    } finally {
+        busy.value = false;
+    }
+}
+async function refresh() {
+    const data = await api('');
+    profiles.value = data.profiles;
+    corrupt.value = data.corrupt_slots;
+}
+function selectFile(event: Event) {
+    file.value = (event.target as HTMLInputElement).files?.[0];
+}
+async function upload(persist: boolean) {
+    await run(async () => {
+        if (!file.value || file.value.size > 6144 || !file.value.name.toLowerCase().endsWith('.json'))
+            throw new Error(t('profiles.FileLimit'));
+        const text = await file.value.text();
+        let query = '';
+        if (persist && replace.value) {
+            const id = JSON.parse(text).id;
+            if (typeof id !== 'string') throw new Error(t('profiles.FileLimit'));
+            if (!window.confirm(t('profiles.ConfirmReplace', { id }))) return;
+            query = '?replace=' + encodeURIComponent(id);
+        }
+        const headers = authHeader();
+        headers.set('Content-Type', 'application/json');
+        await api((persist ? '/import' : '/validate') + query, { method: 'POST', headers, body: text });
+        notice.value = t(persist ? 'profiles.ImportedNotice' : 'profiles.ValidNotice');
+        selected.value = undefined;
+        decoded.value = '';
+        await refresh();
+    });
+}
+async function view(id: string) {
+    await run(async () => {
+        selected.value = await api('/export?id=' + encodeURIComponent(id));
+        decodeKey.value = selected.value?.telemetry[0]?.key ?? '';
+        decoded.value = '';
+    });
+}
+async function download(id: string) {
+    await run(async () => {
+        const response = await fetch('/api/hems/profiles/export?id=' + encodeURIComponent(id), {
+            headers: authHeader(),
+        });
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || response.statusText);
+        }
+        const url = URL.createObjectURL(await response.blob());
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = id + '.json';
+        anchor.click();
+        URL.revokeObjectURL(url);
+    });
+}
+async function remove(id: string) {
+    if (!window.confirm(t('profiles.ConfirmDelete', { id }))) return;
+    await run(async () => {
+        await api('/delete?id=' + encodeURIComponent(id), { method: 'POST' });
+        selected.value = undefined;
+        decoded.value = '';
+        await refresh();
+    });
+}
+async function decodeSample() {
+    await run(async () => {
+        decoded.value = JSON.stringify(
+            await api(
+                '/decode?' + new URLSearchParams({ id: selected.value?.id ?? '', key: decodeKey.value, hex: hex.value })
+            )
+        );
+    });
+}
+onMounted(() => run(refresh));
+</script>

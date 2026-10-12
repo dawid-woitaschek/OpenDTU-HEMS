@@ -11,6 +11,7 @@
 #include "WebApi_firmware.h"
 #include "WebApi_gridprofile.h"
 #include "WebApi_hems.h"
+#include "WebApi_profiles.h"
 #include "WebApi_i18n.h"
 #include "WebApi_inverter.h"
 #include "WebApi_limit.h"
@@ -66,6 +67,7 @@ private:
     WebApiFirmwareClass _webApiFirmware;
     WebApiGridProfileClass _webApiGridprofile;
     WebApiHemsClass _webApiHems;
+    WebApiProfilesClass _webApiProfiles;
     WebApiI18nClass _webApiI18n;
     WebApiInverterClass _webApiInverter;
     WebApiLimitClass _webApiLimit;

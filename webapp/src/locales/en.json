@@ -1432,5 +1432,34 @@
             "batteryProtectionHysteresis": "@:powerlimiteradmin.TargetPowerConsumptionHysteresis",
             "packMinSoc": "Minimum Pack State of Charge"
         }
+    },
+    "profiles": {
+        "Title": "Modbus profiles",
+        "Hint": "Read only. Import never activates a device or enables writes. Limits: 6 KiB per JSON file, 4 imported profiles, 24 entries.",
+        "File": "Profile JSON file",
+        "Replace": "Explicitly replace an existing imported profile with the same ID",
+        "Import": "Import",
+        "Validate": "Validate only",
+        "Identity": "Profile",
+        "Source": "Source / provenance",
+        "Actions": "Actions",
+        "Builtin": "Built-in",
+        "Imported": "Imported",
+        "Entries": "Telemetry entries: {count}",
+        "ReadOnly": "Read only",
+        "NoControl": "Control metadata: no",
+        "View": "View",
+        "Export": "Export",
+        "Delete": "Delete",
+        "DecodeHint": "Decode a sample payload locally. No network request is sent to a device. Invalid results are null.",
+        "Key": "Telemetry key",
+        "Hex": "Payload bytes (hex, up to 4 bytes)",
+        "Decode": "Decode sample",
+        "FileLimit": "Select a .json file of at most 6144 bytes with a valid profile ID.",
+        "ConfirmReplace": "Replace imported profile {id}?",
+        "ConfirmDelete": "Delete imported profile {id}?",
+        "ImportedNotice": "Profile imported. No device activated.",
+        "ValidNotice": "Profile validated; nothing stored.",
+        "Corrupt": "Invalid stored profiles ignored: {count}. A validated import can reuse these slots."
     }
 }

@@ -17,6 +17,7 @@ public:
     Result open(char const* host, uint16_t port, uint8_t unit = 1);
     void close();
     Result readInputRegisters(uint16_t address, uint16_t count, uint8_t* payload);
+    Result readHoldingRegisters(uint16_t address, uint16_t count, uint8_t* payload);
     Result readDiscreteInputs(uint16_t address, uint16_t count, uint8_t* payload);
     static constexpr uint32_t DnsTimeoutMs = 1000;
     static constexpr uint32_t RequestTimeoutMs = 1500;
