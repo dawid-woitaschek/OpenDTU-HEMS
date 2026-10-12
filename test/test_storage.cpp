@@ -14,6 +14,7 @@ struct Reader {
     unsigned failAt = 0;
     bool zeroAc = false;
     bool invalidSoc = false;
+    bool charging = true;
 
     Modbus::Result maybeFail()
     {
@@ -50,10 +51,13 @@ struct Reader {
         return result;
     }
 
-    Modbus::Result readDiscreteInputs(uint16_t, uint16_t, uint8_t*)
+    Modbus::Result readDiscreteInputs(uint16_t address, uint16_t count, uint8_t* target)
     {
-        assert(false);
-        return { Modbus::Error::Protocol, 0, true };
+        auto result = maybeFail();
+        if (!result) { return result; }
+        assert(address == 40 && count == 1);
+        target[0] = charging ? 1 : 0;
+        return result;
     }
 };
 
@@ -122,6 +126,24 @@ static void testDcOnly()
     assert(sample.batteryVoltageV.valid && std::abs(sample.batteryVoltageV.value - 51.2) < 1e-9);
     assert(sample.batteryCurrentA.valid && sample.batteryCurrentA.value == -5);
     assert(!sample.acPowerW.valid && !sample.socPct.valid);
+}
+
+static void testDiscrete()
+{
+    Profiles::Profile profile;
+    profile.entryCount = 1;
+    profile.entries[0] = entry("charging", Modbus::ReadFunction::DiscreteInputs, 40, Profiles::Type::Bool);
+
+    Reader reader;
+    Storage::Sample sample;
+    assert(Storage::poll(reader, profile, sample));
+    assert(sample.charging.valid && sample.charging.value);
+    assert(sample.recognizedValues == 1 && sample.validValues == 1);
+
+    reader.calls = 0;
+    reader.charging = false;
+    assert(Storage::poll(reader, profile, sample));
+    assert(sample.charging.valid && !sample.charging.value); // false is valid, not unknown
 }
 
 static void testInvalidAndFailures()
@@ -196,9 +218,12 @@ int main()
     assert(Storage::supportedKey("soc_pct"));
     assert(Storage::supportedKey("ac_power_w"));
     assert(Storage::supportedKey("dc_power_w"));
+    assert(Storage::supportedKey("charging"));
+    assert(Storage::supportedKey("fault_active"));
     assert(!Storage::supportedKey("manufacturer_magic"));
     testAcOnly();
     testDcOnly();
+    testDiscrete();
     testInvalidAndFailures();
     testState();
     testSettings();
