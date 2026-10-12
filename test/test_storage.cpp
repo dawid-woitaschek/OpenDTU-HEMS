@@ -243,6 +243,13 @@ static void testSettings()
     assert(deserializeStorageConfig(roundTrip.as<JsonVariantConst>(), decoded));
     assert(decoded.Enabled && !strcmp(decoded.Host, config.Host) && !strcmp(decoded.Profile, config.Profile));
 
+    JsonDocument detached;
+    serializeStorageConfig(config, detached.to<JsonObject>());
+    std::strcpy(config.Host, "mutated.local");
+    std::strcpy(config.Profile, "mutated.model");
+    assert(!strcmp(detached["host"].as<char const*>(), "storage.local"));
+    assert(!strcmp(detached["profile"].as<char const*>(), "vendor.model-v1"));
+
     object["unit"] = 248;
     assert(!deserializeStorageConfig(doc.as<JsonVariantConst>(), decoded));
     object["unit"] = 1;
