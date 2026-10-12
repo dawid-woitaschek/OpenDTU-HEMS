@@ -25,4 +25,38 @@ export interface HemsStatus {
         table_version: number | null;
         meter_available: boolean | null;
     };
+    storage: {
+        configured: boolean;
+        enabled: boolean;
+        profile_loaded: boolean;
+        reachable: boolean;
+        valid: boolean;
+        stale: boolean;
+        status: 'Disabled' | 'Connected' | 'Unreachable' | 'Stale' | 'Invalid';
+        error: string;
+        modbus_exception: number;
+        successful_polls: number;
+        failed_polls: number;
+        last_success_ms: number | null;
+        age_ms: number | null;
+        profile: string;
+        host: string;
+        port: number;
+        unit: number;
+        soc_pct: number | null;
+        ac_power_w: number | null;
+        dc_power_w: number | null;
+        battery_voltage_v: number | null;
+        battery_current_a: number | null;
+        temperature_c: number | null;
+        charge_energy_total_kwh: number | null;
+        discharge_energy_total_kwh: number | null;
+        operating_state: number | null;
+        fault_code: number | null;
+        alarm_code: number | null;
+        charging: boolean | null;
+        discharging: boolean | null;
+        fault_active: boolean | null;
+        alarm_active: boolean | null;
+    };
 }

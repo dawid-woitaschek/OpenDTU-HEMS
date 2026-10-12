@@ -103,6 +103,19 @@ bool numeric(JsonVariantConst value, double& out) {
 bool equals(JsonVariantConst value, char const* expected) {
     return value.is<char const*>() && !strcmp(value.as<char const*>(), expected);
 }
+bool parseCapabilities(JsonVariantConst value, Profile& profile) {
+    if (value.isUnbound()) { return true; }
+    auto values = value.as<JsonArrayConst>();
+    if (values.isNull() || values.size() == 0) { return false; }
+    for (auto item : values) {
+        uint8_t bit = 0;
+        if (equals(item, "storage")) { bit = capabilityBit(Capability::Storage); }
+        else { return false; }
+        if (profile.capabilities & bit) { return false; }
+        profile.capabilities |= bit;
+    }
+    return true;
+}
 struct alignas(std::max_align_t) Allocation { size_t size; };
 } // namespace
 
@@ -166,8 +179,10 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
     auto& p = *candidate;
     auto root = doc.as<JsonObjectConst>();
     error = "Unknown schema/fields or invalid profile id";
-    if (!fields(root, { "schema", "id", "metadata", "transport", "telemetry", "provenance" })
+    if (!fields(root, { "schema", "id", "capabilities", "metadata", "transport", "telemetry", "provenance" })
             || !equals(root["schema"], Schema) || !text(root["id"], p.id, sizeof(p.id)) || !validId(p.id)) { return false; }
+    error = "Invalid or unsupported profile capabilities";
+    if (!parseCapabilities(root["capabilities"], p)) { return false; }
     auto meta = root["metadata"].as<JsonObjectConst>();
     auto provenance = root["provenance"].as<JsonObjectConst>();
     error = "Required metadata/provenance missing, overlong or unknown fields";
@@ -247,6 +262,10 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
 }
 void serialize(Profile const& p, JsonObject root) {
     root["schema"] = Schema; root["id"] = static_cast<char const*>(p.id);
+    if (p.capabilities) {
+        auto capabilities = root["capabilities"].to<JsonArray>();
+        if (hasCapability(p, Capability::Storage)) { capabilities.add("storage"); }
+    }
     auto m = root["metadata"].to<JsonObject>();
     m["vendor"] = static_cast<char const*>(p.vendor); m["model"] = static_cast<char const*>(p.model); m["source"] = static_cast<char const*>(p.source); m["source_revision"] = static_cast<char const*>(p.revision);
     if (*p.description) { m["description"] = static_cast<char const*>(p.description); }

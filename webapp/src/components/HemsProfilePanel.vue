@@ -40,7 +40,11 @@
                                 p.schema
                             }}<br />
                             {{ $t('profiles.Entries', { count: p.telemetry_count }) }}<br />{{ $t('profiles.ReadOnly')
-                            }}<br />{{ $t('profiles.NoControl') }}
+                            }}<br />{{ $t('profiles.NoControl') }}<br />
+                            {{ $t('profiles.Capabilities') }}: {{ capabilityText(p.capabilities) }}
+                            <template v-if="p.used_by.length">
+                                <br />{{ $t('profiles.UsedBy') }}: {{ usedByText(p.used_by) }}
+                            </template>
                         </td>
                         <td>{{ p.source }} / {{ p.source_revision }}<br />{{ p.author }}<br />{{ p.license }}</td>
                         <td>
@@ -64,11 +68,15 @@
                                 v-if="p.origin === 'Imported'"
                                 type="button"
                                 class="btn btn-danger btn-sm"
-                                :disabled="busy"
+                                :disabled="busy || p.in_use"
+                                :title="p.in_use ? $t('profiles.DeleteBlocked') : ''"
                                 @click="remove(p.id)"
                             >
                                 {{ $t('profiles.Delete') }}
                             </button>
+                            <div v-if="p.in_use" class="small text-danger mt-1">
+                                {{ $t('profiles.DeleteBlocked') }}
+                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -95,6 +103,8 @@ import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import CardElement from '@/components/CardElement.vue';
 import { authHeader } from '@/utils/authentication';
+
+const emit = defineEmits(['profiles-changed']);
 const { t } = useI18n();
 type Summary = {
     id: string;
@@ -107,6 +117,9 @@ type Summary = {
     author: string;
     license: string;
     telemetry_count: number;
+    capabilities: string[];
+    used_by: string[];
+    in_use: boolean;
 };
 type Profile = { id: string; telemetry: { key: string }[] };
 const profiles = ref<Summary[]>([]),
@@ -143,6 +156,13 @@ async function refresh() {
     profiles.value = data.profiles;
     corrupt.value = data.corrupt_slots;
 }
+function capabilityText(values: string[]) {
+    if (!values.length) return t('profiles.NoCapabilities');
+    return values.map((value) => t(value === 'storage' ? 'profiles.StorageCapability' : value)).join(', ');
+}
+function usedByText(values: string[]) {
+    return values.map((value) => t(value === 'storage' ? 'profiles.StorageConsumer' : value)).join(', ');
+}
 function selectFile(event: Event) {
     file.value = (event.target as HTMLInputElement).files?.[0];
 }
@@ -165,6 +185,7 @@ async function upload(persist: boolean) {
         selected.value = undefined;
         decoded.value = '';
         await refresh();
+        if (persist) emit('profiles-changed');
     });
 }
 async function view(id: string) {
@@ -198,6 +219,7 @@ async function remove(id: string) {
         selected.value = undefined;
         decoded.value = '';
         await refresh();
+        emit('profiles-changed');
     });
 }
 async function decodeSample() {

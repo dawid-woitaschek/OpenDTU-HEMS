@@ -23,6 +23,15 @@ int main() {
     std::string example = exampleJson();
     assert(parse(example.data(), example.size(), p, error));
     assert(p.entryCount == 1 && std::abs(p.entries[0].scale - .1) < 1e-7);
+    assert(!hasCapability(p, Capability::Storage));
+    auto storageCapable = replace(example, "\"id\":\"example.synthetic\",",
+            "\"id\":\"example.synthetic\",\"capabilities\":[\"storage\"],");
+    Profile storageProfile;
+    assert(parse(storageCapable.data(), storageCapable.size(), storageProfile, error));
+    assert(hasCapability(storageProfile, Capability::Storage));
+    JsonDocument storageDocument; serialize(storageProfile, storageDocument.to<JsonObject>());
+    assert(storageDocument["capabilities"].as<JsonArrayConst>().size() == 1);
+    assert(!strcmp(storageDocument["capabilities"][0].as<char const*>(), "storage"));
     uint8_t fullSoc[] { 3, 0xe8 }, overSoc[] { 3, 0xe9 };
     assert(decode(p.entries[0], fullSoc, sizeof(fullSoc)).valid);
     assert(decode(p.entries[0], fullSoc, sizeof(fullSoc)).number == 100);
@@ -43,6 +52,9 @@ int main() {
         replace(example, "\"count\":1", "\"count\":1.5"),
         replace(example, "uint16", "uint64"),
         replace(example, "\"address\":0", "\"address\":65536"),
+        replace(storageCapable, "\"storage\"", "\"evse\""),
+        replace(storageCapable, "[\"storage\"]", "[\"storage\",\"storage\"]"),
+        replace(storageCapable, "[\"storage\"]", "[]"),
     }) {
         checkBad(s);
     }
@@ -85,6 +97,9 @@ int main() {
     assert(!strcmp(roundtrip.id, p.id) && !strcmp(roundtrip.license, p.license));
     JsonDocument exported; serialize(roundtrip, exported.to<JsonObject>());
     std::string exportedJson; serializeJson(exported, exportedJson); assert(exportedJson == normalized);
+    std::string storageNormalized; serializeJson(storageDocument, storageNormalized);
+    assert(parse(storageNormalized.data(), storageNormalized.size(), roundtrip, error));
+    assert(hasCapability(roundtrip, Capability::Storage));
     std::cout << "Synthetic normalized profile=" << normalized.size() << " bytes\n";
     auto entry = doc["telemetry"][0].as<JsonObject>();
     doc["telemetry"].as<JsonArray>().add(entry);
