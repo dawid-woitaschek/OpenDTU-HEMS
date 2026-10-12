@@ -81,7 +81,11 @@ char const* id(AsyncWebServerRequest* r) { return r->hasParam("id") ? r->getPara
 std::unique_ptr<Profile> allocateProfile() { return std::unique_ptr<Profile>(new (std::nothrow) Profile()); }
 } // namespace
 void WebApiProfilesClass::init(AsyncWebServer& server) {
-    server.on("/api/hems/profiles", HTTP_GET, [this](auto* r) { list(r); });
+    // ESPAsyncWebServer's backward-compatible URI matcher treats a bare route
+    // as a prefix for child paths. Keep the collection endpoint exact so the
+    // /export and /decode handlers below are not shadowed by this first route.
+    server.on("/api/hems/profiles", HTTP_GET, [this](auto* r) { list(r); })
+        .setFilter([](AsyncWebServerRequest* r) { return r->url() == "/api/hems/profiles"; });
     server.on("/api/hems/profiles/export", HTTP_GET, [this](auto* r) { exportProfile(r); });
     server.on("/api/hems/profiles/delete", HTTP_POST, [this](auto* r) { erase(r); });
     server.on("/api/hems/profiles/decode", HTTP_GET, [this](auto* r) { inspect(r); });
