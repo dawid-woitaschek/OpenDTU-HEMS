@@ -1,6 +1,7 @@
 {
   "schema": "opendtu-hems-modbus-profile/v1",
   "id": "marstek.venus-e3.observed",
+  "capabilities": ["storage"],
   "metadata": {
     "vendor": "Marstek",
     "model": "Venus E 3.0",
