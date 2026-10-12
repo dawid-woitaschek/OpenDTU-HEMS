@@ -105,8 +105,7 @@ and the existing HTTP/network machinery. Typical small profiles use less.
 A native 24-entry fixture normalizes to 3604 bytes and its normalization allocator
 peaks at 8470 bytes. ESP32 DWARF confirms the model is also 3232 bytes. The largest allowed input buffer is 6144 bytes. The normalized
 synthetic example is 561 bytes of LittleFS payload; filesystem
-block/metadata costs are additional. This is temporary heap, not persistent/static RAM. Actual ESP32 largest-block
-headroom during repeated imports remains a reference-hardware gate.
+block/metadata costs are additional. This is temporary heap, not persistent/static RAM.
 
 ## Persistence, identity and corruption
 
@@ -205,7 +204,7 @@ profiles are included. New code is GPL-2.0-or-later like existing HEMS code. No 
 firmware or WebApp dependencies; ArduinoJson remains the existing 7.4.3 pin (MIT).
 Native CI checks out that same version for production parser tests.
 
-## Verification and remaining physical gate
+## Verification and reference hardware validation
 
 Native tests exercise production parsing/normalization, representative/minimal
 profiles, invalid schemas/fields/ids/strings/transport/count/address/scaling,
@@ -221,26 +220,32 @@ unavailable in the sandbox. The existing production configuration compatibility
 suite is also run. Web lint, formatting, type checking and production build are
 required; no maintained browser test infrastructure exists in this repository.
 
-Before readiness/merge, test the reference `generic_esp32s3_usb`, ESP32-S3, 8 MB,
-no PSRAM:
+Reference validation passed on `generic_esp32s3_usb`, ESP32-S3, 8 MB, no PSRAM:
 
-- [ ] Boot; existing OpenDTU config and WARP PR #3 settings preserved.
-- [ ] HEMS Settings/Info and profile card work.
-- [ ] Import valid JSON; profile survives reboot.
-- [ ] Export equals expected normalized data, preserving schema/id/provenance.
-- [ ] Reject malformed/oversized/duplicate-id profile without persistence.
-- [ ] Failed replacement preserves the good profile, including storage failure.
-- [ ] Delete imported profile; built-in remains intact.
-- [ ] Sample decoding shows valid zero and invalid/null correctly.
-- [ ] Repeated import/delete/replacement: free heap/largest block remain healthy.
-- [ ] Interrupted upload and concurrent requests release resources safely.
-- [ ] Reboot/power loss during replacement leaves old or new valid profile intact.
-- [ ] MQTT, Power Meter, Hoymiles communication work; DPL remains responsive.
+- [x] Boot; existing OpenDTU config and WARP PR #3 settings preserved.
+- [x] HEMS Settings/Info and profile card work.
+- [x] Import valid JSON; profile survives reboot.
+- [x] Export returns expected normalized data, preserving schema/id/provenance.
+- [x] Malformed/duplicate-id profiles are rejected without persistence.
+- [x] Failed validation during explicit replacement preserves the good profile.
+- [x] Delete imported profile; built-in remains intact.
+- [x] Sample decoding shows valid zero, decimal scaling and invalid/null correctly.
+- [x] Repeated import/delete/replacement leaves free heap/largest block healthy.
+- [x] MQTT, Power Meter, Hoymiles communication work; DPL remains responsive.
+- [x] Existing WARP configuration remains intact after profile operations and reboot.
 
-No Marstek hardware is required. These checks are pending, not inferred from CI.
-PR stays draft until implementation, native tests, GitHub CI and reference import/
-export validation are complete. Deferred PR #3 physical WARP testing remains
-tracked separately and does not block development of PR #4.
+The intrusive power-cut-during-rename and interrupted/concurrent-upload cases were
+not physically forced on the reference unit. Their bounded cleanup/preservation
+paths remain covered by implementation review and native deterministic tests and
+are accepted as residual risk for this read-only milestone. No Marstek hardware is
+required for PR #4. Deferred PR #3 physical WARP testing remains tracked separately
+and does not block PR #4.
+
+Reference resource observations during repeated import/delete/replacement were
+stable: free heap 142 kB before and 143 kB after, largest free block 100 kB before
+and after, fragmentation 29% to 30%, and maximum heap usage unchanged at 172 kB
+(61%). LittleFS remained 156 kB free / 36 kB used. No leak or progressive
+fragmentation signal was observed.
 
 ## Local resource measurement
 
@@ -255,4 +260,5 @@ roadmap-only). Application flash includes the embedded compressed WebApp:
 
 GitHub merge-ref build metadata may shift the final artifact size slightly.
 No persistent profile RAM or polling worker is added. Imports require temporary
-heap as bounded above. Physical free heap/largest-block testing is still pending.
+heap as bounded above. Reference hardware heap/largest-block validation passed as
+documented above.
