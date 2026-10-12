@@ -1,10 +1,10 @@
-# Modbus profiles (PR #4)
+# Modbus profiles (PR #4, extended by PR #5)
 
 Profiles describe reads, never execute control. Import/validation does not select
 or activate a device. There is no write frame constructor, control endpoint,
-external-control permission, generic provider, persistent polling, Shadow/Active
-mode or Marstek integration in this milestone. WARP remains its existing provider
-with FC2/FC4 requests and unchanged failure/null behavior.
+external-control permission, Shadow/Active mode or executable profile logic.
+PR #5 adds a generic storage consumer on top of this profile engine without
+changing those read-only boundaries.
 
 ## v1 definition
 
@@ -14,14 +14,19 @@ for any manufacturer. The firmware ships it as built-in `example.synthetic`.
 Use the [import fixture](examples/import-profile.json), with a different stable id,
 for reference import tests; importing the built-in id intentionally fails.
 
-All top-level fields below are required. Unknown fields at every level are errors.
-JSON strings must be printable ASCII, without backslash escapes. This deliberate
-v1 restriction also rejects escaped keys, embedded NUL, malformed UTF-8 and
-ambiguous duplicate key spellings. International metadata and URLs are deferred;
-the UI itself has English, German and French translations.
+All top-level fields below are required except `capabilities`, which was added by
+PR #5 as a backward-compatible optional field. Unknown fields at every level are
+errors. JSON strings must be printable ASCII, without backslash escapes. This
+deliberate v1 restriction also rejects escaped keys, embedded NUL, malformed UTF-8
+and ambiguous duplicate key spellings. International metadata and URLs are
+deferred; the UI itself has English, German and French translations.
 
 - `schema`: exact v1 identifier.
 - `id`: 1–48 characters, starting with `[a-z]`, followed by `[a-z0-9._-]`.
+- `capabilities`: optional nonempty array of explicit HEMS consumer capabilities.
+  PR #5 recognizes `storage`. Unknown or duplicate capabilities are rejected.
+  Absence remains valid for existing PR #4 profiles but makes them unassignable
+  to storage until they are explicitly classified.
 - `metadata`: required nonempty `vendor`, `model`, `source`, `source_revision`;
   optional nonempty `description`. Each is at most 96 ASCII bytes.
 - `provenance`: required nonempty `author`, `license`, each at most 96 bytes.
@@ -30,6 +35,13 @@ the UI itself has English, German and French translations.
   `unit_id: 1..247`, `address_base: 0|1`. Address base is subtracted to produce
   zero-based wire addresses; a one-based profile cannot contain address zero.
 - `telemetry`: array of 1–24 entries with unique semantic keys.
+
+Capabilities identify intended consumer classes; telemetry keys do not. This is
+deliberate because different device classes may share semantics such as `charging`,
+`temperature_c` or `fault_code`. A storage consumer therefore requires both the
+explicit `storage` capability and at least one semantic supported by the storage
+provider. Capability metadata is declarative and cannot enable writes or execute
+logic.
 
 Telemetry fields:
 
@@ -92,8 +104,8 @@ Parser allocations are bounded, with no user-sized vectors or string growth.
 The lexical scan rejects oversize, duplicate object keys, trailing JSON, invalid
 number syntax, excess nesting/array complexity and unsafe strings first. Schema
 validation rejects missing fields, wrong scalar types, invalid port/unit/base,
-unknown schema, duplicate telemetry keys, count/type mismatch, address overflow,
-nonfinite settings and unknown metadata.
+unknown schema/capabilities, duplicate telemetry keys, count/type mismatch,
+address overflow, nonfinite settings and unknown metadata.
 
 Profiles are allocated only during explicit API operations; no RAM registry is
 held at boot, and no PSRAM is assumed. Parsing uses a second candidate model so
@@ -102,10 +114,10 @@ models; parse temporarily holds another model. A conservative application payloa
 budget is <=12 KiB models + 6 KiB request + 6 KiB stored-file read + 12 KiB JSON
 allocator = 36 KiB during a worst-case import scan, plus allocator headers, stack
 and the existing HTTP/network machinery. Typical small profiles use less.
-A native 24-entry fixture normalizes to 3604 bytes and its normalization allocator
-peaks at 8470 bytes. ESP32 DWARF confirms the model is also 3232 bytes. The largest allowed input buffer is 6144 bytes. The normalized
-synthetic example is 561 bytes of LittleFS payload; filesystem
-block/metadata costs are additional. This is temporary heap, not persistent/static RAM.
+A native 24-entry fixture normalizes to about 3.6 KiB and its normalization
+allocator remains within the 12 KiB cap. The largest allowed input buffer is
+6144 bytes. Filesystem block/metadata costs are additional. This is temporary heap,
+not persistent/static RAM.
 
 ## Persistence, identity and corruption
 
@@ -118,13 +130,13 @@ be replaced or deleted. Imported ids must be unique. Replacement requires the
 profile. Import without it rejects duplicate ids. Filename is not identity.
 
 Validation and normalized-size checks precede any flash mutation. Commit writes a
-single fixed temporary file, checks the complete write, flushes/closes it, verifies contents using a fixed
-128-byte buffer, then
-uses LittleFS atomic rename to replace the slot. It never removes the destination
-first. Failure retains the old profile. A leftover temp file after a power loss
-is ignored and removed by the next commit. LittleFS data/metadata block overhead
-is additional to the payload budget; an 8 KiB reserve is enforced against current
-usage. A full filesystem rejects imports rather than deleting other data.
+single fixed temporary file, checks the complete write, flushes/closes it, verifies
+contents using a fixed 128-byte buffer, then uses LittleFS atomic rename to replace
+the slot. It never removes the destination first. Failure retains the old profile.
+A leftover temp file after a power loss is ignored and removed by the next commit.
+LittleFS data/metadata block overhead is additional to the payload budget; an 8 KiB
+reserve is enforced against current usage. A full filesystem rejects imports rather
+than deleting other data.
 
 Slots are scanned on demand, not as a startup requirement. Each file is size
 checked and independently validated. A bad file is skipped and reported in
@@ -140,21 +152,25 @@ There are no telemetry-history or polling flash writes.
 ## API and UI
 
 All endpoints use the existing administrator authentication, including reads.
-HEMS Settings contains a compact Modbus Profiles card. It displays identity,
+The HEMS device page contains Modbus profile administration. It displays identity,
 vendor/model, built-in/imported origin, schema, source/revision, author/license,
-entry count, read-only status and absence of control metadata. Import and validate
-select a `.json` file; replacement and deletion require explicit UI confirmation.
+entry count, declared/usable HEMS capabilities, current consumers, read-only status
+and absence of control metadata. Import and validate select a `.json` file;
+replacement requires explicit confirmation. Deletion is blocked while a profile
+is referenced by a HEMS consumer, with the backend returning HTTP 409 and the
+consumer/location rather than relying on a disabled UI button alone.
+
 View shows normalized JSON; export uses the existing authenticated blob-download
 pattern. Sample decode accepts a telemetry key and 1–4 bytes in hex.
 
 | Method and endpoint | Behavior |
 |---|---|
-| GET `/api/hems/profiles` | List bounded summaries, limits and corrupt-slot count |
+| GET `/api/hems/profiles` | List bounded summaries, capabilities, consumers, limits and corrupt-slot count |
 | POST `/api/hems/profiles/validate` | Raw `application/json`, validate without storage |
 | POST `/api/hems/profiles/import` | Raw `application/json`, validate/normalize/commit |
-| POST `/api/hems/profiles/import?replace=ID` | Explicit replacement of that imported id |
-| GET `/api/hems/profiles/export?id=ID` | Normalized JSON attachment, stable identity/provenance |
-| POST `/api/hems/profiles/delete?id=ID` | Imported profiles only |
+| POST `/api/hems/profiles/import?replace=ID` | Explicit replacement of that imported id; incompatible in-use replacement is rejected |
+| GET `/api/hems/profiles/export?id=ID` | Normalized JSON attachment, stable identity/provenance/capabilities |
+| POST `/api/hems/profiles/delete?id=ID` | Imported profiles only; HTTP 409 while referenced |
 | GET `/api/hems/profiles/decode?id=ID&key=KEY&hex=0064` | Deterministic sample decoding, no network I/O |
 
 JSON upload uses the established ESPAsyncWebServer body callbacks instead of the
@@ -163,9 +179,10 @@ Content-Length, maximum size and single-upload ownership are checked before
 allocating its buffer. Incomplete/out-of-order bodies fail. Request destruction
 frees the buffer and releases ownership, including interrupted uploads. Short
 mutex-protected profile operations reject concurrent operations as busy; neither
-scheduler nor WARP worker uses that mutex. HTTP responses are bounded by known
-summary/profile sizes. Errors are useful English validation diagnostics within
-the translated UI, and return HTTP 400/404/413/415/503 as appropriate.
+the scheduler nor network workers hold the profile mutex across network I/O.
+HTTP responses are bounded by known summary/profile sizes. Errors are useful
+validation diagnostics within the translated UI and use HTTP status codes such as
+400/404/409/413/415/503 as appropriate.
 
 ## Tinkerforge research and licensing
 
@@ -208,19 +225,21 @@ Native CI checks out that same version for production parser tests.
 
 Native tests exercise production parsing/normalization, representative/minimal
 profiles, invalid schemas/fields/ids/strings/transport/count/address/scaling,
-duplicate keys/entries, entry/file limits, endian/signed/float decoding, valid zero,
-range/sentinel/NaN/truncation rejection, round trips and provenance, reserved ids,
-explicit replacement, failed-commit preservation, deletion, corrupt-slot isolation
-and count limits. FC3 protocol tests verify framing, length/function/header guards,
+duplicate keys/entries, capability absence/presence/unknown/duplicate rejection,
+entry/file limits, endian/signed/float decoding, valid zero, range/sentinel/NaN/
+truncation rejection, round trips and provenance, reserved ids, explicit
+replacement, failed-commit preservation, deletion, corrupt-slot isolation and
+count limits. FC3 protocol tests verify framing, length/function/header guards,
 exceptions and rejected write codes. Existing WARP/client tests remain unchanged,
 including production transport deadline, fragmentation, DNS and recovery tests.
-Store tests use a deterministic backend; actual LittleFS power-cut behavior is
-not proved by those tests. Native ASan/UBSan is supplementary; leak checking is
+Store tests use a deterministic backend; actual LittleFS power-cut behavior is not
+proved by those tests. Native ASan/UBSan is supplementary; leak checking is
 unavailable in the sandbox. The existing production configuration compatibility
 suite is also run. Web lint, formatting, type checking and production build are
 required; no maintained browser test infrastructure exists in this repository.
 
-Reference validation passed on `generic_esp32s3_usb`, ESP32-S3, 8 MB, no PSRAM:
+Reference PR #4 validation passed on `generic_esp32s3_usb`, ESP32-S3, 8 MB, no
+PSRAM:
 
 - [x] Boot; existing OpenDTU config and WARP PR #3 settings preserved.
 - [x] HEMS Settings/Info and profile card work.
@@ -234,12 +253,16 @@ Reference validation passed on `generic_esp32s3_usb`, ESP32-S3, 8 MB, no PSRAM:
 - [x] MQTT, Power Meter, Hoymiles communication work; DPL remains responsive.
 - [x] Existing WARP configuration remains intact after profile operations and reboot.
 
+PR #5 additionally applies consumer-reference integrity and explicit storage
+capability selection. The final bundled PR #5 firmware candidate is validated as a
+separate gate; real Marstek Venus E telemetry may remain explicitly deferred and
+must not be presented as hardware-validated when no device was attached.
+
 The intrusive power-cut-during-rename and interrupted/concurrent-upload cases were
 not physically forced on the reference unit. Their bounded cleanup/preservation
 paths remain covered by implementation review and native deterministic tests and
-are accepted as residual risk for this read-only milestone. No Marstek hardware is
-required for PR #4. Deferred PR #3 physical WARP testing remains tracked separately
-and does not block PR #4.
+are accepted as residual risk for this read-only milestone. Deferred PR #3 physical
+WARP testing remains tracked separately.
 
 Reference resource observations during repeated import/delete/replacement were
 stable: free heap 142 kB before and 143 kB after, largest free block 100 kB before
@@ -259,6 +282,6 @@ roadmap-only). Application flash includes the embedded compressed WebApp:
 | Static RAM | 100096 B | 100128 B | +32 B |
 
 GitHub merge-ref build metadata may shift the final artifact size slightly.
-No persistent profile RAM or polling worker is added. Imports require temporary
-heap as bounded above. Reference hardware heap/largest-block validation passed as
-documented above.
+No persistent profile RAM is added. PR #5 keeps only the selected immutable profile
+snapshot in the storage provider and remains designed for the no-PSRAM reference
+target.
