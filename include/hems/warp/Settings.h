@@ -3,8 +3,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <hems/modbus/Host.h>
 
-constexpr size_t WARP_MAX_HOST_LENGTH = 253;
+constexpr size_t WARP_MAX_HOST_LENGTH = Hems::Modbus::MaxHostLength;
 
 struct WarpConfig {
     bool Enabled = false;
@@ -14,21 +15,5 @@ struct WarpConfig {
 
 inline bool validWarpHost(char const* host)
 {
-    if (!host || !*host) { return false; }
-    size_t total = 0;
-    size_t label = 0;
-    char previous = 0;
-    for (auto p = host; *p; ++p) {
-        if (++total > WARP_MAX_HOST_LENGTH) { return false; }
-        if (*p == '.') {
-            if (label == 0 || previous == '-') { return false; }
-            label = 0;
-        } else {
-            bool alphanumeric = (*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z')
-                || (*p >= '0' && *p <= '9');
-            if ((!alphanumeric && *p != '-') || (label == 0 && *p == '-') || ++label > 63) { return false; }
-        }
-        previous = *p;
-    }
-    return label > 0 && previous != '-';
+    return Hems::Modbus::validHost(host);
 }
