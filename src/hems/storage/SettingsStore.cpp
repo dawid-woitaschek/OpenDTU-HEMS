@@ -10,6 +10,7 @@ namespace Hems::Storage {
 namespace {
 constexpr char Path[] = "/hems-storage.json";
 constexpr char Temp[] = "/hems-storage.tmp";
+constexpr uint32_t Version = 1;
 constexpr size_t MaxBytes = 1024;
 }
 
@@ -34,8 +35,9 @@ void SettingsStore::init()
     }
 
     StorageConfig candidate;
-    if (!deserializeStorageConfig(doc.as<JsonVariantConst>(), candidate)) {
-        ESP_LOGW(TAG, "Ignoring invalid storage settings");
+    if (!doc["version"].is<uint32_t>() || doc["version"].as<uint32_t>() != Version
+            || !deserializeStorageConfig(doc["storage"], candidate)) {
+        ESP_LOGW(TAG, "Ignoring unsupported or invalid storage settings");
         return;
     }
     _config = candidate;
@@ -50,7 +52,8 @@ StorageConfig SettingsStore::get() const
 bool SettingsStore::set(StorageConfig const& config)
 {
     JsonDocument doc;
-    serializeStorageConfig(config, doc.to<JsonObject>());
+    doc["version"] = Version;
+    serializeStorageConfig(config, doc["storage"].to<JsonObject>());
     if (doc.overflowed() || measureJson(doc) > MaxBytes) { return false; }
 
     LittleFS.remove(Temp);
@@ -67,7 +70,8 @@ bool SettingsStore::set(StorageConfig const& config)
     JsonDocument verified;
     StorageConfig candidate;
     bool ok = verify && !deserializeJson(verified, verify)
-        && deserializeStorageConfig(verified.as<JsonVariantConst>(), candidate);
+        && verified["version"].is<uint32_t>() && verified["version"].as<uint32_t>() == Version
+        && deserializeStorageConfig(verified["storage"], candidate);
     verify.close();
     if (!ok) {
         LittleFS.remove(Temp);
