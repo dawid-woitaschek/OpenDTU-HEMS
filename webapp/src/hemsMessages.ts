@@ -4,6 +4,8 @@ export const hemsSupplementMessages = {
             Warp: 'EV charger — read only',
             WarpEnabled: 'EV charger telemetry enabled',
             WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
+            ConfigLoadFailed: 'HEMS configuration could not be loaded.',
+            ConfigSaveFailed: 'HEMS configuration could not be saved.',
         },
         storage: {
             Title: 'Storage — read only',
@@ -50,6 +52,8 @@ export const hemsSupplementMessages = {
             WarpEnabled: 'Wallbox-Telemetrie aktiviert',
             WarpSetupHint:
                 'Aktuell wird die Wallbox über den WARP-Modbus-TCP-Provider ausgelesen. Hostname/IP-Adresse und TCP-Port der Wallbox konfigurieren.',
+            ConfigLoadFailed: 'Die HEMS-Konfiguration konnte nicht geladen werden.',
+            ConfigSaveFailed: 'Die HEMS-Konfiguration konnte nicht gespeichert werden.',
         },
         storage: {
             Title: 'Speicher — nur Lesezugriff',
@@ -99,6 +103,8 @@ export const hemsSupplementMessages = {
             WarpEnabled: 'Télémétrie de la borne activée',
             WarpSetupHint:
                 'Le fournisseur actuel en lecture seule est WARP Modbus TCP. Configurez l’hôte et le port TCP de la borne.',
+            ConfigLoadFailed: 'La configuration HEMS n’a pas pu être chargée.',
+            ConfigSaveFailed: 'La configuration HEMS n’a pas pu être enregistrée.',
         },
         storage: {
             Title: 'Stockage — lecture seule',

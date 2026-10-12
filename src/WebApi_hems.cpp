@@ -39,7 +39,7 @@ bool validateStorageProfile(StorageConfig const& config, std::unique_lock<std::m
         error = "Selected storage profile does not exist";
         return false;
     }
-    if (builtIn || !Hems::Storage::supportsProfile(*profile)) {
+    if (!Hems::Storage::supportsProfile(*profile)) {
         error = "Selected profile is not compatible with storage telemetry";
         return false;
     }
@@ -187,15 +187,17 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     auto& retMsg = response->getRoot();
     WarpConfig warpConfig;
     StorageConfig storageConfig;
+    bool enabledPresent = !root["enabled"].isNull();
     bool warpPresent = !root["warp"].isNull();
     bool storagePresent = !root["storage"].isNull();
+    bool enabledValid = !enabledPresent || root["enabled"].is<bool>();
     bool warpValid = !warpPresent || ConfigurationClass::deserializeWarpConfig(root["warp"], warpConfig);
     bool storageValid = !storagePresent || deserializeStorageConfig(root["storage"], storageConfig);
 
     if (!root["version"].is<uint32_t>() || root["version"].as<uint32_t>() != CONFIG_VERSION_HEMS
-            || !root["enabled"].is<bool>() || Configuration.get().Hems.Version != CONFIG_VERSION_HEMS
-            || !warpValid || !storageValid) {
-        retMsg["message"] = "Supported HEMS version and valid read-only device settings are required!";
+            || Configuration.get().Hems.Version != CONFIG_VERSION_HEMS || !enabledValid || !warpValid || !storageValid
+            || (!enabledPresent && !warpPresent && !storagePresent)) {
+        retMsg["message"] = "Supported HEMS version and valid provided settings are required!";
         retMsg["code"] = WebApiError::GenericValueMissing;
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
         return;
@@ -218,15 +220,21 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     }
     if (profileLock.owns_lock()) { profileLock.unlock(); }
 
-    {
+    bool mainConfigChanged = enabledPresent || warpPresent;
+    if (mainConfigChanged) {
         auto guard = Configuration.getWriteGuard();
         auto& config = guard.getConfig();
-        config.Hems.Enabled = root["enabled"].as<bool>();
-        // Legacy PR #2 clients may omit WARP; do not erase existing settings.
+        if (enabledPresent) { config.Hems.Enabled = root["enabled"].as<bool>(); }
         if (warpPresent) { config.Hems.Warp = warpConfig; }
-        HemsController.updateSettings();
     }
 
-    WebApi.writeConfig(retMsg);
+    HemsController.updateSettings();
+    if (mainConfigChanged) {
+        WebApi.writeConfig(retMsg);
+    } else {
+        retMsg["type"] = "success";
+        retMsg["message"] = "Settings saved!";
+        retMsg["code"] = WebApiError::GenericSuccess;
+    }
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }

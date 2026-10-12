@@ -23,7 +23,7 @@ void Provider::configure(StorageConfig const& config, bool monitor)
             char const* error = nullptr;
             std::lock_guard<std::mutex> storeLock(Profiles::runtimeStoreMutex());
             bool found = Profiles::runtimeStore().get(config.Profile, *candidate, builtIn, error);
-            loaded = found && !builtIn && supportsProfile(*candidate);
+            loaded = found && supportsProfile(*candidate);
             if (loaded) { profile = std::move(candidate); }
         }
     }

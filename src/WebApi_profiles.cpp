@@ -150,7 +150,7 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
         o["control_metadata"] = false;
         o["read_only"] = true;
         auto capabilities = o["capabilities"].to<JsonArray>();
-        if (!builtIn && Hems::Storage::supportsProfile(*p)) { capabilities.add("storage"); }
+        if (Hems::Storage::supportsProfile(*p)) { capabilities.add("storage"); }
         auto usedBy = o["used_by"].to<JsonArray>();
         if (storageConfig.Profile[0] && !strcmp(storageConfig.Profile, p->id)) { usedBy.add("storage"); }
         o["in_use"] = usedBy.size() != 0;
