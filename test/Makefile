@@ -34,7 +34,7 @@ $(TEST_PROFILES): test_profiles.cpp ../src/hems/profiles/Profile.cpp ../src/hems
 $(TEST_MODBUS_PROFILES): test_modbus_profiles.cpp ../src/hems/modbus/Protocol.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $^
 
-$(TEST_STORAGE): test_storage.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/profiles/Profile.cpp
+$(TEST_STORAGE): test_storage.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/storage/State.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
 test: all
