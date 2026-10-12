@@ -48,8 +48,14 @@
                     <div class="row mb-3">
                         <label for="hems-storage-profile" class="col-sm-4 col-form-label">{{ $t('storage.Profile') }}</label>
                         <div class="col-sm-8">
-                            <select id="hems-storage-profile" class="form-select" v-model="hemsConfig.storage.profile">
-                                <option value=""></option>
+                            <select
+                                id="hems-storage-profile"
+                                class="form-select"
+                                v-model="hemsConfig.storage.profile"
+                            >
+                                <option value="" disabled>
+                                    {{ profiles.length ? $t('storage.SelectProfile') : $t('storage.NoProfiles') }}
+                                </option>
                                 <option
                                     v-if="storageProfileUnavailable"
                                     :value="hemsConfig.storage.profile"
@@ -63,6 +69,13 @@
                             </select>
                             <div v-if="storageProfileUnavailable" class="alert alert-warning mt-2 mb-0" role="alert">
                                 {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
+                            </div>
+                            <div
+                                v-else-if="!profiles.length"
+                                class="alert alert-warning mt-2 mb-0"
+                                role="alert"
+                            >
+                                {{ $t('storage.NoProfilesHint') }}
                             </div>
                         </div>
                     </div>
@@ -162,15 +175,30 @@ export default defineComponent({
                 this.dataLoading = false;
             });
         },
+        showValidationError(message: string) {
+            this.alert = { show: true, type: 'danger', code: 0, message };
+        },
         saveConfig() {
-            if (!this.hemsConfig.storage.enabled) { this.hemsConfig.storage.profile = ''; }
+            if (this.hemsConfig.storage.enabled) {
+                if (!this.hemsConfig.storage.profile) {
+                    this.showValidationError(this.$t('storage.ProfileRequired'));
+                    return;
+                }
+                if (this.storageProfileUnavailable) {
+                    this.showValidationError(this.$t('storage.ProfileUnavailable'));
+                    return;
+                }
+            } else {
+                this.hemsConfig.storage.profile = '';
+            }
+
             const formData = new FormData();
             formData.append('data', JSON.stringify(this.hemsConfig));
             fetch('/api/hems/config', { method: 'POST', headers: authHeader(), body: formData })
                 .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data: AlertResponse) => {
                     this.alert = data;
-                    this.alert.message = this.$t('apiresponse.' + data.code);
+                    this.alert.message = data.type === 'success' ? this.$t('apiresponse.' + data.code) : data.message;
                     this.alert.show = true;
                     this.getConfig();
                 });

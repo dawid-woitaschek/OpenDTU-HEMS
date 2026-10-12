@@ -1,9 +1,19 @@
 export const hemsSupplementMessages = {
     en: {
+        hems: {
+            Warp: 'EV charger — read only',
+            WarpEnabled: 'EV charger telemetry enabled',
+            WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
+        },
         storage: {
             Title: 'Storage — read only',
             Enabled: 'Storage telemetry enabled',
             Profile: 'Modbus profile',
+            SelectProfile: 'Select a storage profile…',
+            NoProfiles: 'No compatible storage profile imported',
+            NoProfilesHint: 'No storage profile is available. Import a compatible Modbus profile below first.',
+            ProfileRequired: 'Storage telemetry cannot be enabled without a storage profile. Select a profile first.',
+            ProfileUnavailable: 'The selected storage profile is not available. Select an existing storage profile.',
             Port: 'TCP port (0 = profile default)',
             UnitId: 'Modbus unit ID (0 = profile default)',
             SetupHint: 'Select a device profile and host. Port and unit ID may inherit the profile defaults.',
@@ -30,14 +40,26 @@ export const hemsSupplementMessages = {
             StorageCapability: 'Storage',
             StorageConsumer: 'Storage',
             DeleteBlocked: 'Remove the profile assignment from the listed consumer before deleting this profile.',
-            MissingStorageProfile: 'Configured profile is missing or not suitable for storage: {id}',
+            MissingStorageProfile:
+                'Configured storage profile “{id}” is unavailable. Select another profile or disable storage telemetry.',
         },
     },
     de: {
+        hems: {
+            Warp: 'Wallbox — nur Lesezugriff',
+            WarpEnabled: 'Wallbox-Telemetrie aktiviert',
+            WarpSetupHint:
+                'Aktuell wird die Wallbox über den WARP-Modbus-TCP-Provider ausgelesen. Hostname/IP-Adresse und TCP-Port der Wallbox konfigurieren.',
+        },
         storage: {
             Title: 'Speicher — nur Lesezugriff',
             Enabled: 'Speicher-Telemetrie aktiviert',
             Profile: 'Modbus-Profil',
+            SelectProfile: 'Speicherprofil auswählen…',
+            NoProfiles: 'Kein geeignetes Speicherprofil importiert',
+            NoProfilesHint: 'Es ist kein Speicherprofil verfügbar. Importiere unten zuerst ein kompatibles Modbus-Profil.',
+            ProfileRequired: 'Speicher-Telemetrie kann ohne Speicherprofil nicht aktiviert werden. Wähle zuerst ein Profil aus.',
+            ProfileUnavailable: 'Das ausgewählte Speicherprofil ist nicht verfügbar. Wähle ein vorhandenes Speicherprofil aus.',
             Port: 'TCP-Port (0 = Profilvorgabe)',
             UnitId: 'Modbus Unit-ID (0 = Profilvorgabe)',
             SetupHint: 'Geräteprofil und Host auswählen. TCP-Port und Unit-ID können aus dem Profil übernommen werden.',
@@ -64,14 +86,26 @@ export const hemsSupplementMessages = {
             StorageCapability: 'Speicher',
             StorageConsumer: 'Speicher',
             DeleteBlocked: 'Entferne zuerst die Profilzuordnung beim aufgeführten Verbraucher.',
-            MissingStorageProfile: 'Konfiguriertes Profil fehlt oder ist nicht für Speicher geeignet: {id}',
+            MissingStorageProfile:
+                'Das konfigurierte Speicherprofil „{id}“ ist nicht verfügbar. Wähle ein anderes Profil oder deaktiviere die Speicher-Telemetrie.',
         },
     },
     fr: {
+        hems: {
+            Warp: 'Borne de recharge — lecture seule',
+            WarpEnabled: 'Télémétrie de la borne activée',
+            WarpSetupHint:
+                'Le fournisseur actuel en lecture seule est WARP Modbus TCP. Configurez l’hôte et le port TCP de la borne.',
+        },
         storage: {
             Title: 'Stockage — lecture seule',
             Enabled: 'Télémétrie du stockage activée',
             Profile: 'Profil Modbus',
+            SelectProfile: 'Sélectionner un profil de stockage…',
+            NoProfiles: 'Aucun profil de stockage compatible importé',
+            NoProfilesHint: 'Aucun profil de stockage n’est disponible. Importez d’abord un profil Modbus compatible ci-dessous.',
+            ProfileRequired: 'La télémétrie du stockage ne peut pas être activée sans profil de stockage. Sélectionnez d’abord un profil.',
+            ProfileUnavailable: 'Le profil de stockage sélectionné n’est pas disponible. Sélectionnez un profil existant.',
             Port: 'Port TCP (0 = valeur du profil)',
             UnitId: 'ID unité Modbus (0 = valeur du profil)',
             SetupHint: "Sélectionnez un profil d’appareil et un hôte. Le port TCP et l’ID unité peuvent reprendre les valeurs du profil.",
@@ -98,7 +132,8 @@ export const hemsSupplementMessages = {
             StorageCapability: 'Stockage',
             StorageConsumer: 'Stockage',
             DeleteBlocked: "Supprimez d’abord l’affectation du profil chez le consommateur indiqué.",
-            MissingStorageProfile: 'Le profil configuré est absent ou incompatible avec le stockage : {id}',
+            MissingStorageProfile:
+                'Le profil de stockage configuré « {id} » n’est pas disponible. Sélectionnez un autre profil ou désactivez la télémétrie du stockage.',
         },
     },
 };
