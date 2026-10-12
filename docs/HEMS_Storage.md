@@ -64,13 +64,43 @@ The generic poller only uses the already bounded read-only Modbus surface:
 
 There is no write function in the reader seam. Each recognized entry is decoded with the PR #4 profile decoder, so type, scale, offset, byte order, word order, range and invalid sentinel remain profile concerns rather than storage-provider code.
 
-The first native fixtures deliberately cover AC-only and DC-only storage telemetry, FC2 boolean telemetry, valid zero/false, partial validity, ignored vendor-specific keys and communication failure/staleness propagation.
+The first native fixtures deliberately cover AC-only and DC-only storage telemetry, FC2 boolean telemetry, numeric 0/1 flags, valid zero/false, partial validity, ignored vendor-specific keys and communication failure/staleness propagation.
 
 ## Runtime profile access
 
 The Web API and storage runtime share one LittleFS-backed profile store and one operation mutex. The provider resolves the selected profile while configuring and keeps an immutable shared snapshot for polling, so an import/replace/delete operation cannot mutate the profile underneath an in-flight network poll.
 
+Successful profile replacement or deletion triggers a provider reconfiguration only after the profile-store lock has been released. This reloads a replacement immediately, invalidates a deleted selected profile and avoids re-entering the same store mutex from the controller.
+
 Only the selected profile is retained by the provider; there is no persistent in-memory registry of all imported profiles. PR #5 therefore remains compatible with the no-PSRAM targets.
+
+## Runtime device configuration
+
+Storage connection settings are part of the HEMS API contract at `/api/hems/config`:
+
+```json
+{
+  "storage": {
+    "enabled": true,
+    "host": "storage.local",
+    "profile": "vendor.model",
+    "port": 0,
+    "unit": 0
+  }
+}
+```
+
+`port = 0` and `unit = 0` mean that the selected profile transport defaults are used. Non-zero device settings override those defaults. Hostnames use the same bounded hostname validation as the shared Modbus client. Modbus unit IDs above 247 are rejected.
+
+The storage settings are persisted independently from the inherited OpenDTU `config.json` in the versioned LittleFS file `/hems-storage.json`. The current file schema version is `1`. Malformed or unsupported versions fail safe to an unconfigured/disabled storage provider. The file is bounded to 1024 bytes, written through a temporary file, parsed and validated again before rename, and is visible through the inherited configuration file-management API. A full factory reset removes it together with the other LittleFS configuration files.
+
+Keeping this small HEMS-specific sidecar separate avoids invasive changes to the large inherited OpenDTU configuration schema during the telemetry-only milestone. The public HEMS API still presents storage configuration together with the other HEMS device settings.
+
+## Runtime status and UI
+
+`/api/hems/status` exposes storage reachability, selected profile, resolved Modbus port/unit, freshness, last error, successful/failed poll counters and the semantic telemetry fields. Operational telemetry fields are returned as `null` unless the current storage snapshot is valid; stale or failed reads therefore cannot masquerade as fresh zero/false values.
+
+The HEMS device page configures host, profile and optional transport overrides. The synthetic decoder fixture `example.synthetic` remains available to the profile engine but is hidden from normal storage-device selection. The HEMS overview renders read-only storage telemetry and diagnostics. Multi-section HEMS pages use the inherited OpenDTU section-spacing convention (`add-space`/`mt-5`).
 
 ## Safety / non-goals
 
