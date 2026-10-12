@@ -39,6 +39,14 @@ bool supportedKey(char const* key)
     return numberField(sample, key) != nullptr || boolField(sample, key) != nullptr;
 }
 
+bool supportsProfile(Profiles::Profile const& profile)
+{
+    for (uint8_t i = 0; i < profile.entryCount; ++i) {
+        if (supportedKey(profile.entries[i].key)) { return true; }
+    }
+    return false;
+}
+
 bool apply(Sample& sample, char const* key, Profiles::Value const& value)
 {
     if (!key) { return false; }

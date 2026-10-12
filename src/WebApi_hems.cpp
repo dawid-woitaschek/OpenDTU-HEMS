@@ -3,7 +3,50 @@
 #include "Configuration.h"
 #include "WebApi.h"
 #include <hems/Controller.h>
+#include <hems/profiles/FlashStore.h>
 #include <hems/storage/SettingsStore.h>
+#include <hems/storage/Telemetry.h>
+#include <memory>
+#include <mutex>
+
+namespace {
+
+bool validateStorageProfile(StorageConfig const& config, std::unique_lock<std::mutex>& profileLock,
+        char const*& error)
+{
+    error = nullptr;
+    if (!config.Enabled) { return true; }
+    if (!config.Profile[0]) {
+        error = "A storage profile is required while storage telemetry is enabled";
+        return false;
+    }
+
+    profileLock = std::unique_lock<std::mutex>(Hems::Profiles::runtimeStoreMutex(), std::try_to_lock);
+    if (!profileLock.owns_lock()) {
+        error = "Profile operation busy";
+        return false;
+    }
+
+    auto profile = std::unique_ptr<Hems::Profiles::Profile>(new (std::nothrow) Hems::Profiles::Profile());
+    if (!profile) {
+        error = "Insufficient memory";
+        return false;
+    }
+
+    bool builtIn = false;
+    char const* storeError = nullptr;
+    if (!Hems::Profiles::runtimeStore().get(config.Profile, *profile, builtIn, storeError)) {
+        error = "Selected storage profile does not exist";
+        return false;
+    }
+    if (builtIn || !Hems::Storage::supportsProfile(*profile)) {
+        error = "Selected profile is not compatible with storage telemetry";
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 void WebApiHemsClass::init(AsyncWebServer& server)
 {
@@ -79,8 +122,8 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     storage["modbus_exception"] = storageSnapshot.exception;
     storage["successful_polls"] = storageSnapshot.successfulPolls;
     storage["failed_polls"] = storageSnapshot.failedPolls;
-    storage["profile"] = storageConfig.Profile;
-    storage["host"] = storageConfig.Host;
+    storage["profile"] = static_cast<char const*>(storageConfig.Profile);
+    storage["host"] = static_cast<char const*>(storageConfig.Host);
     storage["port"] = storageSnapshot.port;
     storage["unit"] = storageSnapshot.unit;
     storage["age_ms"] = nullptr;
@@ -158,12 +201,22 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
         return;
     }
 
+    std::unique_lock<std::mutex> profileLock;
+    char const* profileError = nullptr;
+    if (storagePresent && !validateStorageProfile(storageConfig, profileLock, profileError)) {
+        retMsg["message"] = profileError ? profileError : "Invalid storage profile";
+        retMsg["code"] = WebApiError::GenericValueMissing;
+        WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+        return;
+    }
+
     if (storagePresent && !Hems::Storage::StorageSettings.set(storageConfig)) {
         retMsg["message"] = "Failed to persist storage telemetry settings!";
         retMsg["code"] = WebApiError::GenericWriteFailed;
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
         return;
     }
+    if (profileLock.owns_lock()) { profileLock.unlock(); }
 
     {
         auto guard = Configuration.getWriteGuard();

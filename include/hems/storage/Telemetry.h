@@ -37,6 +37,7 @@ struct Sample {
 };
 
 bool supportedKey(char const* key);
+bool supportsProfile(Profiles::Profile const& profile);
 bool apply(Sample& sample, char const* key, Profiles::Value const& value);
 
 } // namespace Hems::Storage

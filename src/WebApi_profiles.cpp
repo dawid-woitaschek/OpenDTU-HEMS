@@ -5,6 +5,8 @@
 #include <defaults.h>
 #include <hems/Controller.h>
 #include <hems/profiles/FlashStore.h>
+#include <hems/storage/SettingsStore.h>
+#include <hems/storage/Telemetry.h>
 #include <atomic>
 #include <cstring>
 #include <memory>
@@ -31,6 +33,19 @@ void reply(AsyncWebServerRequest* request, int status, char const* error = nullp
     response->getRoot()["ok"] = error == nullptr;
     if (error) { response->getRoot()["message"] = error; }
     response->setCode(status); WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+void replyInUse(AsyncWebServerRequest* request, char const* profileId) {
+    auto* response = new AsyncJsonResponse();
+    auto& root = response->getRoot();
+    root["ok"] = false;
+    root["message"] = "Profile is still referenced by the storage configuration";
+    root["profile"] = profileId;
+    auto references = root["references"].to<JsonArray>();
+    auto reference = references.add<JsonObject>();
+    reference["consumer"] = "storage";
+    reference["location"] = "/hems/devices";
+    response->setCode(409);
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 char const* id(AsyncWebServerRequest* r) { return r->hasParam("id") ? r->getParam("id")->value().c_str() : ""; }
 std::unique_ptr<Profile> allocateProfile() { return std::unique_ptr<Profile>(new (std::nothrow) Profile()); }
@@ -81,6 +96,19 @@ void WebApiProfilesClass::finish(AsyncWebServerRequest* r, bool persist) {
     bool ok;
     if (persist) {
         auto replace = r->hasParam("replace") ? r->getParam("replace")->value().c_str() : nullptr;
+        auto storageConfig = Hems::Storage::StorageSettings.get();
+        if (replace && storageConfig.Profile[0] && !strcmp(storageConfig.Profile, replace)) {
+            auto candidate = allocateProfile();
+            if (!candidate || !parse(json, upload->received, *candidate, error)) {
+                if (!candidate) { error = "Insufficient memory"; }
+                reply(r, 400, error);
+                return;
+            }
+            if (!Hems::Storage::supportsProfile(*candidate)) {
+                reply(r, 409, "Replacement profile is not compatible with storage telemetry");
+                return;
+            }
+        }
         ok = store().import(json, upload->received, replace, error);
     } else {
         auto p = allocateProfile(); ok = p && parse(json, upload->received, *p, error);
@@ -99,6 +127,7 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
     std::unique_lock<std::mutex> lock(operation(), std::try_to_lock);
     if (!lock.owns_lock()) { reply(r, 503, "Profile operation busy"); return; }
     auto p = allocateProfile(); if (!p) { reply(r, 503, "Insufficient memory"); return; }
+    auto storageConfig = Hems::Storage::StorageSettings.get();
     auto* response = new AsyncJsonResponse(); auto& root = response->getRoot();
     auto profiles = root["profiles"].to<JsonArray>(); char const* error = nullptr; size_t corrupt = 0;
     for (size_t i = 0; i <= MaxImported; ++i) {
@@ -106,11 +135,25 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
         if (!ok) { if (i && files().size(i - 1)) { ++corrupt; } continue; }
         // Reject ambiguous or illegally shadowed ids even if files were altered externally.
         bool builtIn; if (i && (!strcmp(p->id, "example.synthetic") || !store().get(p->id, *p, builtIn, error))) { ++corrupt; continue; }
-        auto o = profiles.add<JsonObject>(); o["id"] = p->id; o["vendor"] = p->vendor; o["model"] = p->model;
-        o["origin"] = i == 0 ? "Built-in" : "Imported"; o["schema"] = Schema;
-        o["source"] = p->source; o["source_revision"] = p->revision;
-        o["author"] = p->author; o["license"] = p->license; o["telemetry_count"] = p->entryCount;
-        o["control_metadata"] = false; o["read_only"] = true;
+        builtIn = i == 0;
+        auto o = profiles.add<JsonObject>();
+        o["id"] = static_cast<char const*>(p->id);
+        o["vendor"] = static_cast<char const*>(p->vendor);
+        o["model"] = static_cast<char const*>(p->model);
+        o["origin"] = builtIn ? "Built-in" : "Imported";
+        o["schema"] = Schema;
+        o["source"] = static_cast<char const*>(p->source);
+        o["source_revision"] = static_cast<char const*>(p->revision);
+        o["author"] = static_cast<char const*>(p->author);
+        o["license"] = static_cast<char const*>(p->license);
+        o["telemetry_count"] = p->entryCount;
+        o["control_metadata"] = false;
+        o["read_only"] = true;
+        auto capabilities = o["capabilities"].to<JsonArray>();
+        if (!builtIn && Hems::Storage::supportsProfile(*p)) { capabilities.add("storage"); }
+        auto usedBy = o["used_by"].to<JsonArray>();
+        if (storageConfig.Profile[0] && !strcmp(storageConfig.Profile, p->id)) { usedBy.add("storage"); }
+        o["in_use"] = usedBy.size() != 0;
     }
     root["corrupt_slots"] = corrupt; root["max_json_bytes"] = MaxJson; root["max_imported"] = MaxImported;
     WebApi.sendJsonResponse(r, response, __FUNCTION__, __LINE__);
@@ -130,8 +173,14 @@ void WebApiProfilesClass::erase(AsyncWebServerRequest* r) {
     if (!WebApi.checkCredentials(r)) { return; }
     std::unique_lock<std::mutex> lock(operation(), std::try_to_lock);
     if (!lock.owns_lock()) { reply(r, 503, "Profile operation busy"); return; }
+    auto profileId = id(r);
+    auto storageConfig = Hems::Storage::StorageSettings.get();
+    if (storageConfig.Profile[0] && !strcmp(storageConfig.Profile, profileId)) {
+        replyInUse(r, profileId);
+        return;
+    }
     char const* error;
-    bool ok = store().erase(id(r), error);
+    bool ok = store().erase(profileId, error);
     if (ok) {
         lock.unlock();
         HemsController.updateSettings();

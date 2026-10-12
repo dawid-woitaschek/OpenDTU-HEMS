@@ -51,7 +51,9 @@ inline bool deserializeStorageConfig(JsonVariantConst source, StorageConfig& tar
 
     target.Enabled = enabled;
     std::memcpy(target.Host, host, std::strlen(host) + 1);
-    std::memcpy(target.Profile, profile, std::strlen(profile) + 1);
+    // A disabled consumer must not keep a hidden profile reference. This makes
+    // disabling the consumer an explicit way to release a profile for deletion.
+    if (enabled) { std::memcpy(target.Profile, profile, std::strlen(profile) + 1); }
     target.Port = port;
     target.Unit = unit;
     return true;

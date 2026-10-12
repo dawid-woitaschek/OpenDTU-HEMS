@@ -23,6 +23,15 @@ export const hemsSupplementMessages = {
             AlarmActive: 'Alarm active',
             ModbusEndpoint: 'Modbus TCP endpoint',
         },
+        profiles: {
+            Capabilities: 'Suitable for',
+            UsedBy: 'Used by',
+            NoCapabilities: 'No supported HEMS consumer',
+            StorageCapability: 'Storage',
+            StorageConsumer: 'Storage',
+            DeleteBlocked: 'Remove the profile assignment from the listed consumer before deleting this profile.',
+            MissingStorageProfile: 'Configured profile is missing or not suitable for storage: {id}',
+        },
     },
     de: {
         storage: {
@@ -48,6 +57,15 @@ export const hemsSupplementMessages = {
             AlarmActive: 'Alarm aktiv',
             ModbusEndpoint: 'Modbus-TCP-Endpunkt',
         },
+        profiles: {
+            Capabilities: 'Geeignet für',
+            UsedBy: 'Verwendet von',
+            NoCapabilities: 'Kein unterstützter HEMS-Verbraucher',
+            StorageCapability: 'Speicher',
+            StorageConsumer: 'Speicher',
+            DeleteBlocked: 'Entferne zuerst die Profilzuordnung beim aufgeführten Verbraucher.',
+            MissingStorageProfile: 'Konfiguriertes Profil fehlt oder ist nicht für Speicher geeignet: {id}',
+        },
     },
     fr: {
         storage: {
@@ -72,6 +90,15 @@ export const hemsSupplementMessages = {
             FaultActive: 'Défaut actif',
             AlarmActive: 'Alarme active',
             ModbusEndpoint: 'Point de terminaison Modbus TCP',
+        },
+        profiles: {
+            Capabilities: 'Compatible avec',
+            UsedBy: 'Utilisé par',
+            NoCapabilities: 'Aucun consommateur HEMS pris en charge',
+            StorageCapability: 'Stockage',
+            StorageConsumer: 'Stockage',
+            DeleteBlocked: "Supprimez d’abord l’affectation du profil chez le consommateur indiqué.",
+            MissingStorageProfile: 'Le profil configuré est absent ou incompatible avec le stockage : {id}',
         },
     },
 };

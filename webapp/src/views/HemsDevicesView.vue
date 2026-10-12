@@ -50,10 +50,20 @@
                         <div class="col-sm-8">
                             <select id="hems-storage-profile" class="form-select" v-model="hemsConfig.storage.profile">
                                 <option value=""></option>
+                                <option
+                                    v-if="storageProfileUnavailable"
+                                    :value="hemsConfig.storage.profile"
+                                    disabled
+                                >
+                                    ⚠ {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
+                                </option>
                                 <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
                                     {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
                                 </option>
                             </select>
+                            <div v-if="storageProfileUnavailable" class="alert alert-warning mt-2 mb-0" role="alert">
+                                {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
+                            </div>
                         </div>
                     </div>
                     <InputElement
@@ -83,7 +93,7 @@
             {{ $t('hems.UnsupportedVersion') }}
         </div>
         <div v-if="!dataLoading" class="mt-5">
-            <HemsProfilePanel />
+            <HemsProfilePanel @profiles-changed="refreshProfiles" />
         </div>
     </BasePage>
 </template>
@@ -104,6 +114,7 @@ type ProfileSummary = {
     id: string;
     vendor: string;
     model: string;
+    capabilities: string[];
 };
 
 export default defineComponent({
@@ -116,10 +127,26 @@ export default defineComponent({
             alert: {} as AlertResponse,
         };
     },
+    computed: {
+        storageProfileUnavailable(): boolean {
+            const profile = this.hemsConfig.storage?.profile;
+            return !!profile && !this.profiles.some((candidate) => candidate.id === profile);
+        },
+    },
     created() {
         this.getConfig();
     },
     methods: {
+        applyProfiles(profileData: { profiles: ProfileSummary[] }) {
+            this.profiles = profileData.profiles.filter(
+                (profile) => profile.id !== 'example.synthetic' && profile.capabilities?.includes('storage')
+            );
+        },
+        refreshProfiles() {
+            fetch('/api/hems/profiles', { headers: authHeader() })
+                .then((response) => handleResponse(response, this.$emitter, this.$router))
+                .then((profileData) => this.applyProfiles(profileData));
+        },
         getConfig() {
             this.dataLoading = true;
             Promise.all([
@@ -131,13 +158,12 @@ export default defineComponent({
                 ),
             ]).then(([config, profileData]) => {
                 this.hemsConfig = config as HemsConfig;
-                this.profiles = (profileData.profiles as ProfileSummary[]).filter(
-                    (profile) => profile.id !== 'example.synthetic'
-                );
+                this.applyProfiles(profileData as { profiles: ProfileSummary[] });
                 this.dataLoading = false;
             });
         },
         saveConfig() {
+            if (!this.hemsConfig.storage.enabled) { this.hemsConfig.storage.profile = ''; }
             const formData = new FormData();
             formData.append('data', JSON.stringify(this.hemsConfig));
             fetch('/api/hems/config', { method: 'POST', headers: authHeader(), body: formData })
@@ -146,6 +172,7 @@ export default defineComponent({
                     this.alert = data;
                     this.alert.message = this.$t('apiresponse.' + data.code);
                     this.alert.show = true;
+                    this.getConfig();
                 });
         },
     },

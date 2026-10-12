@@ -262,10 +262,25 @@ static void testSettings()
     doc.clear();
     object = doc.to<JsonObject>();
     object["enabled"] = false;
-    object["host"] = "";
-    object["profile"] = "";
+    object["host"] = "storage.local";
+    object["profile"] = "vendor.model-v1";
+    object["port"] = 0;
+    object["unit"] = 0;
     assert(deserializeStorageConfig(doc.as<JsonVariantConst>(), decoded));
-    assert(!decoded.Enabled && decoded.Host[0] == '\0' && decoded.Profile[0] == '\0');
+    assert(!decoded.Enabled && !strcmp(decoded.Host, "storage.local") && decoded.Profile[0] == '\0');
+}
+
+static void testProfileCapability()
+{
+    Profiles::Profile storage;
+    storage.entryCount = 1;
+    storage.entries[0] = entry("soc_pct", Modbus::ReadFunction::HoldingRegisters, 10, Profiles::Type::Uint16);
+    assert(Storage::supportsProfile(storage));
+
+    Profiles::Profile unrelated;
+    unrelated.entryCount = 1;
+    unrelated.entries[0] = entry("vehicle_state", Modbus::ReadFunction::HoldingRegisters, 10, Profiles::Type::Uint16);
+    assert(!Storage::supportsProfile(unrelated));
 }
 
 int main()
@@ -282,5 +297,6 @@ int main()
     testInvalidAndFailures();
     testState();
     testSettings();
+    testProfileCapability();
     std::cout << "Generic storage semantic/poller/state/settings tests passed\n";
 }
