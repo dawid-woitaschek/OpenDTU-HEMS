@@ -6,6 +6,8 @@ export const hemsSupplementMessages = {
             WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
             ConfigLoadFailed: 'HEMS configuration could not be loaded.',
             ConfigSaveFailed: 'HEMS configuration could not be saved.',
+            InvalidWallboxHost: 'Enter a valid hostname or IPv4 address. IPv4 octets must be between 0 and 255.',
+            InvalidWallboxPort: 'Enter a valid wallbox TCP port between 1 and 65535.',
         },
         storage: {
             Title: 'Storage — read only',
@@ -16,6 +18,9 @@ export const hemsSupplementMessages = {
             NoProfilesHint: 'No storage profile is available. Import a compatible Modbus profile below first.',
             ProfileRequired: 'Storage telemetry cannot be enabled without a storage profile. Select a profile first.',
             ProfileUnavailable: 'The selected storage profile is not available. Select an existing storage profile.',
+            InvalidHost: 'Enter a valid storage hostname or IPv4 address. IPv4 octets must be between 0 and 255.',
+            InvalidPort: 'Enter a valid storage TCP port between 0 and 65535.',
+            InvalidUnit: 'Enter a valid Modbus unit ID between 0 and 247.',
             Port: 'TCP port (0 = profile default)',
             UnitId: 'Modbus unit ID (0 = profile default)',
             SetupHint: 'Select a device profile and host. Port and unit ID may inherit the profile defaults.',
@@ -54,6 +59,9 @@ export const hemsSupplementMessages = {
                 'Aktuell wird die Wallbox über den WARP-Modbus-TCP-Provider ausgelesen. Hostname/IP-Adresse und TCP-Port der Wallbox konfigurieren.',
             ConfigLoadFailed: 'Die HEMS-Konfiguration konnte nicht geladen werden.',
             ConfigSaveFailed: 'Die HEMS-Konfiguration konnte nicht gespeichert werden.',
+            InvalidWallboxHost:
+                'Gib einen gültigen Hostnamen oder eine gültige IPv4-Adresse ein. IPv4-Oktette müssen zwischen 0 und 255 liegen.',
+            InvalidWallboxPort: 'Gib einen gültigen Wallbox-TCP-Port zwischen 1 und 65535 ein.',
         },
         storage: {
             Title: 'Speicher — nur Lesezugriff',
@@ -67,6 +75,10 @@ export const hemsSupplementMessages = {
                 'Speicher-Telemetrie kann ohne Speicherprofil nicht aktiviert werden. Wähle zuerst ein Profil aus.',
             ProfileUnavailable:
                 'Das ausgewählte Speicherprofil ist nicht verfügbar. Wähle ein vorhandenes Speicherprofil aus.',
+            InvalidHost:
+                'Gib einen gültigen Speicher-Hostnamen oder eine gültige IPv4-Adresse ein. IPv4-Oktette müssen zwischen 0 und 255 liegen.',
+            InvalidPort: 'Gib einen gültigen Speicher-TCP-Port zwischen 0 und 65535 ein.',
+            InvalidUnit: 'Gib eine gültige Modbus Unit-ID zwischen 0 und 247 ein.',
             Port: 'TCP-Port (0 = Profilvorgabe)',
             UnitId: 'Modbus Unit-ID (0 = Profilvorgabe)',
             SetupHint: 'Geräteprofil und Host auswählen. TCP-Port und Unit-ID können aus dem Profil übernommen werden.',
@@ -105,6 +117,9 @@ export const hemsSupplementMessages = {
                 'Le fournisseur actuel en lecture seule est WARP Modbus TCP. Configurez l’hôte et le port TCP de la borne.',
             ConfigLoadFailed: 'La configuration HEMS n’a pas pu être chargée.',
             ConfigSaveFailed: 'La configuration HEMS n’a pas pu être enregistrée.',
+            InvalidWallboxHost:
+                'Saisissez un nom d’hôte ou une adresse IPv4 valide. Les octets IPv4 doivent être compris entre 0 et 255.',
+            InvalidWallboxPort: 'Saisissez un port TCP de borne valide entre 1 et 65535.',
         },
         storage: {
             Title: 'Stockage — lecture seule',
@@ -118,6 +133,10 @@ export const hemsSupplementMessages = {
                 'La télémétrie du stockage ne peut pas être activée sans profil de stockage. Sélectionnez d’abord un profil.',
             ProfileUnavailable:
                 'Le profil de stockage sélectionné n’est pas disponible. Sélectionnez un profil existant.',
+            InvalidHost:
+                'Saisissez un nom d’hôte de stockage ou une adresse IPv4 valide. Les octets IPv4 doivent être compris entre 0 et 255.',
+            InvalidPort: 'Saisissez un port TCP de stockage valide entre 0 et 65535.',
+            InvalidUnit: 'Saisissez un ID unité Modbus valide entre 0 et 247.',
             Port: 'Port TCP (0 = valeur du profil)',
             UnitId: 'ID unité Modbus (0 = valeur du profil)',
             SetupHint:
