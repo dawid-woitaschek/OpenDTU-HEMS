@@ -52,9 +52,9 @@
                                 }}</router-link>
                             </li>
                             <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/hems/profiles">{{
-                                    $t('profiles.Title')
-                                }}</router-link>
+                                <router-link @click="onClick" class="dropdown-item" to="/hems/devices"
+                                    >{{ $t('menu.DeviceManager') }} / {{ $t('profiles.Title') }}</router-link
+                                >
                             </li>
                         </ul>
                     </li>
