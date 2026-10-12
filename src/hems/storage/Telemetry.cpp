@@ -52,9 +52,19 @@ bool apply(Sample& sample, char const* key, Profiles::Value const& value)
     }
     if (auto* target = boolField(sample, key)) {
         ++sample.recognizedValues;
-        if (!value.valid || value.type != Profiles::Type::Bool) { return true; }
-        target->valid = true;
-        target->value = value.boolean;
+        if (!value.valid) { return true; }
+        if (value.type == Profiles::Type::Bool) {
+            target->valid = true;
+            target->value = value.boolean;
+        } else if (value.number == 0 || value.number == 1) {
+            // Many devices expose flags as 0/1 holding/input registers rather
+            // than coils/discrete inputs. Accept that generic representation,
+            // but reject arbitrary non-zero enums as booleans.
+            target->valid = true;
+            target->value = value.number == 1;
+        } else {
+            return true;
+        }
         ++sample.validValues;
         return true;
     }
