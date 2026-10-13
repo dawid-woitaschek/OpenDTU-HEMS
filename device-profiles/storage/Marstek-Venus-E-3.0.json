@@ -1,0 +1,101 @@
+{
+  "schema": "opendtu-hems-modbus-profile/v1",
+  "id": "marstek.venus-e3.gen3",
+  "capabilities": ["storage"],
+  "metadata": {
+    "vendor": "Marstek",
+    "model": "Venus E 3.0",
+    "source": "ViperRNMC/marstek_venus_modbus e_v3.yaml",
+    "source_revision": "31e71613885d2573b104c47632298920ba99e11b",
+    "description": "Community-validated Gen3 read-only profile adapted to OpenDTU-HEMS semantics"
+  },
+  "provenance": {
+    "author": "ViperRNMC community mapping; OpenDTU-HEMS adaptation",
+    "license": "MIT source mapping; profile adaptation GPL-2.0-or-later"
+  },
+  "transport": {
+    "protocol": "modbus_tcp",
+    "default_port": 502,
+    "unit_id": 1,
+    "address_base": 0
+  },
+  "telemetry": [
+    {
+      "key": "soc_pct",
+      "space": "holding",
+      "address": 34002,
+      "count": 1,
+      "type": "uint16",
+      "scale": 0.1,
+      "unit": "percent",
+      "min": 0,
+      "max": 100
+    },
+    {
+      "key": "ac_power_w",
+      "space": "holding",
+      "address": 30006,
+      "count": 1,
+      "type": "int16",
+      "scale": -1,
+      "unit": "W"
+    },
+    {
+      "key": "battery_voltage_v",
+      "space": "holding",
+      "address": 30100,
+      "count": 1,
+      "type": "uint16",
+      "scale": 0.01,
+      "unit": "V",
+      "min": 0
+    },
+    {
+      "key": "battery_current_a",
+      "space": "holding",
+      "address": 30101,
+      "count": 1,
+      "type": "int16",
+      "scale": 0.1,
+      "unit": "A"
+    },
+    {
+      "key": "temperature_c",
+      "space": "holding",
+      "address": 35000,
+      "count": 1,
+      "type": "int16",
+      "scale": 0.1,
+      "unit": "C"
+    },
+    {
+      "key": "charge_energy_total_kwh",
+      "space": "holding",
+      "address": 33000,
+      "count": 2,
+      "type": "uint32",
+      "scale": 0.01,
+      "unit": "kWh",
+      "min": 0
+    },
+    {
+      "key": "discharge_energy_total_kwh",
+      "space": "holding",
+      "address": 33002,
+      "count": 2,
+      "type": "int32",
+      "scale": 0.01,
+      "unit": "kWh"
+    },
+    {
+      "key": "operating_state",
+      "space": "holding",
+      "address": 35100,
+      "count": 1,
+      "type": "uint16",
+      "scale": 1,
+      "min": 0,
+      "max": 6
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "schema": "opendtu-hems-modbus-profile/v1",
+  "id": "tinkerforge.warp3-smart",
+  "metadata": {
+    "vendor": "Tinkerforge",
+    "model": "WARP3 Smart",
+    "source": "Official Tinkerforge WARP Charger Modbus register table",
+    "source_revision": "cf09655aa599d708da70c383ab3c8d02876ec62d",
+    "description": "Vendor-documented read-only WARP3 Smart profile for manual OpenDTU-HEMS import"
+  },
+  "provenance": {
+    "author": "Tinkerforge documentation; OpenDTU-HEMS adaptation",
+    "license": "Profile adaptation GPL-2.0-or-later; upstream documentation cited"
+  },
+  "transport": {
+    "protocol": "modbus_tcp",
+    "default_port": 502,
+    "unit_id": 1,
+    "address_base": 0
+  },
+  "telemetry": [
+    {
+      "key": "register_table_version",
+      "space": "input",
+      "address": 0,
+      "count": 2,
+      "type": "uint32",
+      "min": 2,
+      "max": 5
+    },
+    {
+      "key": "uptime_s",
+      "space": "input",
+      "address": 12,
+      "count": 2,
+      "type": "uint32",
+      "unit": "s",
+      "min": 0
+    },
+    {
+      "key": "iec_state",
+      "space": "input",
+      "address": 1000,
+      "count": 2,
+      "type": "uint32",
+      "min": 0,
+      "max": 4
+    },
+    {
+      "key": "charging_state",
+      "space": "input",
+      "address": 1002,
+      "count": 2,
+      "type": "uint32",
+      "min": 0,
+      "max": 4
+    },
+    {
+      "key": "allowed_current_a",
+      "space": "input",
+      "address": 1010,
+      "count": 2,
+      "type": "uint32",
+      "scale": 0.001,
+      "unit": "A",
+      "min": 0,
+      "max": 32
+    }
+  ]
+}
