@@ -250,9 +250,12 @@ export default defineComponent({
                 }
             }
 
+            const warp = this.hemsConfig.warp.enabled
+                ? this.hemsConfig.warp
+                : { enabled: false, host: '', port: 502 };
             this.postConfig({
                 version: this.hemsConfig.version,
-                warp: this.hemsConfig.warp,
+                warp,
             });
         },
         saveStorage() {

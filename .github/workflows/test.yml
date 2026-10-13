@@ -44,3 +44,6 @@ jobs:
           cd test
           make clean
           make test ARDUINOJSON=../work/ArduinoJson/src
+
+      - name: Test production HEMS JSON configuration helpers
+        run: python3 test/test_hems_config.py work/ArduinoJson/src
