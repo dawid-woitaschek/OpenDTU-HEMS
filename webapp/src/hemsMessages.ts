@@ -24,6 +24,19 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Fresh',
             QualityStale: 'Stale',
             QualityUnknown: 'Unknown',
+            EvProtectionShadow: 'EV protection — Shadow',
+            EvProtectionShadowHint:
+                'Evaluates whether EV charging should block storage discharge. Shadow mode only observes and proposes; it does not change effective constraints or write to hardware.',
+            EvProtectionState: 'Policy state',
+            EvProtectionCharging: 'EV charging',
+            EvProtectionConditionAge: 'Condition active for',
+            EvProtectionWouldBlock: 'Would block storage discharge',
+            EvProtectionDebounce: 'Debounce',
+            EvProtectionStates: {
+                inactive: 'Inactive',
+                waiting: 'Waiting for debounce',
+                would_block_storage_discharge: 'Would block storage discharge',
+            },
         },
         storage: {
             Title: 'Storage — read only',
@@ -94,6 +107,19 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Aktuell',
             QualityStale: 'Veraltet',
             QualityUnknown: 'Unbekannt',
+            EvProtectionShadow: 'EV-Schutz — Shadow',
+            EvProtectionShadowHint:
+                'Bewertet, ob ein ladendes Fahrzeug die Speicherentladung sperren sollte. Shadow beobachtet und schlägt nur vor; wirksame Begrenzungen und Hardware bleiben unverändert.',
+            EvProtectionState: 'Regelzustand',
+            EvProtectionCharging: 'Fahrzeug lädt',
+            EvProtectionConditionAge: 'Bedingung aktiv seit',
+            EvProtectionWouldBlock: 'Würde Speicherentladung sperren',
+            EvProtectionDebounce: 'Entprellzeit',
+            EvProtectionStates: {
+                inactive: 'Inaktiv',
+                waiting: 'Wartet auf Entprellzeit',
+                would_block_storage_discharge: 'Würde Speicherentladung sperren',
+            },
         },
         storage: {
             Title: 'Speicher — nur Lesezugriff',
@@ -168,6 +194,19 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Actuel',
             QualityStale: 'Périmé',
             QualityUnknown: 'Inconnu',
+            EvProtectionShadow: 'Protection VE — Shadow',
+            EvProtectionShadowHint:
+                'Évalue si la recharge du véhicule devrait bloquer la décharge du stockage. Le mode Shadow observe et propose uniquement; les contraintes effectives et le matériel restent inchangés.',
+            EvProtectionState: 'État de la règle',
+            EvProtectionCharging: 'Véhicule en charge',
+            EvProtectionConditionAge: 'Condition active depuis',
+            EvProtectionWouldBlock: 'Bloquerait la décharge du stockage',
+            EvProtectionDebounce: 'Temporisation',
+            EvProtectionStates: {
+                inactive: 'Inactive',
+                waiting: 'En attente de temporisation',
+                would_block_storage_discharge: 'Bloquerait la décharge du stockage',
+            },
         },
         storage: {
             Title: 'Stockage — lecture seule',
