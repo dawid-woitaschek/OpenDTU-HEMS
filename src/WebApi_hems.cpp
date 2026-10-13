@@ -236,6 +236,21 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     serializeLimit(storageConstraints["max_charge_power"].to<JsonObject>(), constraints.storage.maxChargePower);
     serializeLimit(storageConstraints["max_discharge_power"].to<JsonObject>(), constraints.storage.maxDischargePower);
 
+    auto evProtection = HemsController.getEvProtectionShadowSnapshot();
+    JsonObject shadow = root["shadow"].to<JsonObject>();
+    JsonObject evProtectionJson = shadow["ev_protection"].to<JsonObject>();
+    evProtectionJson["state"] = Hems::Policies::evProtectionStateName(evProtection.state);
+    evProtectionJson["debounce_ms"] = Hems::Policies::EvProtectionDebounceMs;
+    evProtectionJson["condition_age_ms"] = nullptr;
+    if (evProtection.state != Hems::Policies::EvProtectionState::Inactive) {
+        evProtectionJson["condition_age_ms"] = evProtection.conditionAgeMs;
+    }
+    evProtectionJson["charging_known"] = evProtection.chargingKnown;
+    evProtectionJson["charging"] = nullptr;
+    if (evProtection.chargingKnown) { evProtectionJson["charging"] = evProtection.charging; }
+    evProtectionJson["would_block_storage_discharge"] =
+        !evProtection.proposedConstraints.storage.dischargeAllowed;
+
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 
