@@ -3,6 +3,7 @@
 #include <hems/model/Normalize.h>
 #include <cassert>
 #include <iostream>
+#include <optional>
 
 namespace {
 
@@ -97,6 +98,22 @@ void testEvseUnknownsAndFalseStayDistinct()
     assert(!state.evse.powerW.known());
 }
 
+void testGridPowerPreservesZeroUnknownAndStale()
+{
+    auto freshZero = Hems::Model::normalizeGridPower(0.0f, true, true);
+    assert(freshZero.usable());
+    assert(freshZero.value == 0.0);
+
+    auto stale = Hems::Model::normalizeGridPower(815.0f, false, true);
+    assert(stale.known());
+    assert(!stale.usable());
+    assert(stale.quality == Hems::Model::Quality::Stale);
+    assert(stale.value == 815.0);
+
+    auto unknown = Hems::Model::normalizeGridPower(std::nullopt, false, false);
+    assert(!unknown.known());
+}
+
 void testConstraintComposition()
 {
     Hems::Constraints::ConstraintSet first;
@@ -125,6 +142,7 @@ int main()
     testFailedPollDoesNotReuseOperationalValues();
     testStaleValuesRemainDiagnosticOnly();
     testEvseUnknownsAndFalseStayDistinct();
+    testGridPowerPreservesZeroUnknownAndStale();
     testConstraintComposition();
     std::cout << "Normalized HEMS state and constraint tests passed\n";
 }

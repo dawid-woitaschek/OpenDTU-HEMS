@@ -2,6 +2,7 @@
 #include <hems/Controller.h>
 #include <hems/model/Normalize.h>
 #include <hems/storage/SettingsStore.h>
+#include <powermeter/Controller.h>
 #include <Configuration.h>
 
 Hems::Controller HemsController;
@@ -50,7 +51,10 @@ Storage::Snapshot Controller::getStorageSnapshot() const
 
 Model::SystemState Controller::getNormalizedState() const
 {
-    return Model::normalize(_warp.snapshot(), _storage.snapshot());
+    auto result = Model::normalize(_warp.snapshot(), _storage.snapshot());
+    auto grid = PowerMeter.getSnapshot();
+    result.grid.powerW = Model::normalizeGridPower(grid.powerTotal, grid.valid, grid.lastUpdate > 0);
+    return result;
 }
 
 Constraints::ConstraintSet Controller::getConstraints() const

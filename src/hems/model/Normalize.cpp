@@ -26,6 +26,12 @@ Hems::Model::Signal<bool> boolSignal(Hems::Storage::BoolValue const& value, Hems
 
 namespace Hems::Model {
 
+Signal<double> normalizeGridPower(std::optional<float> powerW, bool valid, bool hasUpdate)
+{
+    if (!powerW || !hasUpdate) { return {}; }
+    return { static_cast<double>(*powerW), valid ? Quality::Fresh : Quality::Stale };
+}
+
 SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& storage)
 {
     SystemState result;
@@ -64,9 +70,8 @@ SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& stora
     result.storage.faultActive = boolSignal(sample.faultActive, storageQuality);
     result.storage.alarmActive = boolSignal(sample.alarmActive, storageQuality);
 
-    // Grid and PV are intentionally left Unknown until their existing OpenDTU
-    // sources are adapted into this model. Unknown is a first-class state and
-    // must never be replaced by a fabricated zero.
+    // PV remains Unknown until the existing OpenDTU inverter/solar sources are
+    // adapted into this model. Unknown must never be replaced by a fabricated zero.
     return result;
 }
 

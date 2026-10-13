@@ -4,9 +4,11 @@
 #include <hems/model/State.h>
 #include <hems/storage/State.h>
 #include <hems/warp/State.h>
+#include <optional>
 
 namespace Hems::Model {
 
+Signal<double> normalizeGridPower(std::optional<float> powerW, bool valid, bool hasUpdate);
 SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& storage);
 
 } // namespace Hems::Model

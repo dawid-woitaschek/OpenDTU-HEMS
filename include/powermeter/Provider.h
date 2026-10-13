@@ -4,6 +4,7 @@
 #include <atomic>
 #include <Configuration.h>
 #include <powermeter/DataPoints.h>
+#include <optional>
 
 namespace PowerMeters {
 
@@ -28,6 +29,7 @@ public:
     virtual void loop() = 0;
     virtual bool isDataValid() const;
 
+    std::optional<float> getPowerTotalOptional() const;
     float getPowerTotal() const;
     uint32_t getLastUpdate() const { return _dataCurrent.getLastUpdate(); }
     void mqttLoop() const;
