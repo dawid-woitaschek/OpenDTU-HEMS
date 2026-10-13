@@ -36,6 +36,9 @@ struct GridState {
 };
 
 struct PvState {
+    // AC output of solar-classified Hoymiles inverters. DC solar chargers are
+    // deliberately not mixed into this signal because they represent a
+    // different energy path and would distort grid-side calculations.
     Signal<double> powerW;
 };
 

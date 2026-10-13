@@ -198,6 +198,31 @@ void testGridPowerPreservesZeroUnknownAndStale()
     assert(!valueWithoutUpdate.known());
 }
 
+void testPvPowerRequiresCompleteClassifiedSources()
+{
+    auto freshZero = Hems::Model::normalizePvPower(0.0, 1, 1, true, false);
+    assert(freshZero.usable());
+    assert(freshZero.value == 0.0);
+
+    auto stale = Hems::Model::normalizePvPower(940.0, 2, 2, true, true);
+    assert(stale.known());
+    assert(!stale.usable());
+    assert(stale.quality == Hems::Model::Quality::Stale);
+    assert(stale.value == 940.0);
+
+    auto noConfiguredSolar = Hems::Model::normalizePvPower(0.0, 0, 0, true, false);
+    assert(!noConfiguredSolar.known());
+
+    auto incompleteClassification = Hems::Model::normalizePvPower(500.0, 1, 1, false, false);
+    assert(!incompleteClassification.known());
+
+    auto missingSolarSample = Hems::Model::normalizePvPower(500.0, 2, 1, true, false);
+    assert(!missingSolarSample.known());
+
+    auto inconsistentSourceCount = Hems::Model::normalizePvPower(500.0, 1, 2, true, false);
+    assert(!inconsistentSourceCount.known());
+}
+
 void testConstraintComposition()
 {
     Hems::Constraints::ConstraintSet first;
@@ -252,6 +277,7 @@ int main()
     testFailedEvsePollDoesNotReuseOperationalValues();
     testStaleEvseValuesRemainDiagnosticOnly();
     testGridPowerPreservesZeroUnknownAndStale();
+    testPvPowerRequiresCompleteClassifiedSources();
     testConstraintComposition();
     testConstraintCompositionIsOrderIndependent();
     std::cout << "Normalized HEMS state and constraint tests passed\n";

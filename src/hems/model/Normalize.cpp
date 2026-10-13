@@ -32,6 +32,17 @@ Signal<double> normalizeGridPower(std::optional<float> powerW, bool valid, bool 
     return { static_cast<double>(*powerW), valid ? Quality::Fresh : Quality::Stale };
 }
 
+Signal<double> normalizePvPower(double totalPowerW, uint8_t configuredSolarSources,
+        uint8_t observedSolarSources, bool classificationComplete, bool anyStale)
+{
+    if (!classificationComplete || configuredSolarSources == 0
+            || observedSolarSources != configuredSolarSources) {
+        return {};
+    }
+
+    return { totalPowerW, anyStale ? Quality::Stale : Quality::Fresh };
+}
+
 SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& storage)
 {
     SystemState result;
@@ -70,8 +81,6 @@ SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& stora
     result.storage.faultActive = boolSignal(sample.faultActive, storageQuality);
     result.storage.alarmActive = boolSignal(sample.alarmActive, storageQuality);
 
-    // PV remains Unknown until the existing OpenDTU inverter/solar sources are
-    // adapted into this model. Unknown must never be replaced by a fabricated zero.
     return result;
 }
 
