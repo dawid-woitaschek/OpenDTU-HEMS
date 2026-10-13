@@ -14,11 +14,12 @@ TEST_HOST = test_host
 TEST_HEMS_MODEL = test_hems_model
 TEST_HEMS_CONFIG = test_hems_config
 TEST_EV_PROTECTION = test_ev_protection
+TEST_FIRMWARE_UPDATE = test_firmware_update
 ARDUINOJSON ?= ../.pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 
 .PHONY: all clean test help
 
-all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION)
+all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
 
 $(TEST_OVERSCALING): test_overscaling.cpp ../src/OverscalingCalculator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $< ../src/OverscalingCalculator.cpp
@@ -53,6 +54,9 @@ $(TEST_HEMS_CONFIG): test_hems_config.cpp ../src/hems/profiles/Profile.cpp
 $(TEST_EV_PROTECTION): test_ev_protection.cpp ../src/hems/policies/EvProtection.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $^
 
+$(TEST_FIRMWARE_UPDATE): test_firmware_update.cpp
+	$(CXX) $(CXXFLAGS) -I../include -o $@ $<
+
 test: all
 	@echo "Running overscaling tests..."
 	./$(TEST_OVERSCALING)
@@ -67,9 +71,10 @@ test: all
 	./$(TEST_HEMS_MODEL)
 	./$(TEST_HEMS_CONFIG)
 	./$(TEST_EV_PROTECTION)
+	./$(TEST_FIRMWARE_UPDATE)
 
 clean:
-	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION)
+	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
 
 help:
 	@echo "Available targets:"
