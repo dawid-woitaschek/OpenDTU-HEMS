@@ -5,7 +5,7 @@
   "metadata": {
     "vendor": "Marstek",
     "model": "Venus E 3.0",
-    "source": "V148/Micro V119 target observation plus independent community cross-checks",
+    "source": "V148/Micro V119 target plus independent public E3 mappings",
     "source_revision": "target-v148-micro119-2026-10-05",
     "description": "Read-only V148-targeted profile; public E3 mappings vary by firmware"
   },
