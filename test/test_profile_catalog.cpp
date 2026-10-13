@@ -46,6 +46,7 @@ int main()
     auto marstek = loadProfile("../device-profiles/storage/Marstek-Venus-E-3.0.json");
     assert(!strcmp(marstek.id, "marstek.venus-e3.v148"));
     assert(hasCapability(marstek, Capability::Storage));
+    assert(!hasCapability(marstek, Capability::Evse));
 
     auto soc = findEntry(marstek, "soc_pct");
     assert(soc && soc->address == 34002 && soc->type == Type::Uint16);
@@ -61,6 +62,7 @@ int main()
 
     auto warp = loadProfile("../device-profiles/evse/Tinkerforge-WARP3-Smart.json");
     assert(!strcmp(warp.id, "tinkerforge.warp3-smart"));
+    assert(hasCapability(warp, Capability::Evse));
     assert(!hasCapability(warp, Capability::Storage));
 
     auto chargingState = findEntry(warp, "charging_state");
