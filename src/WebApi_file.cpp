@@ -42,16 +42,16 @@ void WebApiFileClass::onFileListGet(AsyncWebServerRequest* request)
     File rootfs = LittleFS.open("/");
     File file = rootfs.openNextFile();
     while (file) {
-        if (file.isDirectory()) {
-            continue;
+        if (!file.isDirectory()) {
+            JsonObject obj = data.add<JsonObject>();
+            obj["name"] = String(file.name());
+            obj["size"] = file.size();
         }
-        JsonObject obj = data.add<JsonObject>();
-        obj["name"] = String(file.name());
-        obj["size"] = file.size();
 
+        file.close();
         file = rootfs.openNextFile();
     }
-    file.close();
+    rootfs.close();
 
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
