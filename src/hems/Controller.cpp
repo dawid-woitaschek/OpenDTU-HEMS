@@ -3,6 +3,7 @@
 #include <hems/model/Normalize.h>
 #include <hems/storage/SettingsStore.h>
 #include <powermeter/Controller.h>
+#include <Arduino.h>
 #include <Configuration.h>
 #include <Hoymiles.h>
 
@@ -87,6 +88,10 @@ void Controller::init(Scheduler& scheduler)
     _loopTask.setCallback([this] {
         _warp.loop();
         _storage.loop();
+
+        auto normalized = Model::normalize(_warp.snapshot(), _storage.snapshot());
+        std::lock_guard<std::mutex> lock(_policyMutex);
+        _evProtectionPolicy.update(normalized.evse, millis());
     });
     _loopTask.setInterval(100);
     _loopTask.setIterations(TASK_FOREVER);
@@ -103,6 +108,10 @@ void Controller::updateSettings()
     bool monitor = getMode() == Mode::Monitor;
     _warp.configure(config.Warp, monitor);
     _storage.configure(Storage::StorageSettings.get(), monitor);
+    if (!monitor) {
+        std::lock_guard<std::mutex> lock(_policyMutex);
+        _evProtectionPolicy.reset();
+    }
 }
 
 Mode Controller::getMode() const
@@ -131,9 +140,16 @@ Model::SystemState Controller::getNormalizedState() const
 
 Constraints::ConstraintSet Controller::getConstraints() const
 {
-    // PR #6 establishes deterministic constraint composition. Policies begin in
-    // PR #7, so the current aggregate intentionally contains no restrictions.
+    // The EV protection policy is deliberately Shadow-only in this milestone.
+    // Proposed restrictions are observable separately and do not become effective
+    // constraints until the later Active milestone.
     return {};
+}
+
+Policies::EvProtectionSnapshot Controller::getEvProtectionShadowSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(_policyMutex);
+    return _evProtectionPolicy.snapshot(millis());
 }
 
 } // namespace Hems
