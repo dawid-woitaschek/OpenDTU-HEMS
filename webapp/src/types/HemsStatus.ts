@@ -115,4 +115,14 @@ export interface HemsStatus {
             max_discharge_power: HemsPowerLimit;
         };
     };
+    shadow: {
+        ev_protection: {
+            state: 'inactive' | 'waiting' | 'would_block_storage_discharge';
+            debounce_ms: number;
+            condition_age_ms: number | null;
+            charging_known: boolean;
+            charging: boolean | null;
+            would_block_storage_discharge: boolean;
+        };
+    };
 }
