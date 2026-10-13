@@ -12,11 +12,12 @@ TEST_MODBUS_PROFILES = test_modbus_profiles
 TEST_STORAGE = test_storage
 TEST_HOST = test_host
 TEST_HEMS_MODEL = test_hems_model
+TEST_HEMS_CONFIG = test_hems_config
 ARDUINOJSON ?= ../.pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 
 .PHONY: all clean test help
 
-all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL)
+all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG)
 
 $(TEST_OVERSCALING): test_overscaling.cpp ../src/OverscalingCalculator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $< ../src/OverscalingCalculator.cpp
@@ -45,6 +46,9 @@ $(TEST_HOST): test_host.cpp
 $(TEST_HEMS_MODEL): test_hems_model.cpp ../src/hems/model/Normalize.cpp ../src/hems/constraints/Constraints.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
+$(TEST_HEMS_CONFIG): test_hems_config.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $<
+
 test: all
 	@echo "Running overscaling tests..."
 	./$(TEST_OVERSCALING)
@@ -57,9 +61,10 @@ test: all
 	./$(TEST_STORAGE)
 	./$(TEST_HOST)
 	./$(TEST_HEMS_MODEL)
+	./$(TEST_HEMS_CONFIG)
 
 clean:
-	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL)
+	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_MODBUS_PROFILES) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG)
 
 help:
 	@echo "Available targets:"

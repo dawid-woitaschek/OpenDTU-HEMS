@@ -46,14 +46,20 @@ inline bool deserializeStorageConfig(JsonVariantConst source, StorageConfig& tar
     auto host = source["host"].as<char const*>();
     auto profile = source["profile"].as<char const*>();
     bool enabled = source["enabled"].as<bool>();
-    if ((host[0] != '\0' || enabled) && !Hems::Modbus::validHost(host)) { return false; }
-    if ((profile[0] != '\0' || enabled) && !validStorageProfileId(profile)) { return false; }
+    auto hostLength = std::strlen(host);
+    auto profileLength = std::strlen(profile);
+
+    // Always enforce representation bounds before copying. Semantic endpoint/profile
+    // validity only matters while the consumer is enabled: stale disabled values
+    // must never prevent an operator from disabling the consumer safely.
+    if (hostLength > Hems::Modbus::MaxHostLength || profileLength > Hems::Profiles::MaxId) { return false; }
+    if (enabled && (!Hems::Modbus::validHost(host) || !validStorageProfileId(profile))) { return false; }
 
     target.Enabled = enabled;
-    std::memcpy(target.Host, host, std::strlen(host) + 1);
+    std::memcpy(target.Host, host, hostLength + 1);
     // A disabled consumer must not keep a hidden profile reference. This makes
     // disabling the consumer an explicit way to release a profile for deletion.
-    if (enabled) { std::memcpy(target.Profile, profile, std::strlen(profile) + 1); }
+    if (enabled) { std::memcpy(target.Profile, profile, profileLength + 1); }
     target.Port = port;
     target.Unit = unit;
     return true;
