@@ -14,7 +14,7 @@ constexpr size_t MaxText = 96;
 constexpr size_t MaxKey = 32;
 
 enum class Type : uint8_t { Bool, Uint16, Int16, Uint32, Int32, Float32 };
-enum class Capability : uint8_t { Storage = 1 };
+enum class Capability : uint8_t { Storage = 1, Evse = 2 };
 inline constexpr uint8_t capabilityBit(Capability capability) { return static_cast<uint8_t>(capability); }
 struct Entry {
     char key[MaxKey + 1] {};
