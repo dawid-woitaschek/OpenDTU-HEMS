@@ -88,6 +88,18 @@ bool Controller::isDataValid() const
     return _upProvider->isDataValid();
 }
 
+Snapshot Controller::getSnapshot() const
+{
+    std::lock_guard<std::mutex> l(_mutex);
+    if (!_upProvider) { return {}; }
+
+    Snapshot result;
+    result.powerTotal = _upProvider->getPowerTotalOptional();
+    result.lastUpdate = _upProvider->getLastUpdate();
+    result.valid = _upProvider->isDataValid();
+    return result;
+}
+
 void Controller::loop()
 {
     std::lock_guard<std::mutex> lock(_mutex);

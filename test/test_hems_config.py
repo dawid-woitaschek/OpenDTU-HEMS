@@ -22,6 +22,7 @@ bindings = """
 #include <Arduino.h>
 #include <cassert>
 #include <cstring>
+#include <string>
 #define CONFIG_VERSION_HEMS 1
 struct HemsConfig { uint32_t Version; bool Enabled; WarpConfig Warp; };
 class ConfigurationClass {
@@ -40,6 +41,11 @@ int main() {
         JsonObject obj = document.as<JsonObject>();
         ConfigurationClass::deserializeHemsConfig(obj, config);
     };
+    auto warpAccepted = [&](std::string const& text, WarpConfig& candidate) {
+        assert(!deserializeJson(document, text.c_str()));
+        return ConfigurationClass::deserializeWarpConfig(document.as<JsonVariantConst>(), candidate);
+    };
+
     load("{}");
     assert(config.Version == 1 && !config.Enabled && !config.Warp.Enabled && config.Warp.Port == 502);
     load(R"({"version":1,"enabled":true})");
@@ -50,6 +56,7 @@ int main() {
     assert(config.Version == 0 && !config.Enabled);
     load(R"({"version":1,"enabled":true,"warp":{"enabled":true,"host":"warp.local","port":502}})");
     assert(config.Warp.Enabled && strcmp(config.Warp.Host, "warp.local") == 0 && config.Warp.Port == 502);
+
     JsonDocument saved;
     JsonObject out = saved.to<JsonObject>();
     ConfigurationClass::serializeHemsConfig(config, out);
@@ -58,9 +65,26 @@ int main() {
     ConfigurationClass::deserializeHemsConfig(backup, restored);
     assert(restored.Version == 1 && restored.Enabled && restored.Warp.Enabled);
     assert(strcmp(restored.Warp.Host, "warp.local") == 0 && restored.Warp.Port == 502);
+
+    WarpConfig candidate;
+    assert(warpAccepted(R"({"enabled":true,"host":"warp.local","port":1})", candidate));
+    assert(candidate.Enabled && candidate.Port == 1 && strcmp(candidate.Host, "warp.local") == 0);
+    assert(warpAccepted(R"({"enabled":true,"host":"10.0.4.20","port":65535})", candidate));
+    assert(candidate.Enabled && candidate.Port == 65535);
+
+    std::string maxHost = std::string(63, 'a') + "." + std::string(63, 'b') + "."
+        + std::string(63, 'c') + "." + std::string(61, 'd');
+    assert(maxHost.size() == WARP_MAX_HOST_LENGTH);
+    assert(warpAccepted(std::string("{\"enabled\":true,\"host\":\"") + maxHost
+        + "\",\"port\":502}", candidate));
+    assert(strcmp(candidate.Host, maxHost.c_str()) == 0);
+
     for (auto text : {
             R"({"enabled":true,"host":"","port":502})",
             R"({"enabled":true,"host":"http://warp","port":502})",
+            R"({"enabled":true,"host":"131.143.9311.11","port":502})",
+            R"({"enabled":true,"host":" warp.local","port":502})",
+            R"({"enabled":true,"host":"warp.local ","port":502})",
             R"({"enabled":true,"host":"warp","port":0})",
             R"({"enabled":true,"host":"warp","port":65536})",
             R"({"enabled":true,"host":"warp","port":-1})",
@@ -72,12 +96,30 @@ int main() {
             R"({"enabled":true,"host":"warp"})",
             R"("malformed")",
             R"([])" }) {
-        assert(!deserializeJson(document, text));
-        WarpConfig candidate;
         candidate.Enabled = true;
-        assert(!ConfigurationClass::deserializeWarpConfig(document.as<JsonVariantConst>(), candidate));
+        assert(!warpAccepted(text, candidate));
         assert(!candidate.Enabled); // Malformed restored data cannot activate polling.
     }
+
+    std::string oversizedHost(WARP_MAX_HOST_LENGTH + 1, 'a');
+    assert(!warpAccepted(std::string("{\"enabled\":true,\"host\":\"") + oversizedHost
+        + "\",\"port\":502}", candidate));
+
+    // Disabled WARP uses a canonical clean payload. The backend deliberately remains
+    // strict instead of persisting malformed hidden endpoint data.
+    assert(warpAccepted(R"({"enabled":false,"host":"","port":502})", candidate));
+    assert(!candidate.Enabled && candidate.Host[0] == '\0' && candidate.Port == 502);
+    assert(!warpAccepted(R"({"enabled":false,"host":"bad host","port":502})", candidate));
+    assert(!warpAccepted(R"({"enabled":false,"host":"","port":0})", candidate));
+    assert(!warpAccepted(R"({"enabled":false,"host":"warp.local","port":"502"})", candidate));
+
+    JsonDocument absent;
+    candidate.Enabled = true;
+    strcpy(candidate.Host, "old.local");
+    candidate.Port = 1234;
+    assert(ConfigurationClass::deserializeWarpConfig(absent.as<JsonVariantConst>(), candidate));
+    assert(!candidate.Enabled && candidate.Host[0] == '\0' && candidate.Port == 502);
+
     load(R"({"version":1,"enabled":true,"warp":{"enabled":true,"host":"bad host","port":502}})");
     assert(config.Enabled && !config.Warp.Enabled);
     load(R"({"version":1,"enabled":false,"warp":{"enabled":false,"host":"","port":502}})");
@@ -94,4 +136,4 @@ with tempfile.TemporaryDirectory(prefix="hems-config-") as directory:
         "-I" + str(root / "test/warp_stubs"), str(harness), "-o", str(binary),
     ], check=True)
     subprocess.run([str(binary)], check=True)
-print("Production HEMS JSON compatibility, round-trip and malformed-config tests passed")
+print("Production HEMS JSON compatibility, round-trip and WARP validation tests passed")

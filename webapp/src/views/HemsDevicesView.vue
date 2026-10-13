@@ -170,6 +170,30 @@ export default defineComponent({
         showError(message: string) {
             this.alert = { show: true, type: 'danger', code: 0, message };
         },
+        validHost(host: string): boolean {
+            if (!host || host.length > 253 || host.trim() !== host) return false;
+
+            if (/^[0-9.]+$/.test(host) && host.includes('.')) {
+                const parts = host.split('.');
+                return (
+                    parts.length === 4 &&
+                    parts.every(
+                        (part) => /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
+                    )
+                );
+            }
+
+            return host.split('.').every(
+                (label) =>
+                    label.length >= 1 &&
+                    label.length <= 63 &&
+                    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
+            );
+        },
+        validInteger(value: unknown, minimum: number, maximum: number): boolean {
+            const number = typeof value === 'number' ? value : Number(value);
+            return Number.isInteger(number) && number >= minimum && number <= maximum;
+        },
         applyProfiles(profileData: { profiles: ProfileSummary[] }) {
             this.profiles = profileData.profiles.filter((profile) => profile.capabilities?.includes('storage'));
         },
@@ -215,19 +239,45 @@ export default defineComponent({
                 .catch(() => this.showError(this.$t('hems.ConfigSaveFailed')));
         },
         saveWarp() {
+            if (this.hemsConfig.warp.enabled) {
+                if (!this.validHost(this.hemsConfig.warp.host)) {
+                    this.showError(this.$t('hems.InvalidWallboxHost'));
+                    return;
+                }
+                if (!this.validInteger(this.hemsConfig.warp.port, 1, 65535)) {
+                    this.showError(this.$t('hems.InvalidWallboxPort'));
+                    return;
+                }
+            }
+
+            const warp = this.hemsConfig.warp.enabled
+                ? this.hemsConfig.warp
+                : { enabled: false, host: '', port: 502 };
             this.postConfig({
                 version: this.hemsConfig.version,
-                warp: this.hemsConfig.warp,
+                warp,
             });
         },
         saveStorage() {
             if (this.hemsConfig.storage.enabled) {
+                if (!this.validHost(this.hemsConfig.storage.host)) {
+                    this.showError(this.$t('storage.InvalidHost'));
+                    return;
+                }
                 if (!this.hemsConfig.storage.profile) {
                     this.showError(this.$t('storage.ProfileRequired'));
                     return;
                 }
                 if (this.storageProfileUnavailable) {
                     this.showError(this.$t('storage.ProfileUnavailable'));
+                    return;
+                }
+                if (!this.validInteger(this.hemsConfig.storage.port, 0, 65535)) {
+                    this.showError(this.$t('storage.InvalidPort'));
+                    return;
+                }
+                if (!this.validInteger(this.hemsConfig.storage.unit, 0, 247)) {
+                    this.showError(this.$t('storage.InvalidUnit'));
                     return;
                 }
             } else {

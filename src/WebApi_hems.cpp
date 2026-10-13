@@ -2,6 +2,7 @@
 #include "WebApi_hems.h"
 #include "Configuration.h"
 #include "WebApi.h"
+#include <hems/ConfigUpdate.h>
 #include <hems/Controller.h>
 #include <hems/profiles/FlashStore.h>
 #include <hems/storage/SettingsStore.h>
@@ -44,6 +45,44 @@ bool validateStorageProfile(StorageConfig const& config, std::unique_lock<std::m
         return false;
     }
     return true;
+}
+
+char const* qualityName(Hems::Model::Quality quality)
+{
+    switch (quality) {
+        case Hems::Model::Quality::Fresh: return "fresh";
+        case Hems::Model::Quality::Stale: return "stale";
+        case Hems::Model::Quality::Unknown:
+        default: return "unknown";
+    }
+}
+
+template <typename T>
+void serializeSignal(JsonObject target, Hems::Model::Signal<T> const& signal)
+{
+    target["quality"] = qualityName(signal.quality);
+    if (signal.known()) {
+        target["value"] = signal.value;
+    } else {
+        target["value"] = nullptr;
+    }
+}
+
+void serializeDevice(JsonObject target, Hems::Model::DeviceState const& device)
+{
+    target["configured"] = device.configured;
+    target["enabled"] = device.enabled;
+    target["reachable"] = device.reachable;
+    target["has_update"] = device.hasUpdate;
+    target["age_ms"] = nullptr;
+    if (device.hasUpdate) { target["age_ms"] = device.ageMs; }
+}
+
+void serializeLimit(JsonObject target, Hems::Constraints::UpperLimit const& limit)
+{
+    target["active"] = limit.active;
+    target["value_w"] = nullptr;
+    if (limit.active) { target["value_w"] = limit.valueW; }
 }
 
 } // namespace
@@ -142,7 +181,7 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
         auto number = [&storage](char const* key, Hems::Storage::NumberValue const& value) {
             if (value.valid) { storage[key] = value.value; }
         };
-        auto boolean = [&storage](char const* key, Hems::Storage::BoolValue const& value) {
+        auto flag = [&storage](char const* key, Hems::Storage::BoolValue const& value) {
             if (value.valid) { storage[key] = value.value; }
         };
         number("soc_pct", sample.socPct);
@@ -156,11 +195,61 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
         number("operating_state", sample.operatingState);
         number("fault_code", sample.faultCode);
         number("alarm_code", sample.alarmCode);
-        boolean("charging", sample.charging);
-        boolean("discharging", sample.discharging);
-        boolean("fault_active", sample.faultActive);
-        boolean("alarm_active", sample.alarmActive);
+        flag("charging", sample.charging);
+        flag("discharging", sample.discharging);
+        flag("fault_active", sample.faultActive);
+        flag("alarm_active", sample.alarmActive);
     }
+
+    auto normalizedState = HemsController.getNormalizedState();
+    JsonObject normalized = root["normalized"].to<JsonObject>();
+    JsonObject grid = normalized["grid"].to<JsonObject>();
+    serializeSignal(grid["power_w"].to<JsonObject>(), normalizedState.grid.powerW);
+    JsonObject pv = normalized["pv"].to<JsonObject>();
+    serializeSignal(pv["power_w"].to<JsonObject>(), normalizedState.pv.powerW);
+
+    JsonObject normalizedStorage = normalized["storage"].to<JsonObject>();
+    serializeDevice(normalizedStorage["device"].to<JsonObject>(), normalizedState.storage.device);
+    serializeSignal(normalizedStorage["soc_pct"].to<JsonObject>(), normalizedState.storage.socPct);
+    serializeSignal(normalizedStorage["ac_power_w"].to<JsonObject>(), normalizedState.storage.acPowerW);
+    serializeSignal(normalizedStorage["dc_power_w"].to<JsonObject>(), normalizedState.storage.dcPowerW);
+    serializeSignal(normalizedStorage["battery_voltage_v"].to<JsonObject>(), normalizedState.storage.batteryVoltageV);
+    serializeSignal(normalizedStorage["battery_current_a"].to<JsonObject>(), normalizedState.storage.batteryCurrentA);
+    serializeSignal(normalizedStorage["temperature_c"].to<JsonObject>(), normalizedState.storage.temperatureC);
+    serializeSignal(normalizedStorage["charging"].to<JsonObject>(), normalizedState.storage.charging);
+    serializeSignal(normalizedStorage["discharging"].to<JsonObject>(), normalizedState.storage.discharging);
+    serializeSignal(normalizedStorage["fault_active"].to<JsonObject>(), normalizedState.storage.faultActive);
+    serializeSignal(normalizedStorage["alarm_active"].to<JsonObject>(), normalizedState.storage.alarmActive);
+
+    JsonObject evse = normalized["evse"].to<JsonObject>();
+    serializeDevice(evse["device"].to<JsonObject>(), normalizedState.evse.device);
+    serializeSignal(evse["vehicle_connected"].to<JsonObject>(), normalizedState.evse.vehicleConnected);
+    serializeSignal(evse["charging"].to<JsonObject>(), normalizedState.evse.charging);
+    serializeSignal(evse["power_w"].to<JsonObject>(), normalizedState.evse.powerW);
+    serializeSignal(evse["allowed_current_a"].to<JsonObject>(), normalizedState.evse.allowedCurrentA);
+
+    auto constraints = HemsController.getConstraints();
+    JsonObject constraintsJson = root["constraints"].to<JsonObject>();
+    JsonObject storageConstraints = constraintsJson["storage"].to<JsonObject>();
+    storageConstraints["charge_allowed"] = constraints.storage.chargeAllowed;
+    storageConstraints["discharge_allowed"] = constraints.storage.dischargeAllowed;
+    serializeLimit(storageConstraints["max_charge_power"].to<JsonObject>(), constraints.storage.maxChargePower);
+    serializeLimit(storageConstraints["max_discharge_power"].to<JsonObject>(), constraints.storage.maxDischargePower);
+
+    auto evProtection = HemsController.getEvProtectionShadowSnapshot();
+    JsonObject shadow = root["shadow"].to<JsonObject>();
+    JsonObject evProtectionJson = shadow["ev_protection"].to<JsonObject>();
+    evProtectionJson["state"] = Hems::Policies::evProtectionStateName(evProtection.state);
+    evProtectionJson["debounce_ms"] = Hems::Policies::EvProtectionDebounceMs;
+    evProtectionJson["condition_age_ms"] = nullptr;
+    if (evProtection.state != Hems::Policies::EvProtectionState::Inactive) {
+        evProtectionJson["condition_age_ms"] = evProtection.conditionAgeMs;
+    }
+    evProtectionJson["charging_known"] = evProtection.chargingKnown;
+    evProtectionJson["charging"] = nullptr;
+    if (evProtection.chargingKnown) { evProtectionJson["charging"] = evProtection.charging; }
+    evProtectionJson["would_block_storage_discharge"] =
+        !evProtection.proposedConstraints.storage.dischargeAllowed;
 
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
@@ -190,22 +279,52 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     bool enabledPresent = !root["enabled"].isNull();
     bool warpPresent = !root["warp"].isNull();
     bool storagePresent = !root["storage"].isNull();
-    bool enabledValid = !enabledPresent || root["enabled"].is<bool>();
-    bool warpValid = !warpPresent || ConfigurationClass::deserializeWarpConfig(root["warp"], warpConfig);
-    bool storageValid = !storagePresent || deserializeStorageConfig(root["storage"], storageConfig);
 
-    if (!root["version"].is<uint32_t>() || root["version"].as<uint32_t>() != CONFIG_VERSION_HEMS
-            || Configuration.get().Hems.Version != CONFIG_VERSION_HEMS || !enabledValid || !warpValid || !storageValid
-            || (!enabledPresent && !warpPresent && !storagePresent)) {
-        retMsg["message"] = "Supported HEMS version and valid provided settings are required!";
+    auto sendValueError = [&](char const* error, char const* field, char const* message) {
+        retMsg["error"] = error;
+        retMsg["field"] = field;
+        retMsg["message"] = message;
         retMsg["code"] = WebApiError::GenericValueMissing;
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+    };
+
+    if (!root["version"].is<uint32_t>() || root["version"].as<uint32_t>() != CONFIG_VERSION_HEMS) {
+        sendValueError("unsupported_version", "version", "Unsupported or missing HEMS configuration version.");
+        return;
+    }
+    if (Configuration.get().Hems.Version != CONFIG_VERSION_HEMS) {
+        sendValueError("unsupported_stored_version", "version", "Stored HEMS configuration version is unsupported.");
+        return;
+    }
+    if (!enabledPresent && !warpPresent && !storagePresent) {
+        sendValueError("empty_update", "request", "No HEMS settings were provided.");
+        return;
+    }
+    if (Hems::ConfigUpdate::mixesPersistenceDomains(enabledPresent, warpPresent, storagePresent)) {
+        sendValueError("mixed_config_domains", "request",
+                "Storage settings must be updated separately from HEMS and wallbox settings.");
+        return;
+    }
+    if (enabledPresent && !root["enabled"].is<bool>()) {
+        sendValueError("invalid_enabled", "enabled", "HEMS enabled must be true or false.");
+        return;
+    }
+    if (warpPresent && !ConfigurationClass::deserializeWarpConfig(root["warp"], warpConfig)) {
+        sendValueError("invalid_wallbox_settings", "warp",
+                "Invalid wallbox settings. Verify enabled, hostname/IPv4 address and TCP port.");
+        return;
+    }
+    if (storagePresent && !deserializeStorageConfig(root["storage"], storageConfig)) {
+        sendValueError("invalid_storage_settings", "storage",
+                "Invalid storage settings. Verify enabled, hostname/IPv4 address, profile, TCP port and Modbus unit ID.");
         return;
     }
 
     std::unique_lock<std::mutex> profileLock;
     char const* profileError = nullptr;
     if (storagePresent && !validateStorageProfile(storageConfig, profileLock, profileError)) {
+        retMsg["error"] = "invalid_storage_profile";
+        retMsg["field"] = "storage.profile";
         retMsg["message"] = profileError ? profileError : "Invalid storage profile";
         retMsg["code"] = WebApiError::GenericValueMissing;
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
@@ -213,6 +332,8 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     }
 
     if (storagePresent && !Hems::Storage::StorageSettings.set(storageConfig)) {
+        retMsg["error"] = "storage_persist_failed";
+        retMsg["field"] = "storage";
         retMsg["message"] = "Failed to persist storage telemetry settings!";
         retMsg["code"] = WebApiError::GenericWriteFailed;
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);

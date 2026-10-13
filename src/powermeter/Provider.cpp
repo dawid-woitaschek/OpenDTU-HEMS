@@ -9,14 +9,22 @@ bool Provider::isDataValid() const
     return getLastUpdate() > 0 && ((millis() - getLastUpdate()) < (30 * 1000));
 }
 
+std::optional<float> Provider::getPowerTotalOptional() const
+{
+    auto total = _dataCurrent.get<DataPointLabel::PowerTotal>();
+    if (total) { return total; }
+
+    auto phase1 = _dataCurrent.get<DataPointLabel::PowerL1>();
+    auto phase2 = _dataCurrent.get<DataPointLabel::PowerL2>();
+    auto phase3 = _dataCurrent.get<DataPointLabel::PowerL3>();
+    if (!phase1 && !phase2 && !phase3) { return std::nullopt; }
+
+    return phase1.value_or(0.0f) + phase2.value_or(0.0f) + phase3.value_or(0.0f);
+}
+
 float Provider::getPowerTotal() const
 {
-    auto oPowerTotal = _dataCurrent.get<DataPointLabel::PowerTotal>();
-    if (oPowerTotal) { return *oPowerTotal; }
-
-    return _dataCurrent.get<DataPointLabel::PowerL1>().value_or(0.0f)
-        + _dataCurrent.get<DataPointLabel::PowerL2>().value_or(0.0f)
-        + _dataCurrent.get<DataPointLabel::PowerL3>().value_or(0.0f);
+    return getPowerTotalOptional().value_or(0.0f);
 }
 
 void Provider::mqttLoop() const
@@ -34,9 +42,7 @@ void Provider::mqttLoop() const
 #define PUB(l, t) \
     { \
         auto oDataPoint = _dataCurrent.get<DataPointLabel::l>(); \
-        if (oDataPoint) { \
-            MqttSettings.publish("powermeter/" t, String(*oDataPoint)); \
-        } \
+        if (oDataPoint) { MqttSettings.publish("powermeter/" t, String(*oDataPoint)); } \
     }
 
     PUB(PowerL1, "power1");
