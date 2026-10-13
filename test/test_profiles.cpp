@@ -24,14 +24,31 @@ int main() {
     assert(parse(example.data(), example.size(), p, error));
     assert(p.entryCount == 1 && std::abs(p.entries[0].scale - .1) < 1e-7);
     assert(!hasCapability(p, Capability::Storage));
+    assert(!hasCapability(p, Capability::Evse));
     auto storageCapable = replace(example, "\"id\":\"example.synthetic\",",
             "\"id\":\"example.synthetic\",\"capabilities\":[\"storage\"],");
     Profile storageProfile;
     assert(parse(storageCapable.data(), storageCapable.size(), storageProfile, error));
     assert(hasCapability(storageProfile, Capability::Storage));
+    assert(!hasCapability(storageProfile, Capability::Evse));
     JsonDocument storageDocument; serialize(storageProfile, storageDocument.to<JsonObject>());
     assert(storageDocument["capabilities"].as<JsonArrayConst>().size() == 1);
     assert(!strcmp(storageDocument["capabilities"][0].as<char const*>(), "storage"));
+    auto evseCapable = replace(example, "\"id\":\"example.synthetic\",",
+            "\"id\":\"example.synthetic\",\"capabilities\":[\"evse\"],");
+    Profile evseProfile;
+    assert(parse(evseCapable.data(), evseCapable.size(), evseProfile, error));
+    assert(!hasCapability(evseProfile, Capability::Storage));
+    assert(hasCapability(evseProfile, Capability::Evse));
+    JsonDocument evseDocument; serialize(evseProfile, evseDocument.to<JsonObject>());
+    assert(evseDocument["capabilities"].as<JsonArrayConst>().size() == 1);
+    assert(!strcmp(evseDocument["capabilities"][0].as<char const*>(), "evse"));
+    auto combinedCapable = replace(example, "\"id\":\"example.synthetic\",",
+            "\"id\":\"example.synthetic\",\"capabilities\":[\"storage\",\"evse\"],");
+    Profile combinedProfile;
+    assert(parse(combinedCapable.data(), combinedCapable.size(), combinedProfile, error));
+    assert(hasCapability(combinedProfile, Capability::Storage));
+    assert(hasCapability(combinedProfile, Capability::Evse));
     uint8_t fullSoc[] { 3, 0xe8 }, overSoc[] { 3, 0xe9 };
     assert(decode(p.entries[0], fullSoc, sizeof(fullSoc)).valid);
     assert(decode(p.entries[0], fullSoc, sizeof(fullSoc)).number == 100);
@@ -52,8 +69,9 @@ int main() {
         replace(example, "\"count\":1", "\"count\":1.5"),
         replace(example, "uint16", "uint64"),
         replace(example, "\"address\":0", "\"address\":65536"),
-        replace(storageCapable, "\"storage\"", "\"evse\""),
+        replace(storageCapable, "\"storage\"", "\"hvac\""),
         replace(storageCapable, "[\"storage\"]", "[\"storage\",\"storage\"]"),
+        replace(evseCapable, "[\"evse\"]", "[\"evse\",\"evse\"]"),
         replace(storageCapable, "[\"storage\"]", "[]"),
     }) {
         checkBad(s);
@@ -100,6 +118,9 @@ int main() {
     std::string storageNormalized; serializeJson(storageDocument, storageNormalized);
     assert(parse(storageNormalized.data(), storageNormalized.size(), roundtrip, error));
     assert(hasCapability(roundtrip, Capability::Storage));
+    std::string evseNormalized; serializeJson(evseDocument, evseNormalized);
+    assert(parse(evseNormalized.data(), evseNormalized.size(), roundtrip, error));
+    assert(hasCapability(roundtrip, Capability::Evse));
     std::cout << "Synthetic normalized profile=" << normalized.size() << " bytes\n";
     auto entry = doc["telemetry"][0].as<JsonObject>();
     doc["telemetry"].as<JsonArray>().add(entry);

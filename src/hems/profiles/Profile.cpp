@@ -110,6 +110,7 @@ bool parseCapabilities(JsonVariantConst value, Profile& profile) {
     for (auto item : values) {
         uint8_t bit = 0;
         if (equals(item, "storage")) { bit = capabilityBit(Capability::Storage); }
+        else if (equals(item, "evse")) { bit = capabilityBit(Capability::Evse); }
         else { return false; }
         if (profile.capabilities & bit) { return false; }
         profile.capabilities |= bit;
@@ -265,6 +266,7 @@ void serialize(Profile const& p, JsonObject root) {
     if (p.capabilities) {
         auto capabilities = root["capabilities"].to<JsonArray>();
         if (hasCapability(p, Capability::Storage)) { capabilities.add("storage"); }
+        if (hasCapability(p, Capability::Evse)) { capabilities.add("evse"); }
     }
     auto m = root["metadata"].to<JsonObject>();
     m["vendor"] = static_cast<char const*>(p.vendor); m["model"] = static_cast<char const*>(p.model); m["source"] = static_cast<char const*>(p.source); m["source_revision"] = static_cast<char const*>(p.revision);
