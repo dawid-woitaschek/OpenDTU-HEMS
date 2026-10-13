@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include <hems/ConfigUpdate.h>
 #include <hems/storage/Settings.h>
 #include <cassert>
 #include <cstring>
@@ -148,6 +149,20 @@ void testNullStorageUsesSafeDefaults()
     assert(config.Unit == 0);
 }
 
+void testConfigUpdateDomainIsolation()
+{
+    using Hems::ConfigUpdate::mixesPersistenceDomains;
+
+    assert(!mixesPersistenceDomains(false, false, false));
+    assert(!mixesPersistenceDomains(true, false, false));
+    assert(!mixesPersistenceDomains(false, true, false));
+    assert(!mixesPersistenceDomains(true, true, false));
+    assert(!mixesPersistenceDomains(false, false, true));
+    assert(mixesPersistenceDomains(true, false, true));
+    assert(mixesPersistenceDomains(false, true, true));
+    assert(mixesPersistenceDomains(true, true, true));
+}
+
 } // namespace
 
 int main()
@@ -157,5 +172,6 @@ int main()
     testStorageRejectsWrongTypesAndRanges();
     testDisabledStorageCanAlwaysBeDisabledWithSafeLeftovers();
     testNullStorageUsesSafeDefaults();
-    std::cout << "HEMS storage configuration validation tests passed\n";
+    testConfigUpdateDomainIsolation();
+    std::cout << "HEMS configuration validation tests passed\n";
 }

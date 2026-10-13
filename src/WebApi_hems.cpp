@@ -2,6 +2,7 @@
 #include "WebApi_hems.h"
 #include "Configuration.h"
 #include "WebApi.h"
+#include <hems/ConfigUpdate.h>
 #include <hems/Controller.h>
 #include <hems/profiles/FlashStore.h>
 #include <hems/storage/SettingsStore.h>
@@ -282,6 +283,11 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     }
     if (!enabledPresent && !warpPresent && !storagePresent) {
         sendValueError("empty_update", "request", "No HEMS settings were provided.");
+        return;
+    }
+    if (Hems::ConfigUpdate::mixesPersistenceDomains(enabledPresent, warpPresent, storagePresent)) {
+        sendValueError("mixed_config_domains", "request",
+                "Storage settings must be updated separately from HEMS and wallbox settings.");
         return;
     }
     if (enabledPresent && !root["enabled"].is<bool>()) {
