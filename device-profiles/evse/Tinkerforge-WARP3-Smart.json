@@ -1,6 +1,7 @@
 {
   "schema": "opendtu-hems-modbus-profile/v1",
   "id": "tinkerforge.warp3-smart",
+  "capabilities": ["evse"],
   "metadata": {
     "vendor": "Tinkerforge",
     "model": "WARP3 Smart",
