@@ -46,8 +46,8 @@ $(TEST_HOST): test_host.cpp
 $(TEST_HEMS_MODEL): test_hems_model.cpp ../src/hems/model/Normalize.cpp ../src/hems/constraints/Constraints.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
-$(TEST_HEMS_CONFIG): test_hems_config.cpp
-	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $<
+$(TEST_HEMS_CONFIG): test_hems_config.cpp ../src/hems/profiles/Profile.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
 test: all
 	@echo "Running overscaling tests..."
