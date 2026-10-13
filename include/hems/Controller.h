@@ -3,6 +3,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <hems/constraints/Constraints.h>
+#include <hems/model/State.h>
 #include <hems/storage/Provider.h>
 #include <hems/warp/Provider.h>
 #include <TaskSchedulerDeclarations.h>
@@ -18,6 +20,8 @@ public:
     Mode getMode() const;
     Warp::Snapshot getWarpSnapshot() const;
     Storage::Snapshot getStorageSnapshot() const;
+    Model::SystemState getNormalizedState() const;
+    Constraints::ConstraintSet getConstraints() const;
 
 private:
     std::atomic<Mode> _mode { Mode::Disabled };

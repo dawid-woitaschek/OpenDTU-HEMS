@@ -21,6 +21,175 @@
                 </table>
             </div>
         </CardElement>
+
+        <CardElement
+            v-if="hemsStatus.normalized"
+            :text="$t('hems.NormalizedState')"
+            textVariant="text-bg-primary"
+            table
+            add-space
+        >
+            <div class="alert alert-info m-3" role="alert">{{ $t('hems.NormalizedHint') }}</div>
+            <div class="table-responsive">
+                <table class="table table-hover table-condensed">
+                    <tbody>
+                        <tr>
+                            <th>{{ $t('hems.GridPower') }}</th>
+                            <td>
+                                {{ signalNumberText(hemsStatus.normalized.grid.power_w, 'W') }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.grid.power_w)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.grid.power_w) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.PvPower') }}</th>
+                            <td>
+                                {{ signalNumberText(hemsStatus.normalized.pv.power_w, 'W') }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.pv.power_w)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.pv.power_w) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.StorageSoc') }}</th>
+                            <td>
+                                {{ signalNumberText(hemsStatus.normalized.storage.soc_pct, '%') }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.storage.soc_pct)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.storage.soc_pct) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('storage.AcPower') }}</th>
+                            <td>
+                                {{ signalNumberText(hemsStatus.normalized.storage.ac_power_w, 'W') }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.storage.ac_power_w)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.storage.ac_power_w) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('storage.Charging') }}</th>
+                            <td>
+                                {{ signalBooleanText(hemsStatus.normalized.storage.charging) }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.storage.charging)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.storage.charging) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('storage.Discharging') }}</th>
+                            <td>
+                                {{ signalBooleanText(hemsStatus.normalized.storage.discharging) }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.storage.discharging)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.storage.discharging) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.EvseVehicle') }}</th>
+                            <td>
+                                {{ signalBooleanText(hemsStatus.normalized.evse.vehicle_connected) }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.evse.vehicle_connected)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.evse.vehicle_connected) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.Charging') }}</th>
+                            <td>
+                                {{ signalBooleanText(hemsStatus.normalized.evse.charging) }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.evse.charging)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.evse.charging) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.Power') }}</th>
+                            <td>
+                                {{ signalNumberText(hemsStatus.normalized.evse.power_w, 'W') }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.evse.power_w)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.evse.power_w) }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.AllowedCurrent') }}</th>
+                            <td>
+                                {{ signalNumberText(hemsStatus.normalized.evse.allowed_current_a, 'A') }}
+                                <span
+                                    class="badge ms-2"
+                                    :class="signalQualityClass(hemsStatus.normalized.evse.allowed_current_a)"
+                                >
+                                    {{ signalQualityText(hemsStatus.normalized.evse.allowed_current_a) }}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </CardElement>
+
+        <CardElement
+            v-if="hemsStatus.constraints"
+            :text="$t('hems.Constraints')"
+            textVariant="text-bg-primary"
+            table
+            add-space
+        >
+            <div class="alert alert-info m-3" role="alert">{{ $t('hems.ConstraintsHint') }}</div>
+            <div class="table-responsive">
+                <table class="table table-hover table-condensed">
+                    <tbody>
+                        <tr>
+                            <th>{{ $t('hems.StorageChargeAllowed') }}</th>
+                            <td>{{ booleanText(hemsStatus.constraints.storage.charge_allowed) }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.StorageDischargeAllowed') }}</th>
+                            <td>{{ booleanText(hemsStatus.constraints.storage.discharge_allowed) }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.MaxChargePower') }}</th>
+                            <td>{{ limitText(hemsStatus.constraints.storage.max_charge_power) }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ $t('hems.MaxDischargePower') }}</th>
+                            <td>{{ limitText(hemsStatus.constraints.storage.max_discharge_power) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </CardElement>
+
         <CardElement v-if="hemsStatus.warp" :text="$t('hems.Warp')" textVariant="text-bg-primary" table add-space>
             <div class="alert alert-info m-3" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
             <div class="table-responsive">
@@ -234,7 +403,7 @@
 <script lang="ts">
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
-import type { HemsStatus } from '@/types/HemsStatus';
+import type { HemsPowerLimit, HemsQuality, HemsSignal, HemsStatus } from '@/types/HemsStatus';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
@@ -264,6 +433,34 @@ export default defineComponent({
             if (this.fetchFailed || value === null) return this.$t('hems.Unknown');
             const number = value.toLocaleString(undefined, { maximumFractionDigits: 3 });
             return unit ? number + ' ' + unit : number;
+        },
+        signalNumberText(signal: HemsSignal<number>, unit: string) {
+            return this.numberText(signal.value, unit);
+        },
+        signalBooleanText(signal: HemsSignal<boolean>) {
+            return this.booleanText(signal.value);
+        },
+        displayedQuality(quality: HemsQuality): HemsQuality {
+            return this.fetchFailed ? 'unknown' : quality;
+        },
+        signalQualityText(signal: HemsSignal<unknown>) {
+            const quality = this.displayedQuality(signal.quality);
+            return this.$t('hems.Quality' + quality.charAt(0).toUpperCase() + quality.slice(1));
+        },
+        signalQualityClass(signal: HemsSignal<unknown>) {
+            switch (this.displayedQuality(signal.quality)) {
+                case 'fresh':
+                    return 'text-bg-success';
+                case 'stale':
+                    return 'text-bg-warning';
+                default:
+                    return 'text-bg-secondary';
+            }
+        },
+        limitText(limit: HemsPowerLimit) {
+            if (this.fetchFailed) return this.$t('hems.Unknown');
+            if (!limit.active) return this.$t('hems.NoLimit');
+            return this.numberText(limit.value_w, 'W');
         },
         endpointText() {
             if (this.fetchFailed || !this.hemsStatus.storage.port || !this.hemsStatus.storage.unit) {
