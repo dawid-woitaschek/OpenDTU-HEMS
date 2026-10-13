@@ -4,6 +4,7 @@
  */
 #include "WebApi_firmware.h"
 #include "Configuration.h"
+#include "FirmwareUpdateValidation.h"
 #include "RestartHelper.h"
 #include "WebApi.h"
 #include "helper.h"
@@ -41,6 +42,17 @@ void WebApiFirmwareClass::onFirmwareUpdateFinish(AsyncWebServerRequest* request)
         return;
     }
 
+    auto* firmwareParam = request->getParam("firmware", true, true);
+    if (firmwareParam != nullptr
+            && FirmwareUpdateValidation::isFactoryImageFilename(firmwareParam->value().c_str())) {
+        auto* response = request->beginResponse(400, asyncsrv::T_text_plain,
+            "Factory images cannot be installed via OTA. Use a normal firmware .bin image.");
+        response->addHeader(asyncsrv::T_Connection, asyncsrv::T_close);
+        response->addHeader(asyncsrv::T_CORS_ACAO, "*");
+        request->send(response);
+        return;
+    }
+
     // the request handler is triggered after the upload has finished...
     // create the response, add header, and send response
 
@@ -57,6 +69,13 @@ void WebApiFirmwareClass::onFirmwareUpdateFinish(AsyncWebServerRequest* request)
 void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final)
 {
     if (!WebApi.checkCredentials(request)) {
+        return;
+    }
+
+    // Factory images contain bootloader/partition data for flashing from offset 0 and
+    // must never be written into an OTA application partition. Ignore every chunk;
+    // the finish handler returns the explicit client error without restarting.
+    if (FirmwareUpdateValidation::isFactoryImageFilename(filename.c_str())) {
         return;
     }
 

@@ -22,7 +22,7 @@
                 <button class="btn btn-light" @click="clear">
                     <BIconArrowLeft /> {{ $t('firmwareupgrade.Back') }}
                 </button>
-                <button class="btn btn-primary" @click="retryOTA">
+                <button class="btn btn-primary" @click="retryOTA" :disabled="file === null">
                     <BIconArrowRepeat /> {{ $t('firmwareupgrade.Retry') }}
                 </button>
             </div>
@@ -52,7 +52,13 @@
             v-else-if="!loading && !uploading"
         >
             <div class="form-group">
-                <input class="form-control" type="file" ref="file" accept=".bin,.bin.gz" @change="uploadOTA" />
+                <input class="form-control" type="file" ref="file" accept=".bin,.bin.gz" @change="selectFirmware" />
+            </div>
+            <div class="mt-3" v-if="file !== null">
+                <div class="mb-2">{{ file.name }}</div>
+                <button class="btn btn-primary" @click="uploadOTA">
+                    {{ $t('firmwareupgrade.FirmwareUpload') }}
+                </button>
             </div>
         </CardElement>
 
@@ -105,7 +111,7 @@ export default defineComponent({
             OTAError: '',
             OTASuccess: false,
             type: 'firmware',
-            file: {} as File,
+            file: null as File | null,
             firmwareStatus: {} as FirmwareStatus,
         };
     },
@@ -139,38 +145,53 @@ export default defineComponent({
                 loadNext();
             });
         },
+        isFactoryFirmwareFile(filename: string): boolean {
+            const lowerFilename = filename.toLowerCase();
+            return lowerFilename.endsWith('.factory.bin') || lowerFilename.endsWith('.factory.bin.gz');
+        },
         isValidFirmwareFile(filename: string): boolean {
             const validExtensions = ['.bin', '.bin.gz'];
             const lowerFilename = filename.toLowerCase();
-            return validExtensions.some((ext) => lowerFilename.endsWith(ext));
+            return (
+                !this.isFactoryFirmwareFile(filename) &&
+                validExtensions.some((ext) => lowerFilename.endsWith(ext))
+            );
         },
-        uploadOTA(event: Event | null) {
-            this.uploading = true;
-            const formData = new FormData();
-            if (event !== null) {
-                const target = event.target as HTMLInputElement;
-                if (target.files !== null && target.files[0]) {
-                    this.file = target.files[0];
-                }
-            }
+        setInvalidFileError() {
+            this.OTAError = this.$t('firmwareupgrade.InvalidFileType', {
+                validTypes: '.bin, .bin.gz (excluding .factory.bin / .factory.bin.gz)',
+            });
+        },
+        selectFirmware(event: Event) {
+            this.OTAError = '';
+            this.OTASuccess = false;
+            const target = event.target as HTMLInputElement;
+            this.file = target.files !== null && target.files[0] ? target.files[0] : null;
 
-            // Validate file type
-            if (this.file && !this.isValidFirmwareFile(this.file.name)) {
-                this.OTAError = this.$t('firmwareupgrade.InvalidFileType', { validTypes: '.bin, .bin.gz' });
-                this.uploading = false;
+            if (this.file !== null && !this.isValidFirmwareFile(this.file.name)) {
+                this.setInvalidFileError();
+            }
+        },
+        uploadOTA() {
+            if (this.file === null) {
                 return;
             }
 
+            if (!this.isValidFirmwareFile(this.file.name)) {
+                this.setInvalidFileError();
+                return;
+            }
+
+            this.uploading = true;
+            const formData = new FormData();
             const request = new XMLHttpRequest();
             request.addEventListener('load', () => {
                 // request.response will hold the response from the server
                 if (request.status === 200) {
                     this.OTASuccess = true;
                     waitRestart(this.$router);
-                } else if (request.status !== 500) {
-                    this.OTAError = `[HTTP ERROR] ${request.statusText}`;
                 } else {
-                    this.OTAError = request.responseText;
+                    this.OTAError = request.responseText || `[HTTP ERROR] ${request.status} ${request.statusText}`;
                 }
                 this.uploading = false;
                 this.progress = 0;
@@ -182,8 +203,11 @@ export default defineComponent({
             request.withCredentials = true;
             this.fileMD5(this.file)
                 .then((md5) => {
+                    if (this.file === null) {
+                        throw new Error('Firmware file selection was cleared');
+                    }
                     formData.append('MD5', md5 as string);
-                    formData.append('firmware', this.file, 'firmware');
+                    formData.append('firmware', this.file, this.file.name);
                     request.open('post', '/api/firmware/update');
                     authHeader().forEach((value, key) => {
                         request.setRequestHeader(key, value);
@@ -199,11 +223,16 @@ export default defineComponent({
         retryOTA() {
             this.OTAError = '';
             this.OTASuccess = false;
-            this.uploadOTA(null);
+            this.uploadOTA();
         },
         clear() {
             this.OTAError = '';
             this.OTASuccess = false;
+            this.file = null;
+            const input = this.$refs.file as HTMLInputElement | undefined;
+            if (input !== undefined) {
+                input.value = '';
+            }
         },
         getFirmwareStatus() {
             fetch('/api/firmware/status', { headers: authHeader() })
