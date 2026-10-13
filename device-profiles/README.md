@@ -22,4 +22,6 @@ The Marstek Venus E 3.0 V148 profile is based on the target setup (Control V148 
 
 A profile being present in this catalog does not mean every firmware consumer can already bind to it. The current generic storage consumer can use compatible `storage` profiles. The current WARP runtime integration still uses its dedicated read-only provider; the WARP3 profile is therefore importable/reference data today, not a replacement for that provider yet.
 
+The repository catalog is deliberately decoupled from firmware releases: profile files can be reviewed and updated without baking vendor mappings into the binary. Users remain in control of which profiles they import into their own OpenDTU-HEMS instance.
+
 No profile in this directory may add executable write logic. Modbus profile schema v1 remains read-only.
