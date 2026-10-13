@@ -18,7 +18,7 @@ Profile status is intentionally conservative:
 
 Some devices change Modbus addresses, scaling or semantics between firmware revisions. A profile therefore documents the source/target revision it was built against instead of pretending that one mapping is universally correct.
 
-The Marstek Venus E 3.0 V148 profile intentionally uses the values validated on the target setup where register `34002` requires scale `0.01` and register `30006` is sign-normalized to OpenDTU-HEMS storage semantics. Public Venus E3 mappings disagree on SoC scaling and some register meanings, so unverified energy counters and control registers are deliberately omitted from that profile.
+The Marstek Venus E 3.0 V148 profile is based on the target setup (Control V148 / Micro V119) and independent cross-checks from multiple public projects/forums rather than one community repository. On that target, register `34002` required scale `0.01`; using `0.1` produced a tenfold SoC error. Register `30006` is normalized to OpenDTU-HEMS storage semantics so charging is positive and discharging is negative. Public Venus E3 mappings disagree on SoC scaling, some addresses and even power-sign behavior, so unverified energy counters and control registers are deliberately omitted.
 
 A profile being present in this catalog does not mean every firmware consumer can already bind to it. The current generic storage consumer can use compatible `storage` profiles. The current WARP runtime integration still uses its dedicated read-only provider; the WARP3 profile is therefore importable/reference data today, not a replacement for that provider yet.
 
