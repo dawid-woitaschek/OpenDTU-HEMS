@@ -6,7 +6,6 @@
 #include <hems/warp/ProfileAdapter.h>
 #include <NetworkSettings.h>
 #include <esp_log.h>
-#include <cstring>
 #include <new>
 
 #undef TAG
@@ -14,27 +13,32 @@ static const char* TAG = "hems-warp";
 
 namespace Hems::Warp {
 
-void Provider::configure(WarpConfig const& config, bool monitor)
+void Provider::configure(WarpConfig const& config, Evse::BindingConfig const& binding, bool monitor)
 {
+    bool requested = binding.Profile[0] != '\0';
     std::shared_ptr<Profiles::Profile const> profile;
-    auto candidate = std::shared_ptr<Profiles::Profile>(new (std::nothrow) Profiles::Profile());
-    if (candidate) {
-        bool builtIn = false;
-        char const* error = nullptr;
-        std::lock_guard<std::mutex> storeLock(Profiles::runtimeStoreMutex());
-        bool found = Profiles::runtimeStore().get(RepositoryProfileId, *candidate, builtIn, error);
-        if (found && !builtIn && Evse::supportsProfile(*candidate)) {
-            profile = std::move(candidate);
+    if (requested) {
+        auto candidate = std::shared_ptr<Profiles::Profile>(new (std::nothrow) Profiles::Profile());
+        if (candidate) {
+            bool builtIn = false;
+            char const* error = nullptr;
+            std::lock_guard<std::mutex> storeLock(Profiles::runtimeStoreMutex());
+            bool found = Profiles::runtimeStore().get(binding.Profile, *candidate, builtIn, error);
+            if (found && !builtIn && Evse::supportsProfile(*candidate)) {
+                profile = std::move(candidate);
+            }
         }
     }
 
     uint8_t unit = profile ? profile->unit : 1;
+    bool profileReady = !requested || static_cast<bool>(profile);
 
     std::lock_guard<std::mutex> lock(_mutex);
     _config = config;
     _profile = std::move(profile);
+    _profileRequested = requested;
     _unit = unit;
-    _enabled = monitor && config.Enabled && config.Host[0] != '\0' && config.Port != 0;
+    _enabled = monitor && config.Enabled && config.Host[0] != '\0' && config.Port != 0 && profileReady;
     ++_generation;
     _polled = false;
     _state.reset(config.Enabled, _enabled);
@@ -44,7 +48,9 @@ Snapshot Provider::snapshot() const
 {
     std::lock_guard<std::mutex> lock(_mutex);
     auto result = _state.snapshot(millis());
-    result.profileDriven = static_cast<bool>(_profile);
+    result.profileConfigured = _profileRequested;
+    result.profileLoaded = static_cast<bool>(_profile);
+    result.profileDriven = result.profileLoaded;
     return result;
 }
 
