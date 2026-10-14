@@ -1,13 +1,13 @@
 {
-  "schema": "opendtu-hems-modbus-profile/v1",
+  "schema": "opendtu-hems-modbus-profile/v2",
   "id": "marstek.venus-e3.v148",
   "capabilities": ["storage"],
   "metadata": {
     "vendor": "Marstek",
     "model": "Venus E 3.0",
-    "source": "V148/Micro V119 target plus independent public E3 mappings",
-    "source_revision": "target-v148-micro119-2026-10-05",
-    "description": "Read-only V148-targeted profile; public E3 mappings vary by firmware"
+    "source": "V148/Micro V119 target plus independent public E3 telemetry/control mappings",
+    "source_revision": "target-v148-micro119-2026-10-14",
+    "description": "V148-targeted telemetry with conservative community-cross-checked force charge/discharge control"
   },
   "provenance": {
     "author": "OpenDTU-HEMS contributors",
@@ -76,5 +76,85 @@
       "type": "uint16",
       "scale": 1
     }
-  ]
+  ],
+  "control": {
+    "acquire": [
+      {
+        "address": 42000,
+        "type": "uint16",
+        "value": 21930
+      }
+    ],
+    "release": [
+      {
+        "address": 42000,
+        "type": "uint16",
+        "value": 21947
+      }
+    ],
+    "operations": [
+      {
+        "key": "charge_power_w",
+        "input": {
+          "unit": "W",
+          "min": 0,
+          "max": 2500,
+          "step": 5
+        },
+        "writes": [
+          {
+            "address": 42020,
+            "type": "uint16",
+            "value": "input"
+          },
+          {
+            "address": 42010,
+            "type": "uint16",
+            "value": 1
+          }
+        ]
+      },
+      {
+        "key": "discharge_power_w",
+        "input": {
+          "unit": "W",
+          "min": 0,
+          "max": 2500,
+          "step": 5
+        },
+        "writes": [
+          {
+            "address": 42021,
+            "type": "uint16",
+            "value": "input"
+          },
+          {
+            "address": 42010,
+            "type": "uint16",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "key": "stop",
+        "writes": [
+          {
+            "address": 42010,
+            "type": "uint16",
+            "value": 0
+          },
+          {
+            "address": 42020,
+            "type": "uint16",
+            "value": 0
+          },
+          {
+            "address": 42021,
+            "type": "uint16",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  }
 }

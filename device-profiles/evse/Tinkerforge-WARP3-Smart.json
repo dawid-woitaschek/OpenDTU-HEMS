@@ -1,17 +1,17 @@
 {
-  "schema": "opendtu-hems-modbus-profile/v1",
+  "schema": "opendtu-hems-modbus-profile/v2",
   "id": "tinkerforge.warp3-smart",
   "capabilities": ["evse"],
   "metadata": {
     "vendor": "Tinkerforge",
     "model": "WARP3 Smart",
-    "source": "Official Tinkerforge WARP Charger Modbus register table",
-    "source_revision": "cf09655aa599d708da70c383ab3c8d02876ec62d",
-    "description": "Vendor-documented read-only WARP3 Smart profile for manual OpenDTU-HEMS import"
+    "source": "Official Tinkerforge WARP Charger Modbus implementation",
+    "source_revision": "73949ffd83ec9073b8c38caf2b99a64d5a151858",
+    "description": "Vendor-documented WARP3 Smart telemetry and optional Modbus current control"
   },
   "provenance": {
-    "author": "Tinkerforge documentation; OpenDTU-HEMS adaptation",
-    "license": "Profile adaptation GPL-2.0-or-later; upstream documentation cited"
+    "author": "Tinkerforge documentation/source; OpenDTU-HEMS adaptation",
+    "license": "Profile adaptation GPL-2.0-or-later; upstream documentation/source cited"
   },
   "transport": {
     "protocol": "modbus_tcp",
@@ -67,5 +67,35 @@
       "min": 0,
       "max": 32
     }
-  ]
+  ],
+  "control": {
+    "operations": [
+      {
+        "key": "set_current_a",
+        "input": {
+          "unit": "A",
+          "min": 6,
+          "max": 32,
+          "step": 1
+        },
+        "writes": [
+          {
+            "address": 1000,
+            "type": "uint16",
+            "value": "input"
+          }
+        ]
+      },
+      {
+        "key": "stop_charging",
+        "writes": [
+          {
+            "address": 1000,
+            "type": "uint16",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  }
 }
