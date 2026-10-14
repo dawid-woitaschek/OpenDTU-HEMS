@@ -19,12 +19,13 @@ using Hems::Profiles::Store;
 using Hems::Profiles::Profile;
 using Hems::Profiles::MaxImported;
 using Hems::Profiles::MaxJson;
-using Hems::Profiles::Schema;
 using Hems::Profiles::Type;
 using Hems::Profiles::parse;
 using Hems::Profiles::serialize;
 using Hems::Profiles::decode;
 using Hems::Profiles::typeName;
+using Hems::Profiles::schemaName;
+using Hems::Profiles::hasControl;
 Store& store() { return Hems::Profiles::runtimeStore(); }
 Hems::Profiles::Files& files() { return Hems::Profiles::runtimeFiles(); }
 std::mutex& operation() { return Hems::Profiles::runtimeStoreMutex(); }
@@ -160,14 +161,14 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
         o["vendor"] = static_cast<char const*>(p->vendor);
         o["model"] = static_cast<char const*>(p->model);
         o["origin"] = builtIn ? "Built-in" : "Imported";
-        o["schema"] = Schema;
+        o["schema"] = schemaName(*p);
         o["source"] = static_cast<char const*>(p->source);
         o["source_revision"] = static_cast<char const*>(p->revision);
         o["author"] = static_cast<char const*>(p->author);
         o["license"] = static_cast<char const*>(p->license);
         o["telemetry_count"] = p->entryCount;
-        o["control_metadata"] = false;
-        o["read_only"] = true;
+        o["control_metadata"] = hasControl(*p);
+        o["read_only"] = !hasControl(*p);
         auto capabilities = o["capabilities"].to<JsonArray>();
         if (Hems::Storage::supportsProfile(*p)) { capabilities.add("storage"); }
         if (Hems::Evse::supportsProfile(*p)) { capabilities.add("evse"); }

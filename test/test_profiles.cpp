@@ -55,7 +55,6 @@ int main() {
     assert(!decode(p.entries[0], overSoc, sizeof(overSoc)).valid);
     auto checkBad = [&](std::string const& s) { Profile old = p; assert(!parse(s.data(), s.size(), p, error)); assert(error); assert(!memcmp(&old, &p, sizeof(p))); };
     for (auto s : {
-        replace(example, "profile/v1", "profile/v2"),
         replace(example, "\"id\":\"example.synthetic\",", ""),
         replace(example, "example.synthetic", "../escape"),
         replace(example, "example.synthetic", "UPPER"),
