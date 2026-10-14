@@ -5,7 +5,13 @@
 
 namespace Hems::Profiles {
 bool Store::builtin(Profile& output, char const*& error) {
+#ifdef HEMS_TEST_BUILTIN_PROFILE
     auto json = exampleJson(); return parse(json, strlen(json), output, error);
+#else
+    (void)output;
+    error = "No built-in profiles";
+    return false;
+#endif
 }
 bool Store::load(size_t slot, Profile& output, char const*& error) {
     error = "Missing/corrupt imported profile";
@@ -20,8 +26,12 @@ bool Store::load(size_t slot, Profile& output, char const*& error) {
 }
 bool Store::get(char const* id, Profile& output, bool& builtIn, char const*& error) {
     error = "Invalid profile id"; if (!validId(id)) { return false; }
+#ifdef HEMS_TEST_BUILTIN_PROFILE
     builtIn = !strcmp(id, "example.synthetic");
     if (builtIn) { return builtin(output, error); }
+#else
+    builtIn = false;
+#endif
     auto p = std::unique_ptr<Profile>(new (std::nothrow) Profile());
     error = "Insufficient memory"; if (!p) { return false; }
     size_t found = 0;
@@ -37,8 +47,10 @@ bool Store::import(char const* json, size_t size, char const* replaceId, char co
     auto stored = std::unique_ptr<Profile>(new (std::nothrow) Profile());
     error = "Insufficient memory"; if (!candidate || !stored) { return false; }
     if (!parse(json, size, *candidate, error)) { return false; }
+#ifdef HEMS_TEST_BUILTIN_PROFILE
     error = "Built-in profile id is reserved";
     if (!strcmp(candidate->id, "example.synthetic")) { return false; }
+#endif
     error = "Replacement id must match the imported JSON id";
     if (replaceId && (!validId(replaceId) || strcmp(candidate->id, replaceId))) { return false; }
     size_t free = MaxImported, match = MaxImported, matches = 0;
@@ -67,7 +79,9 @@ bool Store::import(char const* json, size_t size, char const* replaceId, char co
 }
 bool Store::erase(char const* id, char const*& error) {
     error = "Invalid profile id"; if (!validId(id)) { return false; }
+#ifdef HEMS_TEST_BUILTIN_PROFILE
     error = "Built-in profiles cannot be deleted"; if (!strcmp(id, "example.synthetic")) { return false; }
+#endif
     auto p = std::unique_ptr<Profile>(new (std::nothrow) Profile());
     error = "Insufficient memory"; if (!p) { return false; }
     size_t match = MaxImported, count = 0;

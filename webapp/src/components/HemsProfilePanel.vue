@@ -158,10 +158,14 @@ async function refresh() {
 }
 function capabilityText(values: string[]) {
     if (!values.length) return t('profiles.NoCapabilities');
-    return values.map((value) => t(value === 'storage' ? 'profiles.StorageCapability' : value)).join(', ');
+    return values
+        .map((value) => (value === 'storage' ? t('profiles.StorageCapability') : value === 'evse' ? 'EVSE' : value))
+        .join(', ');
 }
 function usedByText(values: string[]) {
-    return values.map((value) => t(value === 'storage' ? 'profiles.StorageConsumer' : value)).join(', ');
+    return values
+        .map((value) => (value === 'storage' ? t('profiles.StorageConsumer') : value === 'evse' ? 'EVSE' : value))
+        .join(', ');
 }
 function selectFile(event: Event) {
     file.value = (event.target as HTMLInputElement).files?.[0];

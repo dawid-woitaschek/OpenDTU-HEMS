@@ -39,7 +39,7 @@ $(TEST_MODBUS_CLIENT): test_modbus_client.cpp ../src/hems/modbus/Client.cpp ../s
 	$(CXX) $(CXXFLAGS) -Iwarp_stubs -I../include -pthread -o $@ $^
 
 $(TEST_PROFILES): test_profiles.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/Store.cpp
-	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
+	$(CXX) $(CXXFLAGS) -DHEMS_TEST_BUILTIN_PROFILE -I../include -I$(ARDUINOJSON) -o $@ $^
 
 $(TEST_PROFILE_CATALOG): test_profile_catalog.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
