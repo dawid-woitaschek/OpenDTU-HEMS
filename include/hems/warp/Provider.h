@@ -2,6 +2,7 @@
 #pragma once
 
 #include <Configuration.h>
+#include <hems/evse/Settings.h>
 #include <hems/modbus/Client.h>
 #include <hems/profiles/Profile.h>
 #include <hems/warp/State.h>
@@ -10,12 +11,10 @@
 
 namespace Hems::Warp {
 
-inline constexpr char RepositoryProfileId[] = "tinkerforge.warp3-smart";
-
 // Boot lifetime, like the owning HemsController; safe for late DNS completion.
 class Provider {
 public:
-    void configure(WarpConfig const& config, bool monitor);
+    void configure(WarpConfig const& config, Evse::BindingConfig const& binding, bool monitor);
     void loop(); // Scheduler only: dispatches, never performs network I/O.
     Snapshot snapshot() const;
 
@@ -25,6 +24,7 @@ private:
     mutable std::mutex _mutex;
     WarpConfig _config {};
     std::shared_ptr<Profiles::Profile const> _profile;
+    bool _profileRequested = false;
     bool _enabled = false;
     bool _busy = false;
     bool _polled = false;
