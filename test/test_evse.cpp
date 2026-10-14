@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/evse/Poller.h>
+#include <hems/evse/Settings.h>
 #include <hems/warp/ProfileAdapter.h>
 #include <cassert>
 #include <cmath>
@@ -161,6 +162,39 @@ void testBooleanSafetyAndFailures()
     assert(result.error == Modbus::Error::Timeout && !result.responded && reader.calls == 2);
 }
 
+void testBindingConfig()
+{
+    Evse::BindingConfig binding;
+    assert(Evse::deserializeBindingConfig(JsonVariantConst(), binding));
+    assert(binding.Profile[0] == '\0');
+
+    JsonDocument doc;
+    doc["profile"] = "tinkerforge.warp3-smart";
+    assert(Evse::deserializeBindingConfig(doc.as<JsonVariantConst>(), binding));
+    assert(!std::strcmp(binding.Profile, "tinkerforge.warp3-smart"));
+
+    JsonDocument serialized;
+    Evse::serializeBindingConfig(binding, serialized.to<JsonObject>());
+    assert(!std::strcmp(serialized["profile"].as<char const*>(), "tinkerforge.warp3-smart"));
+
+    doc["profile"] = "";
+    assert(Evse::deserializeBindingConfig(doc.as<JsonVariantConst>(), binding));
+    assert(binding.Profile[0] == '\0');
+
+    for (char const* invalid : { "../escape", "UPPER", "bad profile" }) {
+        doc["profile"] = invalid;
+        assert(!Evse::deserializeBindingConfig(doc.as<JsonVariantConst>(), binding));
+        assert(binding.Profile[0] == '\0');
+    }
+
+    doc["profile"] = std::string(Profiles::MaxId + 1, 'a');
+    assert(!Evse::deserializeBindingConfig(doc.as<JsonVariantConst>(), binding));
+    doc["profile"] = 5;
+    assert(!Evse::deserializeBindingConfig(doc.as<JsonVariantConst>(), binding));
+    doc["profile"] = nullptr;
+    assert(!Evse::deserializeBindingConfig(doc.as<JsonVariantConst>(), binding));
+}
+
 } // namespace
 
 int main()
@@ -169,5 +203,6 @@ int main()
     testWarpProfilePollAndAdapter();
     testUnknownAndBoundaries();
     testBooleanSafetyAndFailures();
-    std::cout << "Profile-driven EVSE telemetry tests passed\n";
+    testBindingConfig();
+    std::cout << "Profile-driven EVSE telemetry and binding tests passed\n";
 }

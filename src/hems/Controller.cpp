@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/Controller.h>
+#include <hems/evse/SettingsStore.h>
 #include <hems/model/Normalize.h>
 #include <hems/storage/SettingsStore.h>
 #include <powermeter/Controller.h>
@@ -83,6 +84,7 @@ namespace Hems {
 
 void Controller::init(Scheduler& scheduler)
 {
+    Evse::BindingSettings.init();
     Storage::StorageSettings.init();
     scheduler.addTask(_loopTask);
     _loopTask.setCallback([this] {
@@ -106,7 +108,7 @@ void Controller::updateSettings()
     _mode.store(config.Version == CONFIG_VERSION_HEMS && config.Enabled
             ? Mode::Monitor : Mode::Disabled);
     bool monitor = getMode() == Mode::Monitor;
-    _warp.configure(config.Warp, monitor);
+    _warp.configure(config.Warp, Evse::BindingSettings.get(), monitor);
     _storage.configure(Storage::StorageSettings.get(), monitor);
     if (!monitor) {
         std::lock_guard<std::mutex> lock(_policyMutex);
