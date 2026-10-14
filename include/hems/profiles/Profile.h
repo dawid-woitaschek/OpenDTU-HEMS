@@ -34,7 +34,7 @@ struct Entry {
 };
 struct ControlWrite {
     uint16_t address = 0; // normalized zero-based holding-register address
-    int32_t constant = 0;
+    int64_t constant = 0;
     double scale = 1, offset = 0; // input = raw * scale + offset
     Type type = Type::Uint16;
     bool usesInput = false;
