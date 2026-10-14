@@ -10,7 +10,7 @@
     "description": "Curated Venus E3 telemetry and conservative remote-control operations"
   },
   "provenance": {
-    "author": "OpenDTU-HEMS contributors",
+    "author": "OpenDTU-HEMS contributors; public firmware reverse-engineering references",
     "license": "GPL-2.0-or-later"
   },
   "transport": {
