@@ -107,6 +107,14 @@ int main()
     assert(warp.schemaVersion == 2 && hasControl(warp));
     assert(hasCapability(warp, Capability::Evse));
     assert(!hasCapability(warp, Capability::Storage));
+    assert(warp.entryCount == 4);
+    assert(findEntry(warp, "uptime_s") == nullptr);
+
+    auto tableVersion = findEntry(warp, "register_table_version");
+    assert(tableVersion && tableVersion->address == 0 && tableVersion->type == Type::Uint32);
+
+    auto iecState = findEntry(warp, "iec_state");
+    assert(iecState && iecState->address == 1000 && iecState->type == Type::Uint32);
 
     auto chargingState = findEntry(warp, "charging_state");
     assert(chargingState && chargingState->address == 1002 && chargingState->type == Type::Uint32);
@@ -118,11 +126,14 @@ int main()
     auto setCurrent = findOperation(warp, "set_current_a");
     assert(setCurrent && setCurrent->hasInput && setCurrent->minimum == 6 && setCurrent->maximum == 32);
     assert(setCurrent->step == 1 && setCurrent->writeCount == 1);
-    assert(writeAt(warp, *setCurrent, 0).address == 1000 && writeAt(warp, *setCurrent, 0).usesInput);
+    auto const& currentWrite = writeAt(warp, *setCurrent, 0);
+    assert(currentWrite.address == 1002 && currentWrite.usesInput && currentWrite.type == Type::Uint32);
+    assert(std::abs(currentWrite.scale - 0.001) < 1e-12);
 
     auto stopCharging = findOperation(warp, "stop_charging");
     assert(stopCharging && !stopCharging->hasInput && stopCharging->writeCount == 1);
-    assert(writeAt(warp, *stopCharging, 0).address == 1000 && writeAt(warp, *stopCharging, 0).constant == 0);
+    auto const& stopWrite = writeAt(warp, *stopCharging, 0);
+    assert(stopWrite.address == 1002 && stopWrite.type == Type::Uint32 && stopWrite.constant == 0);
 
     std::cout << "Repository device-profile catalog passed telemetry/control parser checks\n";
 }
