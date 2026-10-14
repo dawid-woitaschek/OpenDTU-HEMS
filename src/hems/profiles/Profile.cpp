@@ -117,6 +117,8 @@ bool parseCapabilities(JsonVariantConst value, Profile& profile) {
 bool controlType(JsonVariantConst value, Type& type) {
     if (equals(value, "uint16")) { type = Type::Uint16; return true; }
     if (equals(value, "int16")) { type = Type::Int16; return true; }
+    if (equals(value, "uint32")) { type = Type::Uint32; return true; }
+    if (equals(value, "int32")) { type = Type::Int32; return true; }
     return false;
 }
 bool parseControlWrites(JsonVariantConst value, Profile& profile, uint8_t& first, uint8_t& count,
@@ -134,7 +136,9 @@ bool parseControlWrites(JsonVariantConst value, Profile& profile, uint8_t& first
         if (!fields(obj, { "address", "type", "value", "scale", "offset" })
                 || !obj["address"].is<uint32_t>() || !controlType(obj["type"], write.type)) { return false; }
         uint32_t address = obj["address"];
-        if (address < profile.addressBase || address - profile.addressBase > 65535) { return false; }
+        uint8_t width = write.type == Type::Uint32 || write.type == Type::Int32 ? 2 : 1;
+        if (address < profile.addressBase || address - profile.addressBase > 65535
+                || address - profile.addressBase + width > 65536) { return false; }
         write.address = address - profile.addressBase;
         if (equals(obj["value"], "input")) {
             error = "Input-backed write is not allowed here";
@@ -146,12 +150,25 @@ bool parseControlWrites(JsonVariantConst value, Profile& profile, uint8_t& first
         } else {
             error = "Control constant does not fit declared type";
             if (!obj["scale"].isUnbound() || !obj["offset"].isUnbound()) { return false; }
-            if (write.type == Type::Uint16) {
-                if (!obj["value"].is<uint16_t>()) { return false; }
-                write.constant = obj["value"].as<uint16_t>();
-            } else {
-                if (!obj["value"].is<int16_t>()) { return false; }
-                write.constant = obj["value"].as<int16_t>();
+            switch (write.type) {
+                case Type::Uint16:
+                    if (!obj["value"].is<uint16_t>()) { return false; }
+                    write.constant = obj["value"].as<uint16_t>();
+                    break;
+                case Type::Int16:
+                    if (!obj["value"].is<int16_t>()) { return false; }
+                    write.constant = obj["value"].as<int16_t>();
+                    break;
+                case Type::Uint32:
+                    if (!obj["value"].is<uint32_t>()) { return false; }
+                    write.constant = obj["value"].as<uint32_t>();
+                    break;
+                case Type::Int32:
+                    if (!obj["value"].is<int32_t>()) { return false; }
+                    write.constant = obj["value"].as<int32_t>();
+                    break;
+                default:
+                    return false;
             }
         }
         ++profile.controlWriteCount; ++count;
@@ -168,10 +185,14 @@ void serializeControlWrites(Profile const& profile, uint8_t first, uint8_t count
             obj["value"] = "input";
             if (write.scale != 1) { obj["scale"] = write.scale; }
             if (write.offset != 0) { obj["offset"] = write.offset; }
-        } else if (write.type == Type::Int16) {
-            obj["value"] = static_cast<int16_t>(write.constant);
         } else {
-            obj["value"] = static_cast<uint16_t>(write.constant);
+            switch (write.type) {
+                case Type::Uint16: obj["value"] = static_cast<uint16_t>(write.constant); break;
+                case Type::Int16: obj["value"] = static_cast<int16_t>(write.constant); break;
+                case Type::Uint32: obj["value"] = static_cast<uint32_t>(write.constant); break;
+                case Type::Int32: obj["value"] = static_cast<int32_t>(write.constant); break;
+                default: break;
+            }
         }
     }
 }
