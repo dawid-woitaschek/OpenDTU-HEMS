@@ -5,9 +5,9 @@
   "metadata": {
     "vendor": "Marstek",
     "model": "Venus E 3.0",
-    "source": "V148/Micro V119 target plus independent public E3 telemetry/control mappings",
-    "source_revision": "target-v148-micro119-2026-10-14",
-    "description": "V148-targeted telemetry with conservative community-cross-checked force charge/discharge control"
+    "source": "Venus E3 V148 code-verified public Modbus register reference",
+    "source_revision": "control151-bms115-micro119",
+    "description": "Curated Venus E3 telemetry and conservative remote-control operations"
   },
   "provenance": {
     "author": "OpenDTU-HEMS contributors",
@@ -26,7 +26,7 @@
       "address": 34002,
       "count": 1,
       "type": "uint16",
-      "scale": 0.01,
+      "scale": 0.1,
       "unit": "percent",
       "min": 0,
       "max": 100
@@ -38,6 +38,14 @@
       "count": 1,
       "type": "int16",
       "scale": -1,
+      "unit": "W"
+    },
+    {
+      "key": "dc_power_w",
+      "space": "holding",
+      "address": 30001,
+      "count": 1,
+      "type": "int16",
       "unit": "W"
     },
     {
@@ -56,7 +64,7 @@
       "address": 30101,
       "count": 1,
       "type": "int16",
-      "scale": 0.01,
+      "scale": 0.1,
       "unit": "A"
     },
     {
@@ -69,12 +77,47 @@
       "unit": "C"
     },
     {
+      "key": "charge_energy_total_kwh",
+      "space": "holding",
+      "address": 33000,
+      "count": 2,
+      "type": "uint32",
+      "scale": 0.01,
+      "unit": "kWh",
+      "min": 0
+    },
+    {
+      "key": "discharge_energy_total_kwh",
+      "space": "holding",
+      "address": 33002,
+      "count": 2,
+      "type": "uint32",
+      "scale": 0.01,
+      "unit": "kWh",
+      "min": 0
+    },
+    {
       "key": "operating_state",
       "space": "holding",
       "address": 35100,
       "count": 1,
       "type": "uint16",
-      "scale": 1
+      "min": 0,
+      "max": 6
+    },
+    {
+      "key": "alarm_code",
+      "space": "holding",
+      "address": 36000,
+      "count": 2,
+      "type": "uint32"
+    },
+    {
+      "key": "fault_code",
+      "space": "holding",
+      "address": 36100,
+      "count": 2,
+      "type": "uint32"
     }
   ],
   "control": {
@@ -99,7 +142,7 @@
           "unit": "W",
           "min": 0,
           "max": 2500,
-          "step": 5
+          "step": 1
         },
         "writes": [
           {
@@ -120,7 +163,7 @@
           "unit": "W",
           "min": 0,
           "max": 2500,
-          "step": 5
+          "step": 1
         },
         "writes": [
           {
@@ -152,6 +195,22 @@
             "address": 42021,
             "type": "uint16",
             "value": 0
+          }
+        ]
+      },
+      {
+        "key": "target_soc_pct",
+        "input": {
+          "unit": "percent",
+          "min": 13,
+          "max": 100,
+          "step": 1
+        },
+        "writes": [
+          {
+            "address": 42011,
+            "type": "uint16",
+            "value": "input"
           }
         ]
       }
