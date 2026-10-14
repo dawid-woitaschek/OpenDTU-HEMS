@@ -11,4 +11,6 @@ private:
     void inspect(AsyncWebServerRequest* request);
     void finish(AsyncWebServerRequest* request, bool persist);
     void body(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
+    void bindingGet(AsyncWebServerRequest* request);
+    void bindingPost(AsyncWebServerRequest* request);
 };
