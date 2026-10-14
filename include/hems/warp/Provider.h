@@ -3,10 +3,14 @@
 
 #include <Configuration.h>
 #include <hems/modbus/Client.h>
+#include <hems/profiles/Profile.h>
 #include <hems/warp/State.h>
+#include <memory>
 #include <mutex>
 
 namespace Hems::Warp {
+
+inline constexpr char RepositoryProfileId[] = "tinkerforge.warp3-smart";
 
 // Boot lifetime, like the owning HemsController; safe for late DNS completion.
 class Provider {
@@ -20,11 +24,13 @@ private:
     void worker();
     mutable std::mutex _mutex;
     WarpConfig _config {};
+    std::shared_ptr<Profiles::Profile const> _profile;
     bool _enabled = false;
     bool _busy = false;
     bool _polled = false;
     uint32_t _generation = 0;
     uint32_t _lastPollMs = 0;
+    uint8_t _unit = 1;
     State _state;
     Modbus::Client _client;
     TaskHandle_t _worker = nullptr;
