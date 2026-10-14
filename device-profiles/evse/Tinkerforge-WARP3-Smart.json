@@ -5,9 +5,9 @@
   "metadata": {
     "vendor": "Tinkerforge",
     "model": "WARP3 Smart",
-    "source": "Official Tinkerforge WARP Charger Modbus implementation",
-    "source_revision": "73949ffd83ec9073b8c38caf2b99a64d5a151858",
-    "description": "Vendor-documented WARP3 Smart telemetry and optional Modbus current control"
+    "source": "Official Tinkerforge WARP3 Modbus register table and firmware source",
+    "source_revision": "register-table-v2 / firmware-source-73949ffd83ec9073b8c38caf2b99a64d5a151858",
+    "description": "WARP3 Smart telemetry without meter values and optional current control"
   },
   "provenance": {
     "author": "Tinkerforge documentation/source; OpenDTU-HEMS adaptation",
@@ -28,15 +28,6 @@
       "type": "uint32",
       "min": 2,
       "max": 5
-    },
-    {
-      "key": "uptime_s",
-      "space": "input",
-      "address": 12,
-      "count": 2,
-      "type": "uint32",
-      "unit": "s",
-      "min": 0
     },
     {
       "key": "iec_state",
@@ -80,9 +71,10 @@
         },
         "writes": [
           {
-            "address": 1000,
-            "type": "uint16",
-            "value": "input"
+            "address": 1002,
+            "type": "uint32",
+            "value": "input",
+            "scale": 0.001
           }
         ]
       },
@@ -90,8 +82,8 @@
         "key": "stop_charging",
         "writes": [
           {
-            "address": 1000,
-            "type": "uint16",
+            "address": 1002,
+            "type": "uint32",
             "value": 0
           }
         ]

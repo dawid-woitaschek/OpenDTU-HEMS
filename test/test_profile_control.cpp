@@ -58,8 +58,27 @@ int main()
     assert(roundtrip.schemaVersion == 2 && roundtrip.controlOperationCount == 2);
     assert(!strcmp(roundtrip.controlOperations[0].key, "set_power_w"));
 
-    auto v1WithControl = replaceOnce(json, "profile/v2", "profile/v1");
+    auto wideInput = replaceOnce(json,
+        "\"address\":101,\"type\":\"uint16\",\"value\":\"input\"",
+        "\"address\":101,\"type\":\"uint32\",\"value\":\"input\",\"scale\":0.001");
+    Profile wide;
+    assert(parses(wideInput, wide, error));
+    auto const& wideWrite = wide.controlWrites[wide.controlOperations[0].firstWrite];
+    assert(wideWrite.type == Type::Uint32 && wideWrite.usesInput && wideWrite.scale == 0.001);
+
+    auto wideConstant = replaceOnce(json,
+        "\"key\":\"stop\",\"writes\":[{\"address\":102,\"type\":\"uint16\",\"value\":0}]",
+        "\"key\":\"stop\",\"writes\":[{\"address\":102,\"type\":\"uint32\",\"value\":4294967295}]");
+    assert(parses(wideConstant, wide, error));
+    auto const& stop = wide.controlOperations[1];
+    assert(wide.controlWrites[stop.firstWrite].type == Type::Uint32);
+    assert(wide.controlWrites[stop.firstWrite].constant == 4294967295LL);
+
+    auto overflowingWideWrite = replaceOnce(wideInput, "\"address\":101", "\"address\":65535");
     Profile rejected = profile;
+    assert(!parses(overflowingWideWrite, rejected, error));
+
+    auto v1WithControl = replaceOnce(json, "profile/v2", "profile/v1");
     assert(!parses(v1WithControl, rejected, error));
     assert(error && !strcmp(error, "Control metadata requires profile schema v2"));
 
@@ -72,7 +91,7 @@ int main()
     auto inputInAcquire = replaceOnce(json, "\"value\":21930", "\"value\":\"input\"");
     assert(!parses(inputInAcquire, rejected, error));
 
-    auto unsupportedWriteType = replaceOnce(json, "\"address\":101,\"type\":\"uint16\"", "\"address\":101,\"type\":\"uint32\"");
+    auto unsupportedWriteType = replaceOnce(json, "\"address\":101,\"type\":\"uint16\"", "\"address\":101,\"type\":\"float32\"");
     assert(!parses(unsupportedWriteType, rejected, error));
 
     auto v1ReadOnly = R"({"schema":"opendtu-hems-modbus-profile/v1","id":"test.readonly","metadata":{"vendor":"Test","model":"Read only","source":"unit-test","source_revision":"1"},"provenance":{"author":"OpenDTU-HEMS","license":"GPL-2.0-or-later"},"transport":{"protocol":"modbus_tcp","default_port":502,"unit_id":1,"address_base":0},"telemetry":[{"key":"value","space":"holding","address":1,"count":1,"type":"uint16"}]})";
