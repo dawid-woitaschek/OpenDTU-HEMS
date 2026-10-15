@@ -14,6 +14,10 @@ static const char* TAG = "hems-warp";
 
 namespace {
 
+// Arduino millis() returns unsigned long, a distinct function-pointer type
+// from uint32_t even on 32-bit ESP targets. Keep the recovery clock portable.
+uint32_t recoveryNow() { return static_cast<uint32_t>(millis()); }
+
 Hems::Actuation::CommandResult cleanupTransportFailure(Hems::Modbus::Result transport)
 {
     Hems::Actuation::CommandResult result;
@@ -116,7 +120,7 @@ Actuation::CleanupSnapshot Provider::cleanupSnapshot() const
 
 void Provider::initRecovery(Recovery::Files& files)
 {
-    _recovery.load(files, millis, esp_fill_random);
+    _recovery.load(files, recoveryNow, esp_fill_random);
 }
 
 Recovery::Snapshot Provider::recoverySnapshot() const
@@ -224,7 +228,7 @@ void Provider::processRecovery()
                 CommandIoContext context { this, generation, endpoint, profile.get() };
                 Actuation::RegisterIo io { &context, recoveryIoWrite, commandIoRead, recoveryIoAuthorized,
                     nullptr, nullptr, commandIoReadInput };
-                _recovery.recover(*profile, io, millis);
+                _recovery.recover(*profile, io, recoveryNow);
             }
             _client.close();
         }

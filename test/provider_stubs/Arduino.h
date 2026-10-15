@@ -2,4 +2,4 @@
 #pragma once
 #include <cstdint>
 inline uint32_t testNow = 0;
-inline uint32_t millis() { return testNow; }
+inline unsigned long millis() { return testNow; }
