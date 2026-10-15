@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <hems/Control.h>
 #include <hems/modbus/Host.h>
 #include <hems/profiles/Profile.h>
 
@@ -15,6 +16,7 @@ struct StorageConfig {
     // Zero means: use the profile transport default.
     uint16_t Port = 0;
     uint8_t Unit = 0;
+    Hems::ControlMode Control = Hems::ControlMode::MonitorOnly;
 };
 
 inline bool validStorageProfileId(char const* id)
@@ -41,6 +43,12 @@ inline bool deserializeStorageConfig(JsonVariantConst source, StorageConfig& tar
         if (!source["unit"].is<uint8_t>()) { return false; }
         unit = source["unit"].as<uint8_t>();
         if (unit > 247) { return false; }
+    }
+    if (!source["control_mode"].isNull()) {
+        if (!source["control_mode"].is<char const*>()
+                || !Hems::parseControlMode(source["control_mode"].as<char const*>(), target.Control)) {
+            return false;
+        }
     }
 
     auto host = source["host"].as<char const*>();
@@ -74,4 +82,5 @@ inline void serializeStorageConfig(StorageConfig const& source, JsonObject targe
     target["profile"] = static_cast<char const*>(source.Profile);
     target["port"] = source.Port;
     target["unit"] = source.Unit;
+    target["control_mode"] = Hems::controlModeName(source.Control);
 }

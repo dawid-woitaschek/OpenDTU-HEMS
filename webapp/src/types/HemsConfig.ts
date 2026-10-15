@@ -1,3 +1,5 @@
+export type HemsDeviceControlMode = 'monitor' | 'hems';
+
 export interface HemsConfig {
     version: number;
     enabled: boolean;
@@ -12,5 +14,6 @@ export interface HemsConfig {
         profile: string;
         port: number;
         unit: number;
+        control_mode: HemsDeviceControlMode;
     };
 }

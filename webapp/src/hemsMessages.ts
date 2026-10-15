@@ -1,11 +1,36 @@
 export const hemsSupplementMessages = {
     en: {
         hems: {
+            ValidationTitle: 'Temporary hardware validation',
+            ValidationHint:
+                'Sessions expire after two minutes. Real WARP/Marstek commands remain blocked until recovery readiness is validated. Semantic command testing currently uses the authenticated API; no raw register controls exist.',
+            ValidationStart: 'Enable 2-minute validation session',
+            ValidationRevoke: 'Revoke session and request release',
+            ValidationRejected: 'Validation request rejected. Check session, readiness and recovery diagnostics.',
+            ValidationWarning: 'Temporary hardware validation, not normal HEMS Active operation:',
+            ValidationBlockers: 'Validation blockers',
+            Recovery: 'Actuation and reboot recovery diagnostics',
+            RecoveryHint:
+                'Unresolved recovery blocks actuation. Automatic reboot release requires verified device identity and replay-safe release. No physical recovery validation is claimed.',
+            ReadinessBlockers: 'Readiness blockers',
+            RecoveryJournal: 'Durable recovery intent',
+            RecoveryAutomatic: 'Automatic recovery supported',
+            RecoveryIdentity: 'Persisted instance identity',
+            RecoveryAttempts: 'Attempts',
+            RecoveryRetry: 'Retry in',
+            RecoveryCleanup: 'Retained cleanup',
+            RecoveryCommand: 'Command',
+
             Warp: 'EV charger — read only',
             WarpEnabled: 'EV charger telemetry enabled',
             WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
             ConfigLoadFailed: 'HEMS configuration could not be loaded.',
             ConfigSaveFailed: 'HEMS configuration could not be saved.',
+            ControlMode: 'Control mode',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'HEMS control grants per-device permission only. This firmware milestone remains read-only until Active control is implemented.',
             InvalidWallboxHost: 'Enter a valid hostname or IPv4 address. IPv4 octets must be between 0 and 255.',
             InvalidWallboxPort: 'Enter a valid wallbox TCP port between 1 and 65535.',
             NormalizedState: 'Normalized HEMS state',
@@ -15,7 +40,8 @@ export const hemsSupplementMessages = {
             StorageSoc: 'Storage SoC',
             EvseVehicle: 'EV connected',
             Constraints: 'Effective constraints',
-            ConstraintsHint: 'Read-only view of the effective permissions and power limits after constraint composition.',
+            ConstraintsHint:
+                'Read-only view of the effective permissions and power limits after constraint composition.',
             StorageChargeAllowed: 'Storage charging allowed',
             StorageDischargeAllowed: 'Storage discharging allowed',
             MaxChargePower: 'Maximum storage charge power',
@@ -88,17 +114,24 @@ export const hemsSupplementMessages = {
                 'Aktuell wird die Wallbox über den WARP-Modbus-TCP-Provider ausgelesen. Hostname/IP-Adresse und TCP-Port der Wallbox konfigurieren.',
             ConfigLoadFailed: 'Die HEMS-Konfiguration konnte nicht geladen werden.',
             ConfigSaveFailed: 'Die HEMS-Konfiguration konnte nicht gespeichert werden.',
+            ControlMode: 'Steuermodus',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'HEMS control erteilt nur die gerätespezifische Freigabe. Dieser Firmware-Stand bleibt bis zur Active-Steuerung vollständig im Lesezugriff.',
             InvalidWallboxHost:
                 'Gib einen gültigen Hostnamen oder eine gültige IPv4-Adresse ein. IPv4-Oktette müssen zwischen 0 und 255 liegen.',
             InvalidWallboxPort: 'Gib einen gültigen Wallbox-TCP-Port zwischen 1 und 65535 ein.',
             NormalizedState: 'Normalisierter HEMS-Zustand',
-            NormalizedHint: 'Herstellerneutrale Werte, die von HEMS-Regeln und später der Optimierung verwendet werden.',
+            NormalizedHint:
+                'Herstellerneutrale Werte, die von HEMS-Regeln und später der Optimierung verwendet werden.',
             GridPower: 'Netzleistung',
             PvPower: 'PV-Leistung',
             StorageSoc: 'Speicher-SoC',
             EvseVehicle: 'Fahrzeug verbunden',
             Constraints: 'Wirksame Begrenzungen',
-            ConstraintsHint: 'Nur-Lese-Ansicht der wirksamen Freigaben und Leistungsgrenzen nach der Zusammenführung aller Regeln.',
+            ConstraintsHint:
+                'Nur-Lese-Ansicht der wirksamen Freigaben und Leistungsgrenzen nach der Zusammenführung aller Regeln.',
             StorageChargeAllowed: 'Speicher laden erlaubt',
             StorageDischargeAllowed: 'Speicher entladen erlaubt',
             MaxChargePower: 'Maximale Speicher-Ladeleistung',
@@ -175,17 +208,24 @@ export const hemsSupplementMessages = {
                 'Le fournisseur actuel en lecture seule est WARP Modbus TCP. Configurez l’hôte et le port TCP de la borne.',
             ConfigLoadFailed: 'La configuration HEMS n’a pas pu être chargée.',
             ConfigSaveFailed: 'La configuration HEMS n’a pas pu être enregistrée.',
+            ControlMode: 'Mode de contrôle',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'HEMS control accorde uniquement l’autorisation par appareil. Cette version du firmware reste en lecture seule jusqu’à l’implémentation du contrôle Active.',
             InvalidWallboxHost:
                 'Saisissez un nom d’hôte ou une adresse IPv4 valide. Les octets IPv4 doivent être compris entre 0 et 255.',
             InvalidWallboxPort: 'Saisissez un port TCP de borne valide entre 1 et 65535.',
             NormalizedState: 'État HEMS normalisé',
-            NormalizedHint: 'Valeurs indépendantes du fournisseur utilisées par les règles HEMS et l’optimisation future.',
+            NormalizedHint:
+                'Valeurs indépendantes du fournisseur utilisées par les règles HEMS et l’optimisation future.',
             GridPower: 'Puissance réseau',
             PvPower: 'Puissance PV',
             StorageSoc: 'SoC du stockage',
             EvseVehicle: 'Véhicule connecté',
             Constraints: 'Contraintes effectives',
-            ConstraintsHint: 'Vue en lecture seule des autorisations et limites de puissance après composition des règles.',
+            ConstraintsHint:
+                'Vue en lecture seule des autorisations et limites de puissance après composition des règles.',
             StorageChargeAllowed: 'Charge du stockage autorisée',
             StorageDischargeAllowed: 'Décharge du stockage autorisée',
             MaxChargePower: 'Puissance de charge maximale du stockage',

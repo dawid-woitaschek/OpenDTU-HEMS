@@ -7,7 +7,11 @@
 
 namespace Hems::Policies {
 
-constexpr uint32_t EvProtectionDebounceMs = 120000;
+// EV protection becomes restrictive immediately when fresh telemetry confirms
+// charging. This debounce applies only when charging has stopped, so brief EVSE
+// pauses cannot make storage discharge into an EV session that resumes moments later.
+constexpr uint32_t EvProtectionStopDebounceMs = 120000;
+constexpr uint32_t EvProtectionDebounceMs = EvProtectionStopDebounceMs;
 
 enum class EvProtectionState : uint8_t {
     Inactive = 0,
@@ -32,7 +36,7 @@ public:
 private:
     bool _chargingKnown = false;
     bool _charging = false;
-    bool _conditionActive = false;
+    bool _conditionActive = false; // valid not-charging stop-debounce window
     uint32_t _conditionSinceMs = 0;
     EvProtectionState _state = EvProtectionState::Inactive;
 };

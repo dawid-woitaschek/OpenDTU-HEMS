@@ -56,3 +56,16 @@ make test ARDUINOJSON=/path/to/ArduinoJson/src
 CI checks out the same `v7.4.3` version before `make test`. Store tests use an
 in-memory backend with injected commit failure; real LittleFS/power-cut and heap
 behavior remain hardware validation. No writes or device activation are exercised.
+
+
+Focused recovery/session checks (no full firmware build):
+
+```sh
+make -C test test_recovery test_flash_journal test_provider_cleanup test_validation_session ARDUINOJSON=../work/ArduinoJson/src
+(cd test && ./test_recovery && ./test_flash_journal && ./test_provider_cleanup && ./test_validation_session)
+```
+
+`test_flash_journal` exercises the production VFS adapter using native files under
+`work/recovery-flash` and faulted write/fsync/rename calls. Identity fixtures are
+synthetic; only the catalog test asserts documented real profile metadata.
+Hardware reboot/replay/API validation remains a separate gate.

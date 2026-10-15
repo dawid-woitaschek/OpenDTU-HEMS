@@ -15,22 +15,34 @@ constexpr size_t MaxImported = 4;
 constexpr size_t MaxId = 48;
 constexpr size_t MaxText = 96;
 constexpr size_t MaxKey = 32;
+constexpr size_t MaxIdentityFields = 4;
+constexpr size_t MaxIdentityRegisters = 8;
+constexpr size_t MaxIdentityBytes = MaxIdentityFields * MaxIdentityRegisters * 2;
+
+// Only documented immutable instance identifiers belong here. Raw register
+// bytes, in declared field order, form the canonical identity (no lossy decode).
+struct IdentityField {
+    Modbus::ReadFunction space = Modbus::ReadFunction::InputRegisters;
+    uint16_t address = 0;
+    uint8_t count = 0;
+};
 
 enum class Type : uint8_t { Bool, Uint16, Int16, Uint32, Int32, Float32 };
 enum class Capability : uint8_t { Storage = 1, Evse = 2 };
 inline constexpr uint8_t capabilityBit(Capability capability) { return static_cast<uint8_t>(capability); }
 struct Entry {
-    char key[MaxKey + 1] {};
-    char unit[17] {};
+    // Group wide members to keep the expanded profile within its 4 KiB bound.
+    double scale = 1, offset = 0, minimum = 0, maximum = 0;
+    uint32_t invalidRaw = 0;
+    uint16_t address = 0; // normalized zero-based wire address
     Modbus::ReadFunction space = Modbus::ReadFunction::InputRegisters;
     Type type = Type::Uint16;
-    uint16_t address = 0; // normalized zero-based wire address
     uint8_t count = 1;
     bool littleBytes = false;
     bool lowWordFirst = false;
-    double scale = 1, offset = 0, minimum = 0, maximum = 0;
     bool hasMinimum = false, hasMaximum = false, hasInvalidRaw = false;
-    uint32_t invalidRaw = 0;
+    char key[MaxKey + 1] {};
+    char unit[17] {};
 };
 struct ControlWrite {
     uint16_t address = 0; // normalized zero-based holding-register address
@@ -58,6 +70,10 @@ struct Profile {
     Entry entries[MaxEntries] {};
     ControlOperation controlOperations[MaxControlOperations] {};
     ControlWrite controlWrites[MaxControlWrites] {};
+    IdentityField identityFields[MaxIdentityFields] {};
+    char identitySource[MaxText + 1] {};
+    uint8_t identityFieldCount = 0;
+    bool releaseReplaySafe = false;
 };
 inline bool hasCapability(Profile const& profile, Capability capability)
 {

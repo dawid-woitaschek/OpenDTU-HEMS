@@ -176,4 +176,24 @@ Result Client::readDiscreteInputs(uint16_t address, uint16_t count, uint8_t* pay
     return read(ReadFunction::DiscreteInputs, address, count, payload);
 }
 
+Result Client::writeHoldingRegisters(uint16_t address, uint16_t count, uint16_t const* values)
+{
+    uint8_t frame[MaxFrame] {};
+    size_t requestSize = 0;
+    uint16_t transaction = ++_transaction;
+    if (_socket < 0 || !makeWriteHoldingRequest(frame, requestSize, transaction,
+            _unit, address, values, count)) {
+        return { Error::Protocol };
+    }
+
+    uint32_t started = millis();
+    if (!transfer(frame, requestSize, true, started) || !transfer(frame, 7, false, started)) {
+        return { Error::Timeout };
+    }
+    size_t length = (static_cast<size_t>(frame[4]) << 8) | frame[5];
+    if (length < 3 || length + 6 > sizeof(frame)) { return { Error::Protocol, 0, true }; }
+    if (!transfer(frame + 7, length - 1, false, started)) { return { Error::Timeout }; }
+    return parseWriteHoldingResponse(frame, length + 6, transaction, _unit, address, values, count);
+}
+
 } // namespace Hems::Modbus

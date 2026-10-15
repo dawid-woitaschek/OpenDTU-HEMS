@@ -55,6 +55,22 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="row mb-3">
+                            <label for="hems-evse-control-mode" class="col-sm-4 col-form-label">{{
+                                $t('hems.ControlMode')
+                            }}</label>
+                            <div class="col-sm-8">
+                                <select
+                                    id="hems-evse-control-mode"
+                                    class="form-select"
+                                    v-model="evseBinding.control_mode"
+                                >
+                                    <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
+                                    <option value="hems">{{ $t('hems.ControlHems') }}</option>
+                                </select>
+                                <div class="form-text">{{ $t('hems.ControlModeHint') }}</div>
+                            </div>
+                        </div>
                         <div class="alert alert-secondary" role="alert">{{ $t('hems.WarpSetupHint') }}</div>
                     </template>
                     <FormFooter @reload="getConfig" />
@@ -140,6 +156,22 @@
                             step="1"
                             wide
                         />
+                        <div class="row mb-3">
+                            <label for="hems-storage-control-mode" class="col-sm-4 col-form-label">{{
+                                $t('hems.ControlMode')
+                            }}</label>
+                            <div class="col-sm-8">
+                                <select
+                                    id="hems-storage-control-mode"
+                                    class="form-select"
+                                    v-model="hemsConfig.storage.control_mode"
+                                >
+                                    <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
+                                    <option value="hems">{{ $t('hems.ControlHems') }}</option>
+                                </select>
+                                <div class="form-text">{{ $t('hems.ControlModeHint') }}</div>
+                            </div>
+                        </div>
                         <div class="alert alert-secondary" role="alert">{{ $t('storage.SetupHint') }}</div>
                     </template>
                     <FormFooter @reload="getConfig" />
@@ -163,7 +195,7 @@ import FormFooter from '@/components/FormFooter.vue';
 import HemsProfilePanel from '@/components/HemsProfilePanel.vue';
 import InputElement from '@/components/InputElement.vue';
 import type { AlertResponse } from '@/types/AlertResponse';
-import type { HemsConfig } from '@/types/HemsConfig';
+import type { HemsConfig, HemsDeviceControlMode } from '@/types/HemsConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
@@ -177,6 +209,7 @@ type ProfileSummary = {
 type EvseBinding = {
     profile: string;
     legacy: boolean;
+    control_mode: HemsDeviceControlMode;
 };
 
 export default defineComponent({
@@ -186,7 +219,7 @@ export default defineComponent({
             dataLoading: true,
             loadFailed: false,
             hemsConfig: {} as HemsConfig,
-            evseBinding: { profile: '', legacy: true } as EvseBinding,
+            evseBinding: { profile: '', legacy: true, control_mode: 'monitor' } as EvseBinding,
             storageProfiles: [] as ProfileSummary[],
             evseProfiles: [] as ProfileSummary[],
             alert: {} as AlertResponse,
@@ -258,9 +291,13 @@ export default defineComponent({
                 ),
             ])
                 .then(([config, profileData, evseBinding]) => {
-                    this.hemsConfig = config as HemsConfig;
+                    const typedConfig = config as HemsConfig;
+                    if (!typedConfig.storage.control_mode) typedConfig.storage.control_mode = 'monitor';
+                    this.hemsConfig = typedConfig;
                     this.applyProfiles(profileData as { profiles: ProfileSummary[] });
-                    this.evseBinding = evseBinding as EvseBinding;
+                    const typedBinding = evseBinding as EvseBinding;
+                    if (!typedBinding.control_mode) typedBinding.control_mode = 'monitor';
+                    this.evseBinding = typedBinding;
                     this.dataLoading = false;
                 })
                 .catch(() => {
@@ -290,7 +327,10 @@ export default defineComponent({
         async postEvseBinding(): Promise<boolean> {
             try {
                 const formData = new FormData();
-                formData.append('data', JSON.stringify({ profile: this.evseBinding.profile }));
+                formData.append(
+                    'data',
+                    JSON.stringify({ profile: this.evseBinding.profile, control_mode: this.evseBinding.control_mode })
+                );
                 await fetch('/api/hems/profiles/evse-binding', {
                     method: 'POST',
                     headers: authHeader(),

@@ -65,9 +65,9 @@ void setup()
     // Initialize file system
     ESP_LOGI(TAG, "Mounting FS...");
     if (!LittleFS.begin(false)) { // Do not format if mount failed
-        ESP_LOGW(TAG, "Failed mounting FS... Trying to format...");
-        const bool success = LittleFS.begin(true);
-        ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_ERROR), TAG, "FS reformat %s", success ? "successful" : "failed");
+        // Formatting here could erase the only evidence of persistent remote
+        // ownership. Preserve the filesystem; recovery stays fail-closed.
+        ESP_LOGE(TAG, "Failed mounting FS; automatic formatting disabled to preserve HEMS recovery evidence");
     }
 
     // Read configuration values

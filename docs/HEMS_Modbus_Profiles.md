@@ -285,3 +285,13 @@ GitHub merge-ref build metadata may shift the final artifact size slightly.
 No persistent profile RAM is added. PR #5 keeps only the selected immutable profile
 snapshot in the storage provider and remains designed for the no-PSRAM reference
 target.
+
+
+## Schema-v2 recovery metadata
+
+Schema v2 also accepts optional bounded read-only `identity` and `recovery` objects.
+See [HEMS_CONTROL.md](HEMS_CONTROL.md#bounded-device-instance-identity-and-replay-metadata)
+for the normative limits, exact-byte canonical identity and replay opt-in. V1 rejects
+these additions. Importing identity/replay metadata grants no device write permission.
+WARP now declares its upstream eFuse-backed box UID; Marstek identity is unsupported.
+Both reference profiles retain replay-safe=false and cannot automatically recover.

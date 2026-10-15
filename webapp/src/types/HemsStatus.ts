@@ -18,9 +18,81 @@ export interface HemsPowerLimit {
     value_w: number | null;
 }
 
+export interface HemsActuationTarget {
+    profile: string;
+    control_mode: 'monitor' | 'hems';
+    permission_granted: boolean;
+    allowed: boolean;
+    ready_for_active: boolean;
+    blockers: string[];
+    ownership_uncertain: boolean;
+    command: {
+        last_error: string;
+        last_stage: string;
+        execution_error: string;
+        transport_error: string;
+        planning_error: string;
+        state: 'idle' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | (string & {});
+        id: number | null;
+        generation: number | null;
+        action: string | null;
+        value: number | null;
+    };
+    validation: { allowed: boolean; blockers: string[] };
+    recovery: {
+        state:
+            | 'not_loaded'
+            | 'idle'
+            | 'armed'
+            | 'recovery_pending'
+            | 'checking_identity'
+            | 'recovery_running'
+            | 'retry_wait'
+            | 'recovered'
+            | 'unresolved'
+            | 'operator_resolving'
+            | (string & {});
+        target: string;
+        journal_present: boolean;
+        automatic_supported: boolean;
+        identity_available: boolean;
+        identity_supported: boolean;
+        blocked: boolean;
+        reason: string;
+        attempts: number;
+        retry_in_ms: number;
+        clear_pending: boolean;
+        record_checksum: number;
+        record_id: string;
+        resolution_available: boolean;
+        resolution_pending: boolean;
+        operator_acknowledged: boolean;
+        last_error: string;
+        last_stage: string;
+        execution_error: string;
+        transport_error: string;
+    };
+    cleanup: {
+        state: 'idle' | 'pending' | 'running' | 'retry_wait' | 'succeeded' | (string & {});
+        retained_context: boolean;
+        attempts: number;
+        last_error: string;
+        last_stage: string;
+        execution_error: string;
+        transport_error: string;
+        modbus_exception: number;
+    };
+}
+
 export interface HemsStatus {
     state: 'Disabled' | 'Monitor';
     decision: 'None';
+    validation: {
+        state: 'inactive' | 'active' | 'expired' | 'revoked' | (string & {});
+        active: boolean;
+        remaining_ms: number;
+        commands_accepted: number;
+    };
     external_devices: number;
     warp: {
         configured: boolean;
@@ -114,6 +186,11 @@ export interface HemsStatus {
             max_charge_power: HemsPowerLimit;
             max_discharge_power: HemsPowerLimit;
         };
+    };
+    actuation: {
+        global_active: boolean;
+        evse: HemsActuationTarget;
+        storage: HemsActuationTarget;
     };
     shadow: {
         ev_protection: {

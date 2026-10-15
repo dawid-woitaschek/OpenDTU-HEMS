@@ -49,10 +49,7 @@
                             <th>{{ $t('hems.PvPower') }}</th>
                             <td>
                                 {{ signalNumberText(hemsStatus.normalized.pv.power_w, 'W') }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.pv.power_w)"
-                                >
+                                <span class="badge ms-2" :class="signalQualityClass(hemsStatus.normalized.pv.power_w)">
                                     {{ signalQualityText(hemsStatus.normalized.pv.power_w) }}
                                 </span>
                             </td>
@@ -397,13 +394,55 @@
                 </table>
             </div>
         </CardElement>
+        <CardElement v-if="hemsStatus.actuation" :text="$t('hems.Recovery')" textVariant="text-bg-primary" add-space>
+            <div class="p-3">
+                <p>{{ $t('hems.RecoveryHint') }}</p>
+                <div v-if="hemsStatus.validation" class="alert alert-warning">
+                    {{ $t('hems.ValidationWarning') }}
+                    {{ hemsStatus.validation.state }} · {{ Math.ceil(hemsStatus.validation.remaining_ms / 1000) }} s
+                </div>
+                <div v-for="{ target, name } in actuationTargets" :key="name" class="mb-3">
+                    <strong>{{ name }}</strong>
+                    <div>{{ $t('hems.ReadinessBlockers') }}: {{ target.blockers.join(', ') || '—' }}</div>
+                    <div v-if="target.validation">
+                        {{ $t('hems.ValidationBlockers') }}: {{ target.validation.blockers.join(', ') || '—' }}
+                    </div>
+                    <template v-if="target.recovery">
+                        <div :class="{ 'text-danger': target.recovery.blocked }">
+                            {{ target.recovery.state }} / {{ target.recovery.reason }}
+                        </div>
+                        <div>
+                            {{ $t('hems.RecoveryJournal') }}: {{ booleanText(target.recovery.journal_present) }} ·
+                            {{ $t('hems.RecoveryAutomatic') }}: {{ booleanText(target.recovery.automatic_supported) }} ·
+                            {{ $t('hems.RecoveryIdentity') }}: {{ booleanText(target.recovery.identity_available) }}
+                        </div>
+                        <div>
+                            {{ $t('hems.RecoveryAttempts') }}: {{ target.recovery.attempts }} ·
+                            {{ $t('hems.RecoveryRetry') }}: {{ Math.ceil(target.recovery.retry_in_ms / 1000) }} s
+                        </div>
+                        <div>
+                            {{ target.recovery.last_stage }} / {{ target.recovery.last_error }} /
+                            {{ target.recovery.execution_error }} / {{ target.recovery.transport_error }}
+                        </div>
+                    </template>
+                    <div>
+                        {{ $t('hems.RecoveryCleanup') }}: {{ target.cleanup.state }} / {{ target.cleanup.last_error }}
+                    </div>
+                    <div>
+                        {{ $t('hems.RecoveryCommand') }}: {{ target.command.state }} /
+                        {{ target.command.action || '—' }} / {{ target.command.last_stage }} /
+                        {{ target.command.last_error }} / {{ target.command.execution_error }}
+                    </div>
+                </div>
+            </div>
+        </CardElement>
     </BasePage>
 </template>
 
 <script lang="ts">
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
-import type { HemsPowerLimit, HemsQuality, HemsSignal, HemsStatus } from '@/types/HemsStatus';
+import type { HemsActuationTarget, HemsPowerLimit, HemsQuality, HemsSignal, HemsStatus } from '@/types/HemsStatus';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
@@ -424,6 +463,17 @@ export default defineComponent({
     },
     beforeUnmount() {
         clearInterval(this.timer);
+    },
+    computed: {
+        actuationTargets(): { name: string; target: HemsActuationTarget }[] {
+            const actuation = this.hemsStatus.actuation;
+            return actuation
+                ? [
+                      { name: 'evse', target: actuation.evse },
+                      { name: 'storage', target: actuation.storage },
+                  ]
+                : [];
+        },
     },
     methods: {
         booleanText(value: boolean | null) {
