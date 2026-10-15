@@ -8,6 +8,7 @@
 #include "RestartHelper.h"
 #include "WebApi.h"
 #include "helper.h"
+#include "__compiled_constants.h"
 #include <AsyncJson.h>
 #include <Update.h>
 #include "esp_partition.h"
@@ -53,28 +54,23 @@ void WebApiFirmwareClass::onFirmwareUpdateFinish(AsyncWebServerRequest* request)
         return;
     }
 
-    // the request handler is triggered after the upload has finished...
-    // create the response, add header, and send response
-
-    AsyncWebServerResponse* response = request->beginResponse((Update.hasError()) ? 500 : 200, asyncsrv::T_text_plain, (Update.hasError()) ? "FAIL" : "OK");
+    AsyncWebServerResponse* response = request->beginResponse((Update.hasError()) ? 500 : 200,
+        asyncsrv::T_text_plain, (Update.hasError()) ? "FAIL" : "OK");
     response->addHeader(asyncsrv::T_Connection, asyncsrv::T_close);
     response->addHeader(asyncsrv::T_CORS_ACAO, "*");
     request->send(response);
 
-    // write the runtime data to LittleFS, but do not write if last write operation was less than 10 min ago
     RuntimeData.write(10);
     RestartHelper.triggerRestart();
 }
 
-void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final)
+void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request, String filename,
+        size_t index, uint8_t* data, size_t len, bool final)
 {
     if (!WebApi.checkCredentials(request)) {
         return;
     }
 
-    // Factory images contain bootloader/partition data for flashing from offset 0 and
-    // must never be written into an OTA application partition. Ignore every chunk;
-    // the finish handler returns the explicit client error without restarting.
     if (FirmwareUpdateValidation::isFactoryImageFilename(filename.c_str())) {
         return;
     }
@@ -83,7 +79,6 @@ void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request,
         return request->send(500, asyncsrv::T_text_plain, "OTA updates not supported");
     }
 
-    // Upload handler chunks in data
     if (!index) {
         if (!request->hasParam("MD5", true)) {
             return request->send(400, asyncsrv::T_text_plain, "MD5 parameter missing");
@@ -93,21 +88,20 @@ void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request,
             return request->send(400, asyncsrv::T_text_plain, "MD5 parameter invalid");
         }
 
-        if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) { // Start with max available size
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
             Update.printError(Serial);
             return request->send(400, asyncsrv::T_text_plain, "OTA could not begin");
         }
     }
 
-    // Write chunked data to the free sketch space
     if (len) {
         if (Update.write(data, len) != len) {
             return request->send(400, asyncsrv::T_text_plain, "OTA could not begin");
         }
     }
 
-    if (final) { // if the final flag is set then this is the last frame of data
-        if (!Update.end(true)) { // true to set the size to the current progress
+    if (final) {
+        if (!Update.end(true)) {
             Update.printError(Serial);
             return request->send(400, asyncsrv::T_text_plain, "Could not end OTA");
         }
@@ -126,6 +120,12 @@ void WebApiFirmwareClass::onFirmwareStatus(AsyncWebServerRequest* request)
     auto& root = response->getRoot();
 
     root["ota_supported"] = otaSupported();
+    root["git_hash"] = __COMPILED_GIT_HASH__;
+    root["git_sha"] = __COMPILED_GIT_SHA__;
+    root["git_branch"] = __COMPILED_GIT_BRANCH__;
+    root["pioenv"] = PIOENV;
+    root["update_repository"] = __COMPILED_UPDATE_REPOSITORY__;
+    root["update_channel"] = __COMPILED_UPDATE_CHANNEL__;
 
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }

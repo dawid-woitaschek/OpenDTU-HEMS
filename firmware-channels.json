@@ -1,0 +1,14 @@
+{
+  "schema": "opendtu-hems-firmware-channels/v1",
+  "repository": "dawid-woitaschek/OpenDTU-HEMS",
+  "channels": {
+    "integration/hems-next": {
+      "id": "hems-next",
+      "label": "HEMS Next"
+    },
+    "hems": {
+      "id": "hems",
+      "label": "HEMS"
+    }
+  }
+}
