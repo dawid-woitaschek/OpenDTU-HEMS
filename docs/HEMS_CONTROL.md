@@ -18,19 +18,33 @@ Control is intentionally split into independent gates:
 
 The current controller deliberately keeps item 5 false. `Readiness::readyForActive()` can therefore report that every device-side prerequisite is satisfied while `Readiness::allowed()` still remains false.
 
-The command mailbox is now connected to the existing WARP and storage provider workers. There is still no public HTTP write endpoint and no policy caller. `Controller::submitActuation()` is the only controller-side handoff and it rejects every command while the global Active prerequisite is absent. The workers independently call back into the same readiness gate before opening a control session and the register executor rechecks authorization before every bounded write.
+The command mailbox is connected to the existing WARP and storage provider workers. There is still no public HTTP write endpoint and no policy caller. `Controller::submitActuation()` is the only controller-side handoff and it rejects every command while the global Active prerequisite is absent. The workers independently call back into the same readiness gate before opening a control session and the register executor rechecks authorization before every bounded write.
 
-A provider configuration change cancels pending work and advances the provider generation. A running command cannot be synchronously cancelled, but subsequent writes fail their generation/authorization check. The worker follows a command with a fresh telemetry poll so observed state is refreshed promptly. Commands and telemetry share the same provider worker and Modbus client, preserving the one-device/one-owner rule rather than introducing a second network writer.
+A provider configuration change cancels pending work and advances the provider generation. The accepted generation travels with a mailbox command, so work accepted for one endpoint can never be retargeted to another endpoint after a configuration change. A running command cannot be synchronously cancelled, but subsequent writes fail their generation/authorization check. The worker follows a command with a fresh telemetry poll so observed state is refreshed promptly. Commands, telemetry and cleanup share the same provider worker and Modbus client, preserving the one-device/one-owner rule rather than introducing a second network writer.
 
 The mailbox never overwrites a pending or running command and it does not accumulate stale power requests.
 
 ### Ownership across configuration generations
 
-A generation change is not allowed to silently erase local knowledge that the previous endpoint may still be under remote control. If an actuator still owns control when its provider resets for a new generation, the actuator enters an `OwnershipOrphaned` fail-closed state instead of clearing its session. From that state all semantic operations, including stop/release against the new generation, are rejected before any register write is emitted.
+A generation change is not allowed to silently erase local knowledge that the previous endpoint may still be under remote control. If an actuator still owns control when configuration changes, the provider retains the exact old endpoint, effective Modbus unit/port and the shared old profile object before installing the new generation.
 
-This is deliberately conservative. The new generation cannot prove that its endpoint/profile is the same remote owner that was acquired previously, so attempting a release there could write to the wrong device. The orphan barrier therefore prevents accidental cross-endpoint control while preserving the fact that cleanup is still required.
+Normal actuation then fails closed while the retained context exists. `Readiness` exposes `cleanup_pending`, so even a future global Active state cannot authorize new commands until cleanup has completed.
 
-Before a future Active mode can be enabled, shutdown/release semantics still need the second half of this lifecycle: retain the old endpoint/profile long enough to perform an explicit bounded cleanup, define retry/failure behavior, and expose that cleanup state diagnostically. The orphan barrier is a safety stop, not a claim that remote ownership has been released.
+Cleanup is deliberately narrower than normal control:
+
+- it may run after Active/device permission has already been revoked;
+- it is tied to a private retained-context token;
+- it can execute only the old profile's bounded `release` plan;
+- it uses the same provider worker and Modbus client as telemetry/control;
+- it never sends the release sequence to the new endpoint/profile;
+- successful release clears local ownership and the retained context;
+- failures keep the old context and retry after 30 seconds.
+
+This exception to the normal authorization gate exists only to relinquish control safely. It cannot submit charge/discharge/current/stop operations and therefore must not be generalized into an alternate actuator path.
+
+If a configuration change races with a running command, the command's mailbox envelope retains its original provider generation. If that command acquired ownership before later writes were revoked, completion retains the command's already-copied old endpoint/profile for the same cleanup path.
+
+A power loss/reboot can still erase RAM-only ownership knowledge. Device-specific boot recovery for persistent remote-control modes remains a separate hardware-validation and lifecycle concern before Active mode is allowed.
 
 ## WARP3 Smart control provenance
 
@@ -65,6 +79,6 @@ This validates the profile metadata and semantic actuator mapping. It does not c
 
 ## Storage ownership
 
-Profiles such as the curated Venus E3 may define `acquire` and `release` write sequences. `ProfileSession` validates the requested operation before taking ownership, acquires once, retains ownership across subsequent operations and only clears local ownership after a successful release. An explicit forced release remains possible after local state was lost, for example following a reboot.
+Profiles such as the curated Venus E3 may define `acquire` and `release` write sequences. `ProfileSession` validates the requested operation before taking ownership, acquires once, retains ownership across subsequent operations and only clears local ownership after a successful release. Retained-context cleanup uses that same bounded release plan against the exact previous endpoint/profile after a configuration transition.
 
 Physical Venus E3 behavior remains a hardware validation gate; profile metadata and native tests do not claim otherwise.
