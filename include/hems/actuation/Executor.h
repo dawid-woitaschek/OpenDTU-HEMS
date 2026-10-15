@@ -13,11 +13,16 @@ struct RegisterIo {
             uint16_t count, uint16_t const* values) = nullptr;
     Modbus::Result (*readHoldingRegisters)(void* context, uint16_t address,
             uint16_t count, uint8_t* payload) = nullptr;
+    // Optional last-moment gate. When supplied it is evaluated immediately
+    // before every write, so a command cannot continue after authorization was
+    // revoked while it was waiting or between bounded profile writes.
+    bool (*authorized)(void* context) = nullptr;
 };
 
 enum class ExecutionError : uint8_t {
     None,
     InvalidIo,
+    AuthorizationRevoked,
     WriteFailed,
     ReadbackFailed,
     VerificationFailed,

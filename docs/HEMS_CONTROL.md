@@ -14,11 +14,17 @@ Control is intentionally split into independent gates:
 6. a depth-one worker mailbox hands a validated semantic command to exactly one device owner;
 7. the semantic actuator resolves the command to a profile operation;
 8. the profile planner validates/scales it to bounded holding-register writes;
-9. the Modbus executor writes in order and verifies readback where applicable.
+9. the Modbus executor checks authorization immediately before every write, writes in order and verifies readback where applicable.
 
 The current controller deliberately keeps item 5 false. `Readiness::readyForActive()` can therefore report that every device-side prerequisite is satisfied while `Readiness::allowed()` still remains false.
 
-The command mailbox is likewise not connected to a provider worker yet. It never overwrites a pending or running command and it does not accumulate stale power requests.
+The command mailbox is now connected to the existing WARP and storage provider workers. There is still no public HTTP write endpoint and no policy caller. `Controller::submitActuation()` is the only controller-side handoff and it rejects every command while the global Active prerequisite is absent. The workers independently call back into the same readiness gate before opening a control session and the register executor rechecks authorization before every bounded write.
+
+A provider configuration change cancels pending work and advances the provider generation. A running command cannot be synchronously cancelled, but subsequent writes fail their generation/authorization check. The worker follows a command with a fresh telemetry poll so observed state is refreshed promptly. Commands and telemetry share the same provider worker and Modbus client, preserving the one-device/one-owner rule rather than introducing a second network writer.
+
+The mailbox never overwrites a pending or running command and it does not accumulate stale power requests.
+
+Before a future Active mode can be enabled, shutdown/release semantics still need an explicit lifecycle policy. In particular, revoking Active or changing an endpoint while remote ownership may exist must define whether to stop, release, or both. This document does not pretend that problem vanishes merely because the write path is bounded.
 
 ## WARP3 Smart control provenance
 

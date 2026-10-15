@@ -54,6 +54,8 @@ Profiles::Profile profile()
 struct FakeIo {
     int writeCalls = 0;
     int readCalls = 0;
+    int authorizationChecks = 0;
+    int revokeAfterChecks = -1;
     int failWriteAt = -1;
     int failReadAt = -1;
     bool mismatch = false;
@@ -61,6 +63,13 @@ struct FakeIo {
     uint16_t count = 0;
     uint16_t values[2] {};
 };
+
+bool fakeAuthorized(void* context)
+{
+    auto& io = *static_cast<FakeIo*>(context);
+    int call = io.authorizationChecks++;
+    return io.revokeAfterChecks < 0 || call < io.revokeAfterChecks;
+}
 
 Modbus::Result fakeWrite(void* context, uint16_t address, uint16_t count,
         uint16_t const* values)
@@ -134,10 +143,27 @@ int main()
     p = profile();
     assert(Profiles::planOperation(p, "set_current_a", true, 16, plan));
     FakeIo fake;
-    Actuation::RegisterIo io { &fake, fakeWrite, fakeRead };
+    Actuation::RegisterIo io { &fake, fakeWrite, fakeRead, fakeAuthorized };
     auto executed = Actuation::execute(io, plan);
     assert(executed && fake.writeCalls == 1 && fake.readCalls == 1);
+    assert(fake.authorizationChecks == 1);
     assert(fake.address == 1002 && fake.count == 2 && fake.values[1] == 16000);
+
+    fake = {};
+    fake.revokeAfterChecks = 0;
+    executed = Actuation::execute(io, plan);
+    assert(executed.error == Actuation::ExecutionError::AuthorizationRevoked);
+    assert(executed.writeIndex == 0 && fake.writeCalls == 0 && fake.readCalls == 0);
+
+    Profiles::ControlPlan twoWrites = plan;
+    twoWrites.count = 2;
+    twoWrites.writes[1] = twoWrites.writes[0];
+    twoWrites.writes[1].address = 1004;
+    fake = {};
+    fake.revokeAfterChecks = 1;
+    executed = Actuation::execute(io, twoWrites);
+    assert(executed.error == Actuation::ExecutionError::AuthorizationRevoked);
+    assert(executed.writeIndex == 1 && fake.writeCalls == 1 && fake.readCalls == 1);
 
     fake = {};
     fake.failWriteAt = 0;

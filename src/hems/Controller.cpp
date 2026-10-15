@@ -82,10 +82,18 @@ Hems::Model::Signal<double> normalizedPvPower()
 
 namespace Hems {
 
+bool Controller::providerAuthorization(void* context, ControlTarget target)
+{
+    return context && static_cast<Controller*>(context)->actuationAllowed(target);
+}
+
 void Controller::init(Scheduler& scheduler)
 {
     Evse::BindingSettings.init();
     Storage::StorageSettings.init();
+    _warp.setAuthorization(this, providerAuthorization);
+    _storage.setAuthorization(this, providerAuthorization);
+
     scheduler.addTask(_loopTask);
     _loopTask.setCallback([this] {
         _warp.loop();
@@ -139,7 +147,7 @@ Actuation::Readiness Controller::getActuationReadiness(ControlTarget target) con
 {
     Actuation::ReadinessInput input;
     // There is deliberately no global Active mode yet. Keeping this false makes
-    // the readiness model observable without turning any future command path on.
+    // the worker bridge fully wired but impossible to authorize in production.
     input.globalActive = false;
     input.permissionGranted = controlPermissionGranted(target);
 
@@ -176,6 +184,35 @@ Actuation::Readiness Controller::getActuationReadiness(ControlTarget target) con
 bool Controller::actuationAllowed(ControlTarget target) const
 {
     return getActuationReadiness(target).allowed();
+}
+
+bool Controller::submitActuation(Actuation::Command const& command, uint32_t& id)
+{
+    id = 0;
+    if (!Actuation::validCommand(command) || !actuationAllowed(command.target)) { return false; }
+    switch (command.target) {
+        case ControlTarget::Evse: return _warp.submitCommand(command, id);
+        case ControlTarget::Storage: return _storage.submitCommand(command, id);
+        default: return false;
+    }
+}
+
+bool Controller::cancelPendingActuation(ControlTarget target, uint32_t id)
+{
+    switch (target) {
+        case ControlTarget::Evse: return _warp.cancelPendingCommand(id);
+        case ControlTarget::Storage: return _storage.cancelPendingCommand(id);
+        default: return false;
+    }
+}
+
+Actuation::MailboxSnapshot Controller::getActuationCommandSnapshot(ControlTarget target) const
+{
+    switch (target) {
+        case ControlTarget::Evse: return _warp.commandSnapshot();
+        case ControlTarget::Storage: return _storage.commandSnapshot();
+        default: return {};
+    }
 }
 
 Warp::Snapshot Controller::getWarpSnapshot() const

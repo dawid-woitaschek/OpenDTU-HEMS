@@ -8,6 +8,7 @@ char const* executionErrorName(ExecutionError error)
     switch (error) {
         case ExecutionError::None: return "None";
         case ExecutionError::InvalidIo: return "InvalidIo";
+        case ExecutionError::AuthorizationRevoked: return "AuthorizationRevoked";
         case ExecutionError::WriteFailed: return "WriteFailed";
         case ExecutionError::ReadbackFailed: return "ReadbackFailed";
         case ExecutionError::VerificationFailed: return "VerificationFailed";
@@ -27,6 +28,9 @@ ExecutionResult execute(RegisterIo const& io, Profiles::ControlPlan const& plan,
         auto const& write = plan.writes[i];
         if (write.count == 0 || write.count > Modbus::MaxWriteRegisters) {
             return { ExecutionError::InvalidIo, {}, i };
+        }
+        if (io.authorized && !io.authorized(io.context)) {
+            return { ExecutionError::AuthorizationRevoked, {}, i };
         }
 
         auto result = io.writeHoldingRegisters(io.context, write.address,
