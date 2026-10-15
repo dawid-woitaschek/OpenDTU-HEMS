@@ -18,10 +18,14 @@ public:
     Actuation::CommandResult releaseControl(Actuation::RegisterIo const& io,
             Profiles::Profile const& profile);
 
+    // Safety cleanup only: the provider retained the exact old endpoint/profile
+    // and may use this after normal authorization has already been revoked.
+    Actuation::CommandResult releaseRetainedControl(Actuation::RegisterIo const& io,
+            Profiles::Profile const& profile);
+
     // A provider generation change must never silently forget that a previous
     // endpoint may still be under remote control. Once orphaned, the actuator
-    // rejects every command until a later lifecycle implementation explicitly
-    // resolves the old ownership state.
+    // rejects normal commands until retained-context cleanup resolves ownership.
     bool reset()
     {
         if (_session.ownsControl()) {

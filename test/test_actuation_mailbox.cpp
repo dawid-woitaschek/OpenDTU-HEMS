@@ -31,22 +31,25 @@ int main()
     assert(mailbox.snapshot().state == MailboxState::Idle);
 
     uint32_t firstId = 0;
+    constexpr uint32_t firstGeneration = 42;
     Command first { ControlTarget::Storage, Action::SetChargePowerW, true, 500 };
-    assert(mailbox.submit(first, firstId));
+    assert(mailbox.submit(first, firstId, firstGeneration));
     assert(firstId != 0);
     auto pending = mailbox.snapshot();
     assert(pending.state == MailboxState::Pending && pending.id == firstId);
+    assert(pending.generation == firstGeneration);
     assert(pending.command.target == ControlTarget::Storage);
     assert(pending.command.action == Action::SetChargePowerW);
     assert(pending.command.value == 500);
 
     uint32_t rejectedId = 123;
-    assert(!mailbox.submit({ ControlTarget::Storage, Action::Stop, false, 0 }, rejectedId));
+    assert(!mailbox.submit({ ControlTarget::Storage, Action::Stop, false, 0 }, rejectedId, 43));
     assert(rejectedId == 0);
 
     Envelope envelope;
     assert(mailbox.take(envelope));
-    assert(envelope.id == firstId && envelope.command.value == 500);
+    assert(envelope.id == firstId && envelope.generation == firstGeneration);
+    assert(envelope.command.value == 500);
     assert(mailbox.snapshot().state == MailboxState::Running);
     assert(!mailbox.take(envelope));
     assert(!mailbox.cancelPending(firstId));
@@ -55,20 +58,22 @@ int main()
     assert(mailbox.snapshot().state == MailboxState::Succeeded);
 
     uint32_t secondId = 0;
-    assert(mailbox.submit({ ControlTarget::Evse, Action::SetCurrentA, true, 6 }, secondId));
+    assert(mailbox.submit({ ControlTarget::Evse, Action::SetCurrentA, true, 6 }, secondId, 77));
     assert(secondId != 0 && secondId != firstId);
+    assert(mailbox.snapshot().generation == 77);
     assert(mailbox.cancelPending(secondId));
     assert(mailbox.snapshot().state == MailboxState::Cancelled);
 
     uint32_t thirdId = 0;
     assert(mailbox.submit({ ControlTarget::Evse, Action::Stop, false, 0 }, thirdId));
     assert(mailbox.take(envelope));
+    assert(envelope.generation == 0);
     assert(mailbox.complete(thirdId, false));
     assert(mailbox.snapshot().state == MailboxState::Failed);
 
     mailbox.reset();
     auto reset = mailbox.snapshot();
-    assert(reset.state == MailboxState::Idle && reset.id == 0);
+    assert(reset.state == MailboxState::Idle && reset.id == 0 && reset.generation == 0);
 
     assert(!std::strcmp(actionName(Action::SetChargePowerW), "set_charge_power_w"));
     assert(!std::strcmp(actionName(Action::Release), "release"));

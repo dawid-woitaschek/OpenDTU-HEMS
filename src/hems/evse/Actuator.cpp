@@ -51,4 +51,13 @@ Actuation::CommandResult Actuator::releaseControl(Actuation::RegisterIo const& i
     return _session.release(io, profile, true);
 }
 
+Actuation::CommandResult Actuator::releaseRetainedControl(Actuation::RegisterIo const& io,
+        Profiles::Profile const& profile)
+{
+    if (!compatible(profile)) { return incompatible(); }
+    auto result = _session.release(io, profile, true);
+    if (result) { _orphaned = false; }
+    return result;
+}
+
 } // namespace Hems::Evse

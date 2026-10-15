@@ -60,7 +60,7 @@ char const* mailboxStateName(MailboxState state)
     return "unknown";
 }
 
-bool Mailbox::submit(Command const& command, uint32_t& id)
+bool Mailbox::submit(Command const& command, uint32_t& id, uint32_t generation)
 {
     id = 0;
     if (!validCommand(command)) { return false; }
@@ -68,6 +68,7 @@ bool Mailbox::submit(Command const& command, uint32_t& id)
     if (_state == MailboxState::Pending || _state == MailboxState::Running) { return false; }
 
     _command = command;
+    _generation = generation;
     _id = _nextId++;
     if (_id == 0) {
         _id = _nextId++;
@@ -84,6 +85,7 @@ bool Mailbox::take(Envelope& envelope)
     if (_state != MailboxState::Pending) { return false; }
     _state = MailboxState::Running;
     envelope.id = _id;
+    envelope.generation = _generation;
     envelope.command = _command;
     return true;
 }
@@ -110,12 +112,13 @@ void Mailbox::reset()
     _state = MailboxState::Idle;
     _command = {};
     _id = 0;
+    _generation = 0;
 }
 
 MailboxSnapshot Mailbox::snapshot() const
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    return { _state, _id, _command };
+    return { _state, _id, _generation, _command };
 }
 
 } // namespace Hems::Actuation

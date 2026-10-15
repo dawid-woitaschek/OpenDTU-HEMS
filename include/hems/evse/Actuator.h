@@ -13,11 +13,9 @@ public:
             Profiles::Profile const& profile);
     Actuation::CommandResult releaseControl(Actuation::RegisterIo const& io,
             Profiles::Profile const& profile);
+    Actuation::CommandResult releaseRetainedControl(Actuation::RegisterIo const& io,
+            Profiles::Profile const& profile);
 
-    // A provider generation change must never silently forget that a previous
-    // endpoint may still be under remote control. Once orphaned, the actuator
-    // rejects every command until a later lifecycle implementation explicitly
-    // resolves the old ownership state.
     bool reset()
     {
         if (_session.ownsControl()) {

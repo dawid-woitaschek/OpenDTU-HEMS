@@ -64,9 +64,16 @@ Actuation::CommandResult Actuator::releaseControl(Actuation::RegisterIo const& i
 {
     if (_orphaned) { return orphaned(); }
     if (!compatible(profile)) { return incompatible(); }
-    // An explicit release is deliberately forced. After a reboot we may no
-    // longer remember ownership while the device can still be in remote mode.
     return _session.release(io, profile, true);
+}
+
+Actuation::CommandResult Actuator::releaseRetainedControl(Actuation::RegisterIo const& io,
+        Profiles::Profile const& profile)
+{
+    if (!compatible(profile)) { return incompatible(); }
+    auto result = _session.release(io, profile, true);
+    if (result) { _orphaned = false; }
+    return result;
 }
 
 } // namespace Hems::Storage
