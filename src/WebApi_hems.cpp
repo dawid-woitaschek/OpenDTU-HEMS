@@ -85,6 +85,42 @@ void serializeLimit(JsonObject target, Hems::Constraints::UpperLimit const& limi
     if (limit.active) { target["value_w"] = limit.valueW; }
 }
 
+void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarget)
+{
+    auto readiness = HemsController.getActuationReadiness(controlTarget);
+    auto command = HemsController.getActuationCommandSnapshot(controlTarget);
+
+    target["control_mode"] = Hems::controlModeName(HemsController.getControlMode(controlTarget));
+    target["permission_granted"] = HemsController.controlPermissionGranted(controlTarget);
+    target["allowed"] = readiness.allowed();
+    target["ready_for_active"] = readiness.readyForActive();
+
+    auto blockers = target["blockers"].to<JsonArray>();
+    for (auto blocker : {
+            Hems::Actuation::ReadinessBlocker::GlobalModeInactive,
+            Hems::Actuation::ReadinessBlocker::DevicePermissionMissing,
+            Hems::Actuation::ReadinessBlocker::DeviceNotConfigured,
+            Hems::Actuation::ReadinessBlocker::DeviceNotEnabled,
+            Hems::Actuation::ReadinessBlocker::ProfileNotControllable,
+            Hems::Actuation::ReadinessBlocker::DeviceUnreachable,
+            Hems::Actuation::ReadinessBlocker::TelemetryNotFresh,
+            Hems::Actuation::ReadinessBlocker::DeviceFault,
+        }) {
+        if (readiness.has(blocker)) { blockers.add(Hems::Actuation::readinessBlockerName(blocker)); }
+    }
+
+    JsonObject mailbox = target["command"].to<JsonObject>();
+    mailbox["state"] = Hems::Actuation::mailboxStateName(command.state);
+    mailbox["id"] = nullptr;
+    mailbox["action"] = nullptr;
+    mailbox["value"] = nullptr;
+    if (command.id != 0) {
+        mailbox["id"] = command.id;
+        mailbox["action"] = Hems::Actuation::actionName(command.command.action);
+        if (command.command.hasValue) { mailbox["value"] = command.command.value; }
+    }
+}
+
 } // namespace
 
 void WebApiHemsClass::init(AsyncWebServer& server)
@@ -235,6 +271,11 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     storageConstraints["discharge_allowed"] = constraints.storage.dischargeAllowed;
     serializeLimit(storageConstraints["max_charge_power"].to<JsonObject>(), constraints.storage.maxChargePower);
     serializeLimit(storageConstraints["max_discharge_power"].to<JsonObject>(), constraints.storage.maxDischargePower);
+
+    JsonObject actuation = root["actuation"].to<JsonObject>();
+    actuation["global_active"] = false;
+    serializeActuationTarget(actuation["evse"].to<JsonObject>(), Hems::ControlTarget::Evse);
+    serializeActuationTarget(actuation["storage"].to<JsonObject>(), Hems::ControlTarget::Storage);
 
     auto evProtection = HemsController.getEvProtectionShadowSnapshot();
     JsonObject shadow = root["shadow"].to<JsonObject>();
