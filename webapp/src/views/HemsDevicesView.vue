@@ -40,7 +40,9 @@
                             }}</label>
                             <div class="col-sm-8">
                                 <select id="hems-evse-profile" class="form-select" v-model="evseBinding.profile">
-                                    <option value="">WARP (legacy)</option>
+                                    <option value="" disabled>
+                                        {{ evseProfiles.length ? $t('storage.SelectProfile') : $t('storage.NoProfiles') }}
+                                    </option>
                                     <option v-if="evseProfileUnavailable" :value="evseBinding.profile" disabled>
                                         ⚠ {{ evseBinding.profile }}
                                     </option>
@@ -48,11 +50,21 @@
                                         {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
                                     </option>
                                 </select>
+                                <div
+                                    v-if="evseProfileUnavailable"
+                                    class="alert alert-warning mt-2 mb-0"
+                                    role="alert"
+                                >
+                                    {{ evseBinding.profile }}
+                                </div>
+                                <div v-else-if="!evseProfiles.length" class="alert alert-warning mt-2 mb-0" role="alert">
+                                    {{ $t('storage.NoProfilesHint') }}
+                                </div>
                             </div>
                         </div>
                         <div class="row mb-3">
                             <label for="hems-evse-control-mode" class="col-sm-4 col-form-label">{{
-                                'EVSE control'
+                                $t('hems.ControlMode')
                             }}</label>
                             <div class="col-sm-8">
                                 <select
@@ -152,7 +164,7 @@
                         />
                         <div class="row mb-3">
                             <label for="hems-storage-control-mode" class="col-sm-4 col-form-label">{{
-                                'Storage control'
+                                $t('hems.ControlMode')
                             }}</label>
                             <div class="col-sm-8">
                                 <select
@@ -202,7 +214,6 @@ type ProfileSummary = {
 
 type EvseBinding = {
     profile: string;
-    legacy: boolean;
     control_mode: HemsDeviceControlMode;
 };
 
@@ -213,7 +224,7 @@ export default defineComponent({
             dataLoading: true,
             loadFailed: false,
             hemsConfig: {} as HemsConfig,
-            evseBinding: { profile: '', legacy: true, control_mode: 'monitor' } as EvseBinding,
+            evseBinding: { profile: '', control_mode: 'monitor' } as EvseBinding,
             storageProfiles: [] as ProfileSummary[],
             evseProfiles: [] as ProfileSummary[],
             alert: {} as AlertResponse,
@@ -349,6 +360,18 @@ export default defineComponent({
                     this.showError(this.$t('hems.InvalidWallboxPort'));
                     return;
                 }
+                if (!this.evseBinding.profile) {
+                    this.showError(this.$t('storage.ProfileRequired'));
+                    return;
+                }
+                if (this.evseProfileUnavailable) {
+                    this.showError(this.$t('storage.ProfileUnavailable'));
+                    return;
+                }
+            } else {
+                // A disabled EVSE owns no profile, exactly like disabled storage.
+                this.evseBinding.profile = '';
+                this.evseBinding.control_mode = 'monitor';
             }
 
             const warp = this.hemsConfig.warp.enabled ? this.hemsConfig.warp : { enabled: false, host: '', port: 502 };
@@ -380,6 +403,7 @@ export default defineComponent({
                 }
             } else {
                 this.hemsConfig.storage.profile = '';
+                this.hemsConfig.storage.control_mode = 'monitor';
             }
 
             if (
