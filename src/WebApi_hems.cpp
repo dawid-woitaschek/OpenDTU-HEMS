@@ -89,6 +89,7 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
 {
     auto readiness = HemsController.getActuationReadiness(controlTarget);
     auto command = HemsController.getActuationCommandSnapshot(controlTarget);
+    auto cleanup = HemsController.getActuationCleanupSnapshot(controlTarget);
 
     target["control_mode"] = Hems::controlModeName(HemsController.getControlMode(controlTarget));
     target["permission_granted"] = HemsController.controlPermissionGranted(controlTarget);
@@ -105,6 +106,7 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
             Hems::Actuation::ReadinessBlocker::DeviceUnreachable,
             Hems::Actuation::ReadinessBlocker::TelemetryNotFresh,
             Hems::Actuation::ReadinessBlocker::DeviceFault,
+            Hems::Actuation::ReadinessBlocker::CleanupPending,
         }) {
         if (readiness.has(blocker)) { blockers.add(Hems::Actuation::readinessBlockerName(blocker)); }
     }
@@ -112,13 +114,25 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
     JsonObject mailbox = target["command"].to<JsonObject>();
     mailbox["state"] = Hems::Actuation::mailboxStateName(command.state);
     mailbox["id"] = nullptr;
+    mailbox["generation"] = nullptr;
     mailbox["action"] = nullptr;
     mailbox["value"] = nullptr;
     if (command.id != 0) {
         mailbox["id"] = command.id;
+        mailbox["generation"] = command.generation;
         mailbox["action"] = Hems::Actuation::actionName(command.command.action);
         if (command.command.hasValue) { mailbox["value"] = command.command.value; }
     }
+
+    JsonObject cleanupJson = target["cleanup"].to<JsonObject>();
+    cleanupJson["state"] = Hems::Actuation::cleanupStateName(cleanup.state);
+    cleanupJson["retained_context"] = cleanup.retainedContext;
+    cleanupJson["attempts"] = cleanup.attempts;
+    cleanupJson["last_error"] = Hems::Actuation::commandErrorName(cleanup.lastResult.error);
+    cleanupJson["last_stage"] = Hems::Actuation::commandStageName(cleanup.lastResult.stage);
+    cleanupJson["execution_error"] = Hems::Actuation::executionErrorName(cleanup.lastResult.execution.error);
+    cleanupJson["transport_error"] = Hems::Modbus::errorName(cleanup.lastResult.execution.transport.error);
+    cleanupJson["modbus_exception"] = cleanup.lastResult.execution.transport.exception;
 }
 
 } // namespace
