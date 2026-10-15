@@ -6,6 +6,11 @@ export const hemsSupplementMessages = {
             WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
             ConfigLoadFailed: 'HEMS configuration could not be loaded.',
             ConfigSaveFailed: 'HEMS configuration could not be saved.',
+            ControlMode: 'Control mode',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'HEMS control grants per-device permission only. This firmware milestone remains read-only until Active control is implemented.',
             InvalidWallboxHost: 'Enter a valid hostname or IPv4 address. IPv4 octets must be between 0 and 255.',
             InvalidWallboxPort: 'Enter a valid wallbox TCP port between 1 and 65535.',
             NormalizedState: 'Normalized HEMS state',
@@ -88,6 +93,11 @@ export const hemsSupplementMessages = {
                 'Aktuell wird die Wallbox über den WARP-Modbus-TCP-Provider ausgelesen. Hostname/IP-Adresse und TCP-Port der Wallbox konfigurieren.',
             ConfigLoadFailed: 'Die HEMS-Konfiguration konnte nicht geladen werden.',
             ConfigSaveFailed: 'Die HEMS-Konfiguration konnte nicht gespeichert werden.',
+            ControlMode: 'Steuermodus',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'HEMS control erteilt nur die gerätespezifische Freigabe. Dieser Firmware-Stand bleibt bis zur Active-Steuerung vollständig im Lesezugriff.',
             InvalidWallboxHost:
                 'Gib einen gültigen Hostnamen oder eine gültige IPv4-Adresse ein. IPv4-Oktette müssen zwischen 0 und 255 liegen.',
             InvalidWallboxPort: 'Gib einen gültigen Wallbox-TCP-Port zwischen 1 und 65535 ein.',
@@ -175,6 +185,11 @@ export const hemsSupplementMessages = {
                 'Le fournisseur actuel en lecture seule est WARP Modbus TCP. Configurez l’hôte et le port TCP de la borne.',
             ConfigLoadFailed: 'La configuration HEMS n’a pas pu être chargée.',
             ConfigSaveFailed: 'La configuration HEMS n’a pas pu être enregistrée.',
+            ControlMode: 'Mode de contrôle',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'HEMS control accorde uniquement l’autorisation par appareil. Cette version du firmware reste en lecture seule jusqu’à l’implémentation du contrôle Active.',
             InvalidWallboxHost:
                 'Saisissez un nom d’hôte ou une adresse IPv4 valide. Les octets IPv4 doivent être compris entre 0 et 255.',
             InvalidWallboxPort: 'Saisissez un port TCP de borne valide entre 1 et 65535.',

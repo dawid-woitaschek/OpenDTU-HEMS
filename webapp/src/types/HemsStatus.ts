@@ -18,6 +18,31 @@ export interface HemsPowerLimit {
     value_w: number | null;
 }
 
+export interface HemsActuationTarget {
+    control_mode: 'monitor' | 'hems';
+    permission_granted: boolean;
+    allowed: boolean;
+    ready_for_active: boolean;
+    blockers: string[];
+    command: {
+        state: 'idle' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+        id: number | null;
+        generation: number | null;
+        action: string | null;
+        value: number | null;
+    };
+    cleanup: {
+        state: 'idle' | 'pending' | 'running' | 'retry_wait' | 'succeeded';
+        retained_context: boolean;
+        attempts: number;
+        last_error: string;
+        last_stage: string;
+        execution_error: string;
+        transport_error: string;
+        modbus_exception: number;
+    };
+}
+
 export interface HemsStatus {
     state: 'Disabled' | 'Monitor';
     decision: 'None';
@@ -114,6 +139,11 @@ export interface HemsStatus {
             max_charge_power: HemsPowerLimit;
             max_discharge_power: HemsPowerLimit;
         };
+    };
+    actuation: {
+        global_active: boolean;
+        evse: HemsActuationTarget;
+        storage: HemsActuationTarget;
     };
     shadow: {
         ev_protection: {

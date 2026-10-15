@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/ConfigUpdate.h>
+#include <hems/evse/Settings.h>
 #include <hems/storage/Settings.h>
 #include <cassert>
 #include <cstring>
@@ -9,7 +10,7 @@
 namespace {
 
 JsonObject makeStorage(JsonDocument& doc, bool enabled, char const* host, char const* profile,
-        int port, int unit)
+        int port, int unit, char const* controlMode = nullptr)
 {
     auto object = doc.to<JsonObject>();
     object["enabled"] = enabled;
@@ -17,6 +18,7 @@ JsonObject makeStorage(JsonDocument& doc, bool enabled, char const* host, char c
     object["profile"] = profile;
     object["port"] = port;
     object["unit"] = unit;
+    if (controlMode) { object["control_mode"] = controlMode; }
     return object;
 }
 
@@ -32,12 +34,14 @@ void testEnabledStorageBoundaries()
     assert(!std::strcmp(config.Profile, "vendor.model-v1"));
     assert(config.Port == 0);
     assert(config.Unit == 0);
+    assert(config.Control == Hems::ControlMode::MonitorOnly);
 
     JsonDocument maximum;
-    makeStorage(maximum, true, "10.0.4.20", "vendor.model-v1", 65535, 247);
+    makeStorage(maximum, true, "10.0.4.20", "vendor.model-v1", 65535, 247, "hems");
     assert(deserializeStorageConfig(maximum.as<JsonVariantConst>(), config));
     assert(config.Port == 65535);
     assert(config.Unit == 247);
+    assert(config.Control == Hems::ControlMode::HemsControl);
 }
 
 void testEnabledStorageRejectsSemanticGarbage()
@@ -59,6 +63,10 @@ void testEnabledStorageRejectsSemanticGarbage()
     JsonDocument emptyProfile;
     makeStorage(emptyProfile, true, "storage.local", "", 502, 1);
     assert(!deserializeStorageConfig(emptyProfile.as<JsonVariantConst>(), config));
+
+    JsonDocument badControlMode;
+    makeStorage(badControlMode, true, "storage.local", "vendor.model-v1", 502, 1, "automatic-magic");
+    assert(!deserializeStorageConfig(badControlMode.as<JsonVariantConst>(), config));
 }
 
 void testStorageRejectsWrongTypesAndRanges()
@@ -83,6 +91,11 @@ void testStorageRejectsWrongTypesAndRanges()
     object["enabled"] = "false";
     assert(!deserializeStorageConfig(wrongEnabled.as<JsonVariantConst>(), config));
 
+    JsonDocument wrongControlMode;
+    object = makeStorage(wrongControlMode, true, "storage.local", "vendor.model-v1", 502, 1);
+    object["control_mode"] = true;
+    assert(!deserializeStorageConfig(wrongControlMode.as<JsonVariantConst>(), config));
+
     JsonDocument missingHost;
     object = missingHost.to<JsonObject>();
     object["enabled"] = false;
@@ -105,13 +118,14 @@ void testDisabledStorageCanAlwaysBeDisabledWithSafeLeftovers()
     StorageConfig config;
 
     JsonDocument stale;
-    makeStorage(stale, false, "http://old-storage/value", "Vendor Model", 0, 0);
+    makeStorage(stale, false, "http://old-storage/value", "Vendor Model", 0, 0, "hems");
     assert(deserializeStorageConfig(stale.as<JsonVariantConst>(), config));
     assert(!config.Enabled);
     assert(!std::strcmp(config.Host, "http://old-storage/value"));
     assert(config.Profile[0] == '\0');
     assert(config.Port == 0);
     assert(config.Unit == 0);
+    assert(config.Control == Hems::ControlMode::HemsControl);
 
     JsonDocument numericGarbage;
     makeStorage(numericGarbage, false, "131.143.9311.11", "bad profile!", 65535, 247);
@@ -139,6 +153,7 @@ void testNullStorageUsesSafeDefaults()
     config.Enabled = true;
     config.Port = 502;
     config.Unit = 1;
+    config.Control = Hems::ControlMode::HemsControl;
 
     JsonDocument doc;
     assert(deserializeStorageConfig(doc.as<JsonVariantConst>(), config));
@@ -147,6 +162,34 @@ void testNullStorageUsesSafeDefaults()
     assert(config.Profile[0] == '\0');
     assert(config.Port == 0);
     assert(config.Unit == 0);
+    assert(config.Control == Hems::ControlMode::MonitorOnly);
+}
+
+void testEvseControlModes()
+{
+    Hems::Evse::BindingConfig config;
+
+    JsonDocument legacy;
+    legacy["profile"] = "";
+    assert(Hems::Evse::deserializeBindingConfig(legacy.as<JsonVariantConst>(), config));
+    assert(config.Control == Hems::ControlMode::MonitorOnly);
+
+    JsonDocument enabled;
+    enabled["profile"] = "vendor.evse-v1";
+    enabled["control_mode"] = "hems";
+    assert(Hems::Evse::deserializeBindingConfig(enabled.as<JsonVariantConst>(), config));
+    assert(!std::strcmp(config.Profile, "vendor.evse-v1"));
+    assert(config.Control == Hems::ControlMode::HemsControl);
+
+    JsonDocument badMode;
+    badMode["profile"] = "";
+    badMode["control_mode"] = "active";
+    assert(!Hems::Evse::deserializeBindingConfig(badMode.as<JsonVariantConst>(), config));
+
+    JsonDocument wrongType;
+    wrongType["profile"] = "";
+    wrongType["control_mode"] = true;
+    assert(!Hems::Evse::deserializeBindingConfig(wrongType.as<JsonVariantConst>(), config));
 }
 
 void testConfigUpdateDomainIsolation()
@@ -172,6 +215,7 @@ int main()
     testStorageRejectsWrongTypesAndRanges();
     testDisabledStorageCanAlwaysBeDisabledWithSafeLeftovers();
     testNullStorageUsesSafeDefaults();
+    testEvseControlModes();
     testConfigUpdateDomainIsolation();
     std::cout << "HEMS configuration validation tests passed\n";
 }

@@ -53,8 +53,6 @@ Hems::Model::Signal<double> normalizedPvPower()
 
         auto const* classification = findPowerSourceConfig(powerLimiter, inverter->serial());
         if (!classification) {
-            // A poll-enabled inverter without a power-source classification could
-            // itself be PV. Returning a partial sum would silently under-report PV.
             classificationComplete = false;
             continue;
         }
@@ -63,11 +61,7 @@ Hems::Model::Signal<double> normalizedPvPower()
         }
 
         auto statistics = inverter->Statistics();
-        if (statistics->getLastUpdate() == 0) {
-            // Keep the source unobserved. The normalizer will return Unknown until
-            // every configured solar source has produced at least one sample.
-            continue;
-        }
+        if (statistics->getLastUpdate() == 0) { continue; }
 
         ++observedSolarSources;
         totalPowerW += statistics->getChannelFieldValue(TYPE_AC, CH0, FLD_PAC);
@@ -82,10 +76,18 @@ Hems::Model::Signal<double> normalizedPvPower()
 
 namespace Hems {
 
+bool Controller::providerAuthorization(void* context, ControlTarget target)
+{
+    return context && static_cast<Controller*>(context)->actuationAllowed(target);
+}
+
 void Controller::init(Scheduler& scheduler)
 {
     Evse::BindingSettings.init();
     Storage::StorageSettings.init();
+    _warp.setAuthorization(this, providerAuthorization);
+    _storage.setAuthorization(this, providerAuthorization);
+
     scheduler.addTask(_loopTask);
     _loopTask.setCallback([this] {
         _warp.loop();
@@ -104,7 +106,6 @@ void Controller::init(Scheduler& scheduler)
 void Controller::updateSettings()
 {
     auto const& config = Configuration.get().Hems;
-    // Unknown schemas must not enable HEMS or external polling.
     _mode.store(config.Version == CONFIG_VERSION_HEMS && config.Enabled
             ? Mode::Monitor : Mode::Disabled);
     bool monitor = getMode() == Mode::Monitor;
@@ -119,6 +120,103 @@ void Controller::updateSettings()
 Mode Controller::getMode() const
 {
     return _mode.load();
+}
+
+ControlMode Controller::getControlMode(ControlTarget target) const
+{
+    switch (target) {
+        case ControlTarget::Evse: return Evse::BindingSettings.get().Control;
+        case ControlTarget::Storage: return Storage::StorageSettings.get().Control;
+        default: return ControlMode::MonitorOnly;
+    }
+}
+
+bool Controller::controlPermissionGranted(ControlTarget target) const
+{
+    return getControlMode(target) == ControlMode::HemsControl;
+}
+
+Actuation::Readiness Controller::getActuationReadiness(ControlTarget target) const
+{
+    Actuation::ReadinessInput input;
+    input.globalActive = false;
+    input.permissionGranted = controlPermissionGranted(target);
+
+    switch (target) {
+        case ControlTarget::Evse: {
+            auto snapshot = _warp.snapshot();
+            auto cleanup = _warp.cleanupSnapshot();
+            input.configured = snapshot.configured;
+            input.enabled = snapshot.enabled;
+            input.profileControllable = _warp.controlCapable();
+            input.reachable = snapshot.reachable;
+            input.telemetryFresh = snapshot.valid && !snapshot.stale;
+            input.faulted = snapshot.valid && snapshot.sample.chargingState == 4;
+            input.cleanupPending = cleanup.retainedContext;
+            break;
+        }
+        case ControlTarget::Storage: {
+            auto snapshot = _storage.snapshot();
+            auto cleanup = _storage.cleanupSnapshot();
+            input.configured = snapshot.configured;
+            input.enabled = snapshot.enabled;
+            input.profileControllable = _storage.controlCapable();
+            input.reachable = snapshot.reachable;
+            input.telemetryFresh = snapshot.valid && !snapshot.stale;
+            input.faulted = snapshot.valid
+                && ((snapshot.sample.faultActive.valid && snapshot.sample.faultActive.value)
+                    || (snapshot.sample.faultCode.valid && snapshot.sample.faultCode.value != 0));
+            input.cleanupPending = cleanup.retainedContext;
+            break;
+        }
+        default:
+            break;
+    }
+
+    return Actuation::evaluateReadiness(input);
+}
+
+bool Controller::actuationAllowed(ControlTarget target) const
+{
+    return getActuationReadiness(target).allowed();
+}
+
+bool Controller::submitActuation(Actuation::Command const& command, uint32_t& id)
+{
+    id = 0;
+    if (!Actuation::validCommand(command) || !actuationAllowed(command.target)) { return false; }
+    switch (command.target) {
+        case ControlTarget::Evse: return _warp.submitCommand(command, id);
+        case ControlTarget::Storage: return _storage.submitCommand(command, id);
+        default: return false;
+    }
+}
+
+bool Controller::cancelPendingActuation(ControlTarget target, uint32_t id)
+{
+    switch (target) {
+        case ControlTarget::Evse: return _warp.cancelPendingCommand(id);
+        case ControlTarget::Storage: return _storage.cancelPendingCommand(id);
+        default: return false;
+    }
+}
+
+Actuation::MailboxSnapshot Controller::getActuationCommandSnapshot(ControlTarget target) const
+{
+    switch (target) {
+        case ControlTarget::Evse: return _warp.commandSnapshot();
+        case ControlTarget::Storage: return _storage.commandSnapshot();
+        default: return {};
+    }
+}
+
+Actuation::CleanupSnapshot Controller::getActuationCleanupSnapshot(ControlTarget target) const
+{
+    switch (target) {
+        case ControlTarget::Evse: return _warp.cleanupSnapshot();
+        case ControlTarget::Storage: return _storage.cleanupSnapshot();
+        default: return {};
+    }
 }
 
 Warp::Snapshot Controller::getWarpSnapshot() const
@@ -142,9 +240,6 @@ Model::SystemState Controller::getNormalizedState() const
 
 Constraints::ConstraintSet Controller::getConstraints() const
 {
-    // The EV protection policy is deliberately Shadow-only in this milestone.
-    // Proposed restrictions are observable separately and do not become effective
-    // constraints until the later Active milestone.
     return {};
 }
 

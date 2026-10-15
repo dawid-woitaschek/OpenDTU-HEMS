@@ -60,6 +60,79 @@ Result parseReadResponse(uint8_t const* frame, size_t size, uint16_t transaction
     return { Error::None, 0, true };
 }
 
+bool makeWriteHoldingRequest(uint8_t* frame, size_t& frameSize, uint16_t transaction,
+        uint8_t unit, uint16_t address, uint16_t const* values, uint16_t count)
+{
+    frameSize = 0;
+    if (!frame || !values || count == 0 || count > MaxWriteRegisters
+            || static_cast<uint32_t>(address) + count > 65536) { return false; }
+
+    frame[0] = static_cast<uint8_t>(transaction >> 8);
+    frame[1] = static_cast<uint8_t>(transaction);
+    frame[2] = 0;
+    frame[3] = 0;
+    frame[6] = unit;
+    frame[8] = static_cast<uint8_t>(address >> 8);
+    frame[9] = static_cast<uint8_t>(address);
+
+    if (count == 1) {
+        frame[4] = 0;
+        frame[5] = 6;
+        frame[7] = 6;
+        frame[10] = static_cast<uint8_t>(values[0] >> 8);
+        frame[11] = static_cast<uint8_t>(values[0]);
+        frameSize = 12;
+        return true;
+    }
+
+    frame[4] = 0;
+    frame[5] = static_cast<uint8_t>(7 + count * 2);
+    frame[7] = 16;
+    frame[10] = static_cast<uint8_t>(count >> 8);
+    frame[11] = static_cast<uint8_t>(count);
+    frame[12] = static_cast<uint8_t>(count * 2);
+    for (size_t i = 0; i < count; ++i) {
+        frame[13 + i * 2] = static_cast<uint8_t>(values[i] >> 8);
+        frame[14 + i * 2] = static_cast<uint8_t>(values[i]);
+    }
+    frameSize = 13 + count * 2;
+    return true;
+}
+
+Result parseWriteHoldingResponse(uint8_t const* frame, size_t size, uint16_t transaction,
+        uint8_t unit, uint16_t address, uint16_t const* values, uint16_t count)
+{
+    if (!frame || !values || count == 0 || count > MaxWriteRegisters || size < 9 || size > MaxFrame
+            || static_cast<uint32_t>(address) + count > 65536
+            || frame[0] != (transaction >> 8) || frame[1] != (transaction & 0xff)
+            || frame[2] != 0 || frame[3] != 0 || frame[4] != 0
+            || frame[5] != size - 6 || frame[6] != unit) {
+        return { Error::Protocol, 0, true };
+    }
+
+    uint8_t const function = count == 1 ? 6 : 16;
+    if (frame[7] == (function | 0x80)) {
+        if (size != 9 || frame[8] == 0) { return { Error::Protocol, 0, true }; }
+        return { Error::Exception, frame[8], true };
+    }
+    if (frame[7] != function || size != 12 || frame[5] != 6
+            || frame[8] != static_cast<uint8_t>(address >> 8)
+            || frame[9] != static_cast<uint8_t>(address)) {
+        return { Error::Protocol, 0, true };
+    }
+
+    if (count == 1) {
+        if (frame[10] != static_cast<uint8_t>(values[0] >> 8)
+                || frame[11] != static_cast<uint8_t>(values[0])) {
+            return { Error::Protocol, 0, true };
+        }
+    } else if (frame[10] != static_cast<uint8_t>(count >> 8)
+            || frame[11] != static_cast<uint8_t>(count)) {
+        return { Error::Protocol, 0, true };
+    }
+    return { Error::None, 0, true };
+}
+
 uint32_t decodeUint32(uint8_t const* bytes)
 {
     // WARP: network byte order, high 16-bit word first. See docs/HEMS_WARP.md.

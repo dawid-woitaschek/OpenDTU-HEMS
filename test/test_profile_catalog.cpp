@@ -160,6 +160,11 @@ int main()
     assert(allowedCurrent && allowedCurrent->address == 1010 && allowedCurrent->type == Type::Uint32);
     assert(std::abs(allowedCurrent->scale - 0.001) < 1e-12);
 
+    assert(warp.acquireWriteCount == 0 && warp.releaseWriteCount == 1);
+    auto const& warpRelease = warp.controlWrites[warp.releaseFirstWrite];
+    assert(warpRelease.address == 1002 && warpRelease.type == Type::Uint32);
+    assert(warpRelease.constant == 32000 && !warpRelease.usesInput);
+
     auto setCurrent = findOperation(warp, "set_current_a");
     assert(setCurrent && setCurrent->hasInput && setCurrent->minimum == 6 && setCurrent->maximum == 32);
     assert(setCurrent->step == 1 && setCurrent->writeCount == 1);
