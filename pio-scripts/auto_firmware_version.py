@@ -32,7 +32,7 @@ def updateFileIfChanged(filename, content):
 
 def get_build_version():
     try:
-        build_version = porcelain.describe('.')  # '.' refers to the repository root dir
+        build_version = porcelain.describe('.')
     except Exception:
         build_version = "g0000000"
     print("Firmware Revision: " + build_version)
@@ -40,9 +40,6 @@ def get_build_version():
 
 
 def get_build_branch():
-    # GitHub Actions checks out pull requests as a detached synthetic merge commit.
-    # Prefer the workflow-provided source/ref name there, then fall back to the
-    # actual local Git branch for normal/local builds.
     branch_name = os.getenv("GITHUB_HEAD_REF") or os.getenv("GITHUB_REF_NAME")
     if not branch_name:
         try:
@@ -64,6 +61,29 @@ def get_build_sha():
     return build_sha
 
 
+def get_pr_channel(repository):
+    if os.getenv("GITHUB_EVENT_NAME") != "pull_request":
+        return ""
+
+    event_path = os.getenv("GITHUB_EVENT_PATH")
+    if not event_path:
+        return ""
+
+    try:
+        with open(event_path, "r", encoding="utf-8") as fp:
+            event = json.load(fp)
+        pull_request = event.get("pull_request") or {}
+        head = pull_request.get("head") or {}
+        head_repo = (head.get("repo") or {}).get("full_name")
+        number = event.get("number")
+        if head_repo != repository or not isinstance(number, int) or number < 1:
+            return ""
+        return "pr-" + str(number)
+    except Exception as error:
+        print("Firmware PR update channel unavailable: " + str(error))
+        return ""
+
+
 def get_update_source(branch_name):
     config_path = os.path.join(env.subst("$PROJECT_DIR"), "firmware-channels.json")
     try:
@@ -76,6 +96,9 @@ def get_update_source(branch_name):
     except Exception as error:
         print("Firmware update source unavailable: " + str(error))
         return "", ""
+
+    if not channel:
+        channel = get_pr_channel(repository)
 
     if channel:
         print("Firmware Update Channel: " + channel)
@@ -99,16 +122,13 @@ def get_firmware_specifier_build_flag():
 
 def do_main():
     if 0:
-        # this results in a full recompilation of the whole project after each commit
         env.Append(BUILD_FLAGS=[get_firmware_specifier_build_flag()])
     else:
-        # we just create a .c file containing the needed datas
         targetfile = os.path.join(env.subst("$BUILD_DIR"), "__compiled_constants.c")
         lines = ""
         lines += "/* Generated file within build process - Do NOT edit */\n"
 
         if 0:
-            # Add the current date and time as string in UTC timezone
             from datetime import datetime, timezone
             now = datetime.now(tz=timezone.utc)
             COMPILED_DATE_TIME_UTC_STR = now.strftime("%Y/%m/%d %H:%M:%S")
@@ -126,8 +146,6 @@ def do_main():
             lines += 'const char *__COMPILED_UPDATE_CHANNEL__ = "%s";\n' % update_channel
 
         updateFileIfChanged(targetfile, bytes(lines, "utf-8"))
-
-        # Add the created file to the buildfiles - platformio knows how to handle *.c files
         env.AppendUnique(PIOBUILDFILES=[targetfile])
 
 
