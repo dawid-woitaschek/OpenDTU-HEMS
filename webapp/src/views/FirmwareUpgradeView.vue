@@ -68,7 +68,38 @@
 
                     <hr />
 
-                    <div v-if="!firmwareStatus.update_channel" class="alert alert-warning mb-0" role="alert">
+                    <div class="row g-2 align-items-end mb-4">
+                        <div class="col-lg-8">
+                            <label class="form-label fw-semibold" for="firmware-update-channel">
+                                {{ $t('firmwareupgrade.UpdateChannel') }}
+                            </label>
+                            <input
+                                id="firmware-update-channel"
+                                v-model.trim="selectedChannel"
+                                class="form-control font-monospace"
+                                type="text"
+                                maxlength="64"
+                                placeholder="hems-next / hems / pr-19"
+                                :disabled="manifestLoading || remoteUpdating"
+                                @keyup.enter="checkRemoteUpdate"
+                            />
+                            <div class="form-text">
+                                Kanal direkt wechseln, z. B. <code>hems-next</code>, <code>hems</code> oder
+                                einen temporären PR-Kanal wie <code>pr-20</code>.
+                            </div>
+                        </div>
+                        <div class="col-lg-4 d-grid">
+                            <button
+                                class="btn btn-outline-primary"
+                                :disabled="manifestLoading || remoteUpdating || !selectedChannel"
+                                @click="checkRemoteUpdate"
+                            >
+                                <BIconArrowRepeat /> {{ $t('firmwareupgrade.RetryCheck') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="!selectedChannel" class="alert alert-warning mb-0" role="alert">
                         {{ $t('firmwareupgrade.NoUpdateChannel') }}
                     </div>
 
@@ -87,6 +118,8 @@
                     <template v-else-if="updateManifest && remoteBuild">
                         <h6>{{ $t('firmwareupgrade.AvailableFirmware') }}</h6>
                         <dl class="row mb-3">
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.UpdateChannel') }}</dt>
+                            <dd class="col-sm-8"><code>{{ updateManifest.channel }}</code></dd>
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.Branch') }}</dt>
                             <dd class="col-sm-8"><code>{{ updateManifest.branch }}</code></dd>
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.Commit') }}</dt>
@@ -205,6 +238,7 @@ type FirmwareManifest = {
 };
 
 const MANIFEST_SCHEMA = 'opendtu-hems-update/v1';
+const CHANNEL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 export default defineComponent({
     components: {
@@ -373,6 +407,9 @@ export default defineComponent({
             const input = this.$refs.file as HTMLInputElement | undefined;
             if (input !== undefined) input.value = '';
         },
+        validChannelId(value: string): boolean {
+            return value.length > 0 && value.length <= 64 && CHANNEL_ID_PATTERN.test(value);
+        },
         manifestUrl(): string {
             const branch = `firmware-channel-${this.selectedChannel}`;
             return `https://raw.githubusercontent.com/${this.firmwareStatus.update_repository}/${branch}/manifest.json`;
@@ -413,6 +450,10 @@ export default defineComponent({
             this.remoteBuild = null;
             this.manifestError = '';
             if (!this.selectedChannel) return;
+            if (!this.validChannelId(this.selectedChannel)) {
+                this.manifestError = this.$t('firmwareupgrade.ManifestInvalid') as string;
+                return;
+            }
 
             this.manifestLoading = true;
             try {
