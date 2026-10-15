@@ -121,6 +121,30 @@ Mode Controller::getMode() const
     return _mode.load();
 }
 
+ControlMode Controller::getControlMode(ControlTarget target) const
+{
+    switch (target) {
+        case ControlTarget::Evse: return Evse::BindingSettings.get().Control;
+        case ControlTarget::Storage: return Storage::StorageSettings.get().Control;
+        default: return ControlMode::MonitorOnly;
+    }
+}
+
+bool Controller::controlPermissionGranted(ControlTarget target) const
+{
+    return getControlMode(target) == ControlMode::HemsControl;
+}
+
+bool Controller::actuationAllowed(ControlTarget target) const
+{
+    // Persisting a device-level grant must never make this Monitor-only milestone
+    // capable of writing hardware. The future Active controller must extend this
+    // gate with its global mode, device-enabled and runtime-safety checks before
+    // any actuator can receive a command.
+    if (!controlPermissionGranted(target)) { return false; }
+    return false;
+}
+
 Warp::Snapshot Controller::getWarpSnapshot() const
 {
     return _warp.snapshot();

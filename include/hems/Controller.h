@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <hems/Control.h>
 #include <hems/constraints/Constraints.h>
 #include <hems/model/State.h>
 #include <hems/policies/EvProtection.h>
@@ -20,6 +21,9 @@ public:
     void init(Scheduler& scheduler);
     void updateSettings();
     Mode getMode() const;
+    ControlMode getControlMode(ControlTarget target) const;
+    bool controlPermissionGranted(ControlTarget target) const;
+    bool actuationAllowed(ControlTarget target) const;
     Warp::Snapshot getWarpSnapshot() const;
     Storage::Snapshot getStorageSnapshot() const;
     Model::SystemState getNormalizedState() const;
