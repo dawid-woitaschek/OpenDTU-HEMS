@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/evse/SettingsStore.h>
+#include <Configuration.h>
 #include <LittleFS.h>
 #include <esp_log.h>
 
@@ -12,6 +13,14 @@ constexpr char Path[] = "/hems-evse.json";
 constexpr char Temp[] = "/hems-evse.tmp";
 constexpr uint32_t Version = 1;
 constexpr size_t MaxBytes = 512;
+
+BindingConfig effectiveConfig(BindingConfig const& config)
+{
+    // Keep EVSE binding semantics symmetric with storage: a disabled consumer
+    // owns no runtime profile and cannot keep an imported profile artificially
+    // "in use". Re-enabling requires an explicit profile selection again.
+    return Configuration.get().Hems.Warp.Enabled ? config : BindingConfig {};
+}
 }
 
 SettingsStore BindingSettings;
@@ -40,20 +49,23 @@ void SettingsStore::init()
         ESP_LOGW(TAG, "Ignoring unsupported or invalid EVSE settings");
         return;
     }
-    _config = candidate;
+    _config = effectiveConfig(candidate);
 }
 
 BindingConfig SettingsStore::get() const
 {
+    bool enabled = Configuration.get().Hems.Warp.Enabled;
     std::lock_guard<std::mutex> lock(_mutex);
-    return _config;
+    return enabled ? _config : BindingConfig {};
 }
 
 bool SettingsStore::set(BindingConfig const& config)
 {
+    auto effective = effectiveConfig(config);
+
     JsonDocument doc;
     doc["version"] = Version;
-    serializeBindingConfig(config, doc["evse"].to<JsonObject>());
+    serializeBindingConfig(effective, doc["evse"].to<JsonObject>());
     if (doc.overflowed() || measureJson(doc) > MaxBytes) { return false; }
 
     LittleFS.remove(Temp);
