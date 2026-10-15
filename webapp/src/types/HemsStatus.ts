@@ -27,8 +27,19 @@ export interface HemsActuationTarget {
     command: {
         state: 'idle' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
         id: number | null;
+        generation: number | null;
         action: string | null;
         value: number | null;
+    };
+    cleanup: {
+        state: 'idle' | 'pending' | 'running' | 'retry_wait' | 'succeeded';
+        retained_context: boolean;
+        attempts: number;
+        last_error: string;
+        last_stage: string;
+        execution_error: string;
+        transport_error: string;
+        modbus_exception: number;
     };
 }
 
