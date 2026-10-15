@@ -61,7 +61,12 @@ BindingConfig SettingsStore::get() const
 
 bool SettingsStore::set(BindingConfig const& config)
 {
-    auto effective = effectiveConfig(config);
+    bool enabled = Configuration.get().Hems.Warp.Enabled;
+    // The historical no-profile WARP fallback remains readable for old persisted
+    // installations, but new/updated enabled EVSE configuration must be explicit
+    // and profile-driven. It is not a selectable product mode anymore.
+    if (enabled && !config.Profile[0]) { return false; }
+    auto effective = enabled ? config : BindingConfig {};
 
     JsonDocument doc;
     doc["version"] = Version;
