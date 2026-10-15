@@ -18,7 +18,8 @@ char const* executionErrorName(ExecutionError error)
 ExecutionResult execute(RegisterIo const& io, Profiles::ControlPlan const& plan,
         bool verifyReadback)
 {
-    if (!io.writeHoldingRegisters || (verifyReadback && !io.readHoldingRegisters)) {
+    if (!io.writeHoldingRegisters || (verifyReadback && !io.readHoldingRegisters)
+            || plan.count > Profiles::MaxControlWrites) {
         return { ExecutionError::InvalidIo };
     }
 

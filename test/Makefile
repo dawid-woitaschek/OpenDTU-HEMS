@@ -8,6 +8,7 @@ TEST_CHARGEDIST  = test_chargedistributor
 TEST_WARP = test_warp
 TEST_EVSE = test_evse
 TEST_MODBUS_CLIENT = test_modbus_client
+TEST_MODBUS_WRITE_CLIENT = test_modbus_write_client
 TEST_PROFILES = test_profiles
 TEST_PROFILE_CONTROL = test_profile_control
 TEST_PROFILE_CATALOG = test_profile_catalog
@@ -23,7 +24,7 @@ ARDUINOJSON ?= ../.pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 
 .PHONY: all clean test help
 
-all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
+all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
 
 $(TEST_OVERSCALING): test_overscaling.cpp ../src/OverscalingCalculator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $< ../src/OverscalingCalculator.cpp
@@ -38,6 +39,9 @@ $(TEST_EVSE): test_evse.cpp ../src/hems/evse/Telemetry.cpp ../src/hems/warp/Prof
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
 $(TEST_MODBUS_CLIENT): test_modbus_client.cpp ../src/hems/modbus/Client.cpp ../src/hems/modbus/Protocol.cpp
+	$(CXX) $(CXXFLAGS) -Iwarp_stubs -I../include -pthread -o $@ $^
+
+$(TEST_MODBUS_WRITE_CLIENT): test_modbus_write_client.cpp ../src/hems/modbus/Client.cpp ../src/hems/modbus/Protocol.cpp
 	$(CXX) $(CXXFLAGS) -Iwarp_stubs -I../include -pthread -o $@ $^
 
 $(TEST_PROFILES): test_profiles.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/Store.cpp
@@ -81,6 +85,7 @@ test: all
 	./$(TEST_WARP)
 	./$(TEST_EVSE)
 	./$(TEST_MODBUS_CLIENT)
+	./$(TEST_MODBUS_WRITE_CLIENT)
 	./$(TEST_PROFILES)
 	./$(TEST_PROFILE_CONTROL)
 	./$(TEST_PROFILE_CATALOG)
@@ -94,7 +99,7 @@ test: all
 	./$(TEST_FIRMWARE_UPDATE)
 
 clean:
-	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
+	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
 
 help:
 	@echo "Available targets:"
