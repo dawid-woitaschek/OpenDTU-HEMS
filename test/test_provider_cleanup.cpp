@@ -221,10 +221,19 @@ int main()
         tasks.clear(); writes.clear(); registers.clear(); inputRegisters.clear(); testNow = 1000; freshRegisters();
         registers[30006] = 500; // Discharging.
         storage.Control = ControlMode::HemsControl; evse.Control = ControlMode::MonitorOnly;
-        Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse); config.Mode = Mode::Active;
+        Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse); config.Mode = Mode::Monitor;
         Controller controller; Scheduler scheduler; controller.init(scheduler);
         auto tick = [&] { ++testNow; scheduler.execute(); runWorker(); };
-        tick(); ++testNow; scheduler.execute(); // Stop queued but not yet executed.
+        tick(); tick();
+        if (cancelledStop) {
+            uint32_t id;
+            Actuation::Command charge { ControlTarget::Storage, Actuation::Action::SetChargePowerW, true, 500 };
+            assert(controller.submitManual(charge, id)); runWorker(); tick(); tick();
+            // Seed a prior write result: cancelling the later Stop must not attribute it to protection.
+            assert(controller.getActuationCommandResult(ControlTarget::Storage).execution.writeAttempted);
+        }
+        config.Mode = Mode::Active; controller.updateSettings();
+        ++testNow; scheduler.execute(); // Stop queued but not yet executed.
         assert(controller.getActuationCommandSnapshot(ControlTarget::Storage).state == Actuation::MailboxState::Pending);
         if (cancelledStop) { assert(controller.cancelPendingActuation(ControlTarget::Storage)); }
         runWorker(); registers[30006] = 0; tick();

@@ -187,7 +187,8 @@ void Controller::applyEvProtection()
     auto current = _storage.commandSnapshot();
     if (_policyCommandId && current.id == _policyCommandId) {
         if (current.state == Actuation::MailboxState::Pending || current.state == Actuation::MailboxState::Running) { return; }
-        if (current.command.action == Actuation::Action::Stop) {
+        if (current.command.action == Actuation::Action::Stop
+                && (current.state == Actuation::MailboxState::Succeeded || current.state == Actuation::MailboxState::Failed)) {
             // Queueing alone is not an intervention: cancelled/revoked work may never write.
             _evProtectionOwned = _evProtectionOwned || _storage.commandResult().execution.writeAttempted;
         }
