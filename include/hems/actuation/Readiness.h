@@ -15,6 +15,7 @@ enum class ReadinessBlocker : uint16_t {
     DeviceUnreachable = 1u << 5,
     TelemetryNotFresh = 1u << 6,
     DeviceFault = 1u << 7,
+    CleanupPending = 1u << 8,
 };
 
 constexpr uint16_t readinessBit(ReadinessBlocker blocker)
@@ -31,6 +32,7 @@ struct ReadinessInput {
     bool reachable = false;
     bool telemetryFresh = false;
     bool faulted = false;
+    bool cleanupPending = false;
 };
 
 struct Readiness {

@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <hems/Control.h>
+#include <hems/actuation/Cleanup.h>
 #include <hems/actuation/Mailbox.h>
 #include <hems/actuation/Readiness.h>
 #include <hems/constraints/Constraints.h>
@@ -34,6 +35,7 @@ public:
     bool submitActuation(Actuation::Command const& command, uint32_t& id);
     bool cancelPendingActuation(ControlTarget target, uint32_t id = 0);
     Actuation::MailboxSnapshot getActuationCommandSnapshot(ControlTarget target) const;
+    Actuation::CleanupSnapshot getActuationCleanupSnapshot(ControlTarget target) const;
 
     Warp::Snapshot getWarpSnapshot() const;
     Storage::Snapshot getStorageSnapshot() const;

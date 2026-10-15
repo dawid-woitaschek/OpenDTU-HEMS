@@ -18,6 +18,7 @@ Readiness evaluateReadiness(ReadinessInput const& input)
     add(ReadinessBlocker::DeviceUnreachable, !input.reachable);
     add(ReadinessBlocker::TelemetryNotFresh, !input.telemetryFresh);
     add(ReadinessBlocker::DeviceFault, input.faulted);
+    add(ReadinessBlocker::CleanupPending, input.cleanupPending);
     return result;
 }
 
@@ -32,6 +33,7 @@ char const* readinessBlockerName(ReadinessBlocker blocker)
         case ReadinessBlocker::DeviceUnreachable: return "device_unreachable";
         case ReadinessBlocker::TelemetryNotFresh: return "telemetry_not_fresh";
         case ReadinessBlocker::DeviceFault: return "device_fault";
+        case ReadinessBlocker::CleanupPending: return "cleanup_pending";
         case ReadinessBlocker::None:
         default: return "none";
     }

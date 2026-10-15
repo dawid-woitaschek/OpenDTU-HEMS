@@ -17,6 +17,7 @@ int main()
     readyInput.reachable = true;
     readyInput.telemetryFresh = true;
     readyInput.faulted = false;
+    readyInput.cleanupPending = false;
 
     auto ready = evaluateReadiness(readyInput);
     assert(ready.allowed());
@@ -30,6 +31,13 @@ int main()
     assert(monitorOnly.has(ReadinessBlocker::GlobalModeInactive));
     assert(monitorOnly.blockers == readinessBit(ReadinessBlocker::GlobalModeInactive));
 
+    readyInput.globalActive = true;
+    readyInput.cleanupPending = true;
+    auto cleanupBlocked = evaluateReadiness(readyInput);
+    assert(!cleanupBlocked.allowed());
+    assert(!cleanupBlocked.readyForActive());
+    assert(cleanupBlocked.has(ReadinessBlocker::CleanupPending));
+
     ReadinessInput blocked;
     blocked.globalActive = false;
     blocked.permissionGranted = false;
@@ -39,6 +47,7 @@ int main()
     blocked.reachable = false;
     blocked.telemetryFresh = false;
     blocked.faulted = true;
+    blocked.cleanupPending = true;
     auto allBlocked = evaluateReadiness(blocked);
     assert(!allBlocked.allowed());
     assert(!allBlocked.readyForActive());
@@ -50,12 +59,14 @@ int main()
     assert(allBlocked.has(ReadinessBlocker::DeviceUnreachable));
     assert(allBlocked.has(ReadinessBlocker::TelemetryNotFresh));
     assert(allBlocked.has(ReadinessBlocker::DeviceFault));
+    assert(allBlocked.has(ReadinessBlocker::CleanupPending));
 
     assert(!std::strcmp(readinessBlockerName(ReadinessBlocker::GlobalModeInactive), "global_mode_inactive"));
     assert(!std::strcmp(readinessBlockerName(ReadinessBlocker::DevicePermissionMissing), "device_permission_missing"));
     assert(!std::strcmp(readinessBlockerName(ReadinessBlocker::ProfileNotControllable), "profile_not_controllable"));
     assert(!std::strcmp(readinessBlockerName(ReadinessBlocker::TelemetryNotFresh), "telemetry_not_fresh"));
     assert(!std::strcmp(readinessBlockerName(ReadinessBlocker::DeviceFault), "device_fault"));
+    assert(!std::strcmp(readinessBlockerName(ReadinessBlocker::CleanupPending), "cleanup_pending"));
 
     std::cout << "Actuation readiness tests passed\n";
 }
