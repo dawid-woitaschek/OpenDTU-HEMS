@@ -14,6 +14,10 @@ export default class WebSocketService {
     private reconnectDelay = 200;
     private maxDelay = 3000;
 
+    private reconnectTimer: number | null = null;
+    private connectTimer: number | null = null;
+    private stopped = true;
+
     private heartbeatInterval: number | null = null;
     private heartbeatTimeout = 25000; // 25s ping interval
 
@@ -32,11 +36,28 @@ export default class WebSocketService {
 
     /** Public connect entry */
     public connect(): void {
-        const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        this.stopped = false;
 
+        if (
+            this.socket?.readyState === WebSocket.CONNECTING ||
+            this.socket?.readyState === WebSocket.OPEN
+        ) {
+            return;
+        }
+
+        this.clearReconnectTimer();
+
+        const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isiOS) {
-            // Fix for WebKit timing bug on all iOS browsers (Safari/Chrome/Vivaldi/etc.)
-            setTimeout(() => this.openSocket(), 50);
+            // Fix for WebKit timing bug on all iOS browsers (Safari/Chrome/Vivaldi/etc.).
+            // Keep the timer cancellable so leaving a route cannot create a socket afterwards.
+            this.clearConnectTimer();
+            this.connectTimer = window.setTimeout(() => {
+                this.connectTimer = null;
+                if (!this.stopped) {
+                    this.openSocket();
+                }
+            }, 50);
         } else {
             this.openSocket();
         }
@@ -44,31 +65,60 @@ export default class WebSocketService {
 
     /** Internal open function */
     private openSocket(): void {
-        try {
-            this.socket = new WebSocket(this.url);
+        if (this.stopped) {
+            return;
+        }
+        if (
+            this.socket?.readyState === WebSocket.CONNECTING ||
+            this.socket?.readyState === WebSocket.OPEN
+        ) {
+            return;
+        }
 
-            this.socket.onopen = (event: Event) => {
+        try {
+            const socket = new WebSocket(this.url);
+            this.socket = socket;
+
+            socket.onopen = (event: Event) => {
+                if (this.stopped || this.socket !== socket) {
+                    socket.close();
+                    return;
+                }
+
                 this.reconnectDelay = 200; // reset backoff
                 this.startHeartbeat();
                 this.onOpen(event);
             };
 
-            this.socket.onmessage = (event: MessageEvent) => {
-                this.onMessage(event);
+            socket.onmessage = (event: MessageEvent) => {
+                if (!this.stopped && this.socket === socket) {
+                    this.onMessage(event);
+                }
             };
 
-            this.socket.onclose = (event: CloseEvent) => {
+            socket.onclose = (event: CloseEvent) => {
+                if (this.socket === socket) {
+                    this.socket = null;
+                }
                 this.stopHeartbeat();
+
+                if (this.stopped) {
+                    return;
+                }
+
                 this.onClose(event);
                 this.scheduleReconnect();
             };
 
-            this.socket.onerror = (event: Event) => {
-                this.onError(event);
-                // iOS often doesn't fire real errors, but we close to trigger retry
-                this.socket?.close();
+            socket.onerror = (event: Event) => {
+                if (!this.stopped && this.socket === socket) {
+                    this.onError(event);
+                }
+                // Closing triggers the normal reconnect path exactly once.
+                socket.close();
             };
         } catch {
+            this.socket = null;
             this.scheduleReconnect();
         }
     }
@@ -76,8 +126,16 @@ export default class WebSocketService {
     /** Reconnect with gradual backoff */
     private scheduleReconnect(): void {
         this.stopHeartbeat();
+        if (this.stopped || this.reconnectTimer !== null) {
+            return;
+        }
 
-        setTimeout(() => {
+        this.reconnectTimer = window.setTimeout(() => {
+            this.reconnectTimer = null;
+            if (this.stopped) {
+                return;
+            }
+
             this.reconnectDelay = Math.min(this.reconnectDelay * 1.4, this.maxDelay);
             this.connect();
         }, this.reconnectDelay);
@@ -88,7 +146,7 @@ export default class WebSocketService {
         this.stopHeartbeat();
 
         this.heartbeatInterval = window.setInterval(() => {
-            if (this.socket?.readyState === WebSocket.OPEN) {
+            if (!this.stopped && this.socket?.readyState === WebSocket.OPEN) {
                 this.socket.send(JSON.stringify({ type: 'ping' }));
             }
         }, this.heartbeatTimeout);
@@ -101,18 +159,39 @@ export default class WebSocketService {
         }
     }
 
+    private clearReconnectTimer(): void {
+        if (this.reconnectTimer !== null) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+    }
+
+    private clearConnectTimer(): void {
+        if (this.connectTimer !== null) {
+            clearTimeout(this.connectTimer);
+            this.connectTimer = null;
+        }
+    }
+
     /** Explicit close function */
     public close(): void {
+        this.stopped = true;
         this.stopHeartbeat();
+        this.clearReconnectTimer();
+        this.clearConnectTimer();
 
-        if (this.socket) {
-            this.socket.onopen = null;
-            this.socket.onmessage = null;
-            this.socket.onclose = null;
-            this.socket.onerror = null;
+        const socket = this.socket;
+        this.socket = null;
 
-            this.socket.close();
-            this.socket = null;
+        if (socket) {
+            socket.onopen = null;
+            socket.onmessage = null;
+            socket.onclose = null;
+            socket.onerror = null;
+
+            if (socket.readyState !== WebSocket.CLOSING && socket.readyState !== WebSocket.CLOSED) {
+                socket.close();
+            }
         }
     }
 }
