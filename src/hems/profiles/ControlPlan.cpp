@@ -135,6 +135,9 @@ ControlPlanResult planRelease(Profile const& profile, ControlPlan& plan)
     if (profile.schemaVersion < 2 || !hasControl(profile)) {
         return { ControlPlanError::ControlUnavailable };
     }
+    if (profile.releaseWriteCount == 0) {
+        return { ControlPlanError::InvalidMetadata };
+    }
     return planWrites(profile, profile.releaseFirstWrite, profile.releaseWriteCount,
             false, 0, plan);
 }

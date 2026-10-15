@@ -24,7 +24,7 @@ integration/hems-next
 
 PRs #18, #20 and #21 are closed without merge and were consolidated into PR #22. Do not treat them as active dependencies.
 
-At this document refresh, #22 contains one consolidated functional commit plus documentation updates. No global HEMS Active mode exists.
+PR #22 contains the consolidated foundation plus targeted lifecycle audit corrections. The audit input was `33b0f3d02a6f963a2f9ca751088fea05c7fd6e1e`. No global HEMS Active mode exists.
 
 ## Architecture currently implemented
 
@@ -244,7 +244,11 @@ Cleanup:
 - clears retained context only after successful release;
 - is exposed in diagnostics.
 
-Remaining lifecycle hole: retained cleanup is RAM-resident. A hard reboot/power loss can erase ownership knowledge. Boot/power-loss recovery is the next safety milestone before Active mode.
+Audit corrections retain possible ownership after failed acquire responses/readback, block subsequent normal operations until release, reject control without a non-empty release plan, recheck generation after authorization callbacks, and publish command completion after updating ownership/cleanup state. Cleanup diagnostics use locked counter snapshots and retries wait 30 seconds after failure completion. Focused native tests include both production provider implementations, configuration changes during commands/cleanup, retry timing and orphan release.
+
+Remaining lifecycle hole: retained cleanup is RAM-resident. A hard reboot/power loss can erase ownership knowledge. Boot/power-loss recovery is **blocked on device-instance identity**: neither the profile model nor either reference profile defines validated stable identity reads. Host/port/unit/profile matching cannot distinguish a replacement at the same endpoint. A profile hash or firmware/table version is not device-instance identity. Establish documented identity semantics and a bounded worker/profile check, or define an explicit unresolved-state/operator resolution protocol, before adding automatic reboot release. This audit adds no recovery persistence and claims no reboot recovery. Active and manual validation remain blocked.
+
+The networking audit found only small DNS callbacks; Modbus operations and mDNS waits run in the isolated provider workers. No demonstrated HEMS cause for the observed TCP/IP stack pressure or client-dependent remote-access problem was found. Task stack sizes are unchanged.
 
 ## Firmware update channels
 
@@ -301,7 +305,7 @@ No physical write behavior should be described as completed until exercised on t
 
 ```text
 1. validate and merge PR #22
-2. implement boot/power-loss ownership recovery
+2. resolve the boot-recovery device-instance identity blocker, then implement crash-consistent ownership persistence/recovery
 3. add deliberately gated semantic hardware-validation path
 4. validate WARP3 and Marstek on real hardware
 5. introduce global Active + arbitration

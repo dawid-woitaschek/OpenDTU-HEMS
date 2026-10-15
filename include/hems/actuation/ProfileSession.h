@@ -36,7 +36,7 @@ public:
             bool verifyReadback = true);
     CommandResult release(RegisterIo const& io, Profiles::Profile const& profile,
             bool force = false, bool verifyReadback = true);
-    void reset() { _owned = false; }
+    void reset() { _owned = false; _acquireUncertain = false; }
     bool ownsControl() const { return _owned; }
 
 private:
@@ -46,6 +46,7 @@ private:
             bool verifyReadback);
 
     bool _owned = false;
+    bool _acquireUncertain = false;
 };
 
 } // namespace Hems::Actuation

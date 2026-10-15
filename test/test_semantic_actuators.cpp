@@ -18,6 +18,11 @@ struct WireWrite {
 
 struct FakeIo {
     std::vector<WireWrite> writes;
+    bool failWrite = false;
+    bool failRead = false;
+    bool mismatch = false;
+    bool authorized = true;
+    int revokeAfterWrites = -1;
     uint16_t lastAddress = 0;
     uint16_t lastCount = 0;
     uint16_t lastValues[2] {};
@@ -34,18 +39,27 @@ Modbus::Result fakeWrite(void* context, uint16_t address, uint16_t count,
     io.lastAddress = address;
     io.lastCount = count;
     for (uint16_t i = 0; i < count; ++i) { io.lastValues[i] = values[i]; }
-    return {};
+    return io.failWrite ? Modbus::Result { Modbus::Error::Timeout } : Modbus::Result {};
 }
 
 Modbus::Result fakeRead(void* context, uint16_t address, uint16_t count, uint8_t* payload)
 {
     auto& io = *static_cast<FakeIo*>(context);
+    if (io.failRead) { return { Modbus::Error::Timeout }; }
     assert(address == io.lastAddress && count == io.lastCount);
     for (uint16_t i = 0; i < count; ++i) {
         payload[i * 2] = static_cast<uint8_t>(io.lastValues[i] >> 8);
         payload[i * 2 + 1] = static_cast<uint8_t>(io.lastValues[i]);
     }
+    if (io.mismatch) { payload[count * 2 - 1] ^= 1; }
     return {};
+}
+
+bool fakeAuthorized(void* context)
+{
+    auto const& io = *static_cast<FakeIo*>(context);
+    return io.authorized && (io.revokeAfterWrites < 0
+            || io.writes.size() < static_cast<size_t>(io.revokeAfterWrites));
 }
 
 Profiles::Profile storageProfile()
@@ -244,6 +258,87 @@ int main()
     auto orphanedEvse = lifecycleCharger.stop(lifecycleEvseIo, evse);
     assert(!orphanedEvse && orphanedEvse.error == Actuation::CommandError::OwnershipOrphaned);
     assert(lifecycleEvseWire.writes.size() == before);
+
+    // Retained release is the only allowed escape for an orphaned actuator.
+    assert(lifecycleBattery.releaseRetainedControl(lifecycleStorageIo, storage));
+    assert(!lifecycleBattery.ownsControl() && !lifecycleBattery.ownershipOrphaned());
+    assert(lifecycleBattery.reset());
+    assert(lifecycleBattery.stop(lifecycleStorageIo, storage));
+    assert(lifecycleCharger.releaseRetainedControl(lifecycleEvseIo, evse));
+    assert(!lifecycleCharger.ownsControl() && !lifecycleCharger.ownershipOrphaned());
+    assert(lifecycleCharger.reset());
+    assert(lifecycleCharger.setCurrent(lifecycleEvseIo, evse, 10));
+
+    // Lost acquire response, failed readback and verification mismatch all mean
+    // ownership may exist. Block later operations until a verified release.
+    for (int failure = 0; failure < 3; ++failure) {
+        FakeIo failedWire;
+        failedWire.failWrite = failure == 0;
+        failedWire.failRead = failure == 1;
+        failedWire.mismatch = failure == 2;
+        Actuation::RegisterIo failedIo { &failedWire, fakeWrite, fakeRead, fakeAuthorized };
+        Storage::Actuator uncertain;
+        auto acquired = uncertain.setChargePower(failedIo, storage, 500);
+        assert(!acquired && acquired.stage == Actuation::CommandStage::Acquire);
+        assert(acquired.execution.writeAttempted && uncertain.ownsControl());
+        before = failedWire.writes.size();
+        assert(uncertain.stop(failedIo, storage).error == Actuation::CommandError::OwnershipOrphaned);
+        assert(failedWire.writes.size() == before);
+        assert(!uncertain.reset());
+        assert(!uncertain.releaseRetainedControl(failedIo, storage));
+        assert(uncertain.ownsControl() && uncertain.ownershipOrphaned());
+        failedWire.failWrite = failedWire.failRead = failedWire.mismatch = false;
+        assert(uncertain.releaseRetainedControl(failedIo, storage));
+        assert(!uncertain.ownsControl() && !uncertain.ownershipOrphaned());
+        assert(uncertain.setChargePower(failedIo, storage, 500));
+    }
+
+    // An acquire revoked after an earlier write retains possible ownership.
+    auto multiAcquire = storage;
+    multiAcquire.acquireWriteCount = 2;
+    FakeIo revokedWire;
+    revokedWire.revokeAfterWrites = 1;
+    Actuation::RegisterIo revokedIo { &revokedWire, fakeWrite, fakeRead, fakeAuthorized };
+    Storage::Actuator revoked;
+    auto revokedResult = revoked.setChargePower(revokedIo, multiAcquire, 500);
+    assert(!revokedResult && revokedResult.execution.writeAttempted && revoked.ownsControl());
+    assert(revokedResult.execution.error == Actuation::ExecutionError::AuthorizationRevoked);
+    revokedWire.revokeAfterWrites = -1;
+    assert(revoked.releaseRetainedControl(revokedIo, multiAcquire));
+
+    // Rejection before the first acquire write does not invent ownership.
+    revokedWire = {};
+    revokedWire.authorized = false;
+    Storage::Actuator denied;
+    auto deniedResult = denied.stop(revokedIo, storage);
+    assert(!deniedResult && !deniedResult.execution.writeAttempted);
+    assert(!denied.ownsControl() && revokedWire.writes.empty());
+
+    // A WARP operation may have taken effect even without a reply; no acquire
+    // sequence exists, but its release must still remain available.
+    FakeIo warpFailure;
+    warpFailure.failWrite = true;
+    Actuation::RegisterIo warpFailureIo { &warpFailure, fakeWrite, fakeRead };
+    Evse::Actuator uncertainCharger;
+    assert(!uncertainCharger.setCurrent(warpFailureIo, evse, 6));
+    assert(uncertainCharger.ownsControl());
+    assert(!uncertainCharger.reset());
+    warpFailure.failWrite = false;
+    assert(uncertainCharger.releaseRetainedControl(warpFailureIo, evse));
+    assert(!uncertainCharger.ownsControl() && !uncertainCharger.ownershipOrphaned());
+
+    // Missing release metadata must never become a successful no-op cleanup,
+    // nor permit establishing control that cannot subsequently be relinquished.
+    auto noRelease = storage;
+    noRelease.releaseWriteCount = 0;
+    FakeIo noReleaseWire;
+    Actuation::RegisterIo noReleaseIo { &noReleaseWire, fakeWrite, fakeRead };
+    Storage::Actuator unreleasable;
+    auto blocked = unreleasable.stop(noReleaseIo, noRelease);
+    assert(!blocked && blocked.stage == Actuation::CommandStage::Release);
+    assert(!unreleasable.ownsControl() && noReleaseWire.writes.empty());
+    assert(!unreleasable.releaseRetainedControl(noReleaseIo, noRelease));
+    assert(noReleaseWire.writes.empty());
 
     // Reset remains harmless before ownership has ever been taken.
     Storage::Actuator cleanBattery;

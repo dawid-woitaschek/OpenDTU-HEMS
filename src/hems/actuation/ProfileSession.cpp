@@ -35,13 +35,27 @@ CommandResult ProfileSession::acquire(RegisterIo const& io, Profiles::Profile co
     }
 
     auto result = runPlan(io, plan, CommandStage::Acquire, verifyReadback);
-    if (result) { _owned = true; }
+    if (result) {
+        _owned = true;
+    } else if (result.execution.writeAttempted) {
+        // The acquire may have reached the device even if its response or
+        // verification failed. Retain ownership and require release before
+        // accepting more commands; do not silently skip a failed acquire.
+        _owned = true;
+        _acquireUncertain = true;
+    }
     return result;
 }
 
 CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile const& profile,
         char const* operation, bool hasInput, double input, bool verifyReadback)
 {
+    if (_acquireUncertain) {
+        CommandResult command;
+        command.error = CommandError::OwnershipOrphaned;
+        command.stage = CommandStage::Acquire;
+        return command;
+    }
     // Validate the semantic command before taking ownership of the device.
     Profiles::ControlPlan operationPlan;
     auto planned = Profiles::planOperation(profile, operation, hasInput, input, operationPlan);
@@ -49,6 +63,18 @@ CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile co
         CommandResult command;
         command.error = CommandError::PlanningFailed;
         command.stage = CommandStage::Operation;
+        command.planning = planned;
+        return command;
+    }
+
+    // An empty/missing release cannot resolve persistent ownership. Validate
+    // the escape path before any acquire or operation write can occur.
+    Profiles::ControlPlan releasePlan;
+    planned = Profiles::planRelease(profile, releasePlan);
+    if (!planned) {
+        CommandResult command;
+        command.error = CommandError::PlanningFailed;
+        command.stage = CommandStage::Release;
         command.planning = planned;
         return command;
     }
@@ -74,7 +100,7 @@ CommandResult ProfileSession::release(RegisterIo const& io, Profiles::Profile co
     }
 
     auto result = runPlan(io, plan, CommandStage::Release, verifyReadback);
-    if (result) { _owned = false; }
+    if (result) { _owned = false; _acquireUncertain = false; }
     return result;
 }
 

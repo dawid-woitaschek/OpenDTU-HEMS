@@ -38,13 +38,13 @@ Cleanup is deliberately narrower than normal control:
 - it uses the same provider worker and Modbus client as telemetry/control;
 - it never sends the release sequence to the new endpoint/profile;
 - successful release clears local ownership and the retained context;
-- failures keep the old context and retry after 30 seconds.
+- failures keep the old context and retry 30 seconds after the failed attempt completes.
 
 This exception to the normal authorization gate exists only to relinquish control safely. It cannot submit charge/discharge/current/stop operations and therefore must not be generalized into an alternate actuator path.
 
 If a configuration change races with a running command, the command's mailbox envelope retains its original provider generation. If that command acquired ownership before later writes were revoked, completion retains the command's already-copied old endpoint/profile for the same cleanup path.
 
-A power loss/reboot can still erase RAM-only ownership knowledge. Device-specific boot recovery for persistent remote-control modes remains a separate hardware-validation and lifecycle concern before Active mode is allowed.
+A power loss/reboot can still erase RAM-only ownership knowledge. Boot recovery is blocked until device-instance identity can distinguish the original device from a replacement at the same address; neither current reference profile defines such identity reads. No automatic reboot release or recovery persistence exists. See milestone B in `HEMS_Roadmap.md`.
 
 ## WARP3 Smart control provenance
 
@@ -79,6 +79,6 @@ This validates the profile metadata and semantic actuator mapping. It does not c
 
 ## Storage ownership
 
-Profiles such as the curated Venus E3 may define `acquire` and `release` write sequences. `ProfileSession` validates the requested operation before taking ownership, acquires once, retains ownership across subsequent operations and only clears local ownership after a successful release. Retained-context cleanup uses that same bounded release plan against the exact previous endpoint/profile after a configuration transition.
+Profiles such as the curated Venus E3 may define `acquire` and `release` write sequences. `ProfileSession` validates the requested operation and a non-empty release plan before taking ownership. It acquires once, retains ownership across subsequent operations and only clears local ownership after a successful release. If an acquire write was attempted but its response/readback failed, ownership remains possible and further normal operations fail closed until release succeeds. A write rejected before the first acquire attempt does not establish local ownership. Empty release metadata cannot report successful cleanup; providers also report such profiles as not control-capable. Retained-context cleanup uses that same bounded release plan against the exact previous endpoint/profile after a configuration transition.
 
 Physical Venus E3 behavior remains a hardware validation gate; profile metadata and native tests do not claim otherwise.

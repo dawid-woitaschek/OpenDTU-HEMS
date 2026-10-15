@@ -34,6 +34,8 @@ struct ExecutionResult {
     ExecutionError error = ExecutionError::None;
     Modbus::Result transport {};
     uint8_t writeIndex = 0xff;
+    // A failed response/readback does not prove that the device rejected a write.
+    bool writeAttempted = false;
     explicit operator bool() const { return error == ExecutionError::None; }
 };
 

@@ -30,7 +30,7 @@ That baseline includes the repository-backed firmware update infrastructure from
 
 **Current branch:** `feature/hems-actuation-foundation`
 
-**Current branch head at roadmap refresh:** `4f6b8e125a6c5cb57aec94add10cdb04f4dfe14c`
+**Audit input branch head:** `33b0f3d02a6f963a2f9ca751088fea05c7fd6e1e`
 
 **Current phase:** 🟡 Validation
 
@@ -226,15 +226,31 @@ PR #22 must remain unable to perform production actuation automatically:
 - [ ] merge #22 into `integration/hems-next`;
 - [ ] update this roadmap and `HEMS_Current_Status.md` immediately after merge.
 
+### Targeted audit corrections (pending CI/hardware validation)
+
+- Failed acquire responses/readback retain possible ownership and reject further normal operations until successful release.
+- Control requires a non-empty, plannable bounded release sequence; empty release no longer reports successful cleanup.
+- Provider authorization rechecks generation after the external callback returns.
+- Command completion is published after ownership/cleanup state, preventing the scheduler from dispatching work that command completion could then erase.
+- Cleanup logging uses a locked counter snapshot; retry delay starts at failure completion, including slow failed attempts.
+- Native regression coverage exercises both production providers with pending/running configuration changes, old endpoint/profile pinning, failed writes, retry delays and release/unblocking. No physical validation is claimed.
+- HEMS uses small DNS callbacks and worker-side Modbus I/O; no demonstrated cause for TCP/IP stack pressure, heap leakage or the client-dependent remote-access issue was found. No task stack sizing changed.
+
 ## Milestone B: boot and power-loss ownership recovery
 
-**Status:** ⚪ Planned
+**Status:** 🔴 Blocked — stable device identity is not available in the current profiles
 
 ### Goal
 
 Do not lose safety knowledge when the controller reboots while an external device may still be in a persistent remote-control mode.
 
 Current retained cleanup is RAM-resident and handles live configuration-generation changes. A hard reboot/power loss can erase that knowledge.
+
+### Identity prerequisite / implementation blocker
+
+The current `Profile` model and both curated reference profiles provide no validated stable device-instance identifier or identity-read semantics. Vendor/model/source revision, host, effective port, unit ID and profile content identify a configuration, not a physical instance. The same tuple can address a replacement device after DHCP, DNS or device replacement. Persisting that tuple alone cannot authorize an automatic reboot release safely.
+
+Before implementing automatic recovery, establish documented, readable instance identity for WARP and Marstek and add a bounded profile-driven identity check through the existing worker/client. If identity cannot be established, recovery must remain explicitly unresolved and block actuation; an operator resolution protocol would need a separate concrete design. Do not invent serial-number registers, treat a profile hash as device identity, or authorize release based only on an unchanged address. No boot-recovery persistence or release path is implemented by this audit block. Global Active and the manual validation path remain unavailable.
 
 ### Required design
 
@@ -248,6 +264,7 @@ Current retained cleanup is RAM-resident and handles live configuration-generati
 
 ### Exit criteria
 
+- [ ] validated device-instance identity / unresolved-state resolution design established;
 - [ ] reboot during owned Marstek control has deterministic behavior;
 - [ ] reboot during WARP current limitation has deterministic behavior;
 - [ ] stale endpoint/profile recovery cannot write to a replacement device;

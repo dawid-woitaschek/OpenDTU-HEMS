@@ -145,7 +145,7 @@ int main()
     FakeIo fake;
     Actuation::RegisterIo io { &fake, fakeWrite, fakeRead, fakeAuthorized };
     auto executed = Actuation::execute(io, plan);
-    assert(executed && fake.writeCalls == 1 && fake.readCalls == 1);
+    assert(executed && executed.writeAttempted && fake.writeCalls == 1 && fake.readCalls == 1);
     assert(fake.authorizationChecks == 1);
     assert(fake.address == 1002 && fake.count == 2 && fake.values[1] == 16000);
 
@@ -153,7 +153,7 @@ int main()
     fake.revokeAfterChecks = 0;
     executed = Actuation::execute(io, plan);
     assert(executed.error == Actuation::ExecutionError::AuthorizationRevoked);
-    assert(executed.writeIndex == 0 && fake.writeCalls == 0 && fake.readCalls == 0);
+    assert(!executed.writeAttempted && executed.writeIndex == 0 && fake.writeCalls == 0 && fake.readCalls == 0);
 
     Profiles::ControlPlan twoWrites = plan;
     twoWrites.count = 2;
@@ -163,7 +163,7 @@ int main()
     fake.revokeAfterChecks = 1;
     executed = Actuation::execute(io, twoWrites);
     assert(executed.error == Actuation::ExecutionError::AuthorizationRevoked);
-    assert(executed.writeIndex == 1 && fake.writeCalls == 1 && fake.readCalls == 1);
+    assert(executed.writeAttempted && executed.writeIndex == 1 && fake.writeCalls == 1 && fake.readCalls == 1);
 
     fake = {};
     fake.failWriteAt = 0;

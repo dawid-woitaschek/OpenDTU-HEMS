@@ -96,7 +96,7 @@ Snapshot Provider::snapshot() const
 bool Provider::controlCapable() const
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    return _profile && Profiles::hasControl(*_profile);
+    return _profile && Profiles::hasControl(*_profile) && _profile->releaseWriteCount != 0;
 }
 
 Actuation::CleanupSnapshot Provider::cleanupSnapshot() const
@@ -122,7 +122,11 @@ bool Provider::commandAuthorized(uint32_t generation) const
         context = _authorizationContext;
         callback = _authorization;
     }
-    return callback && callback(context, ControlTarget::Storage);
+    if (!callback || !callback(context, ControlTarget::Storage)) { return false; }
+    // The callback runs without our mutex and can race with reconfiguration.
+    // Its approval must still refer to the generation checked above.
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _enabled && _profile && !_cleanup.valid && generation == _generation;
 }
 
 bool Provider::cleanupAuthorized(uint32_t token) const
@@ -337,7 +341,6 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         }
     }
     _client.close();
-    _mailbox.complete(envelope.id, success);
 
     bool ownsControl = _actuator.ownsControl();
     {
@@ -352,6 +355,9 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         }
     }
 
+    // Publish completion only after ownership/cleanup and dispatch state agree.
+    _mailbox.complete(envelope.id, success);
+
     ESP_LOGI(TAG, "Control command %lu (%s) %s", static_cast<unsigned long>(envelope.id),
             Actuation::actionName(envelope.command.action), success ? "succeeded" : "failed");
 }
@@ -359,6 +365,7 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
 void Provider::processCleanup()
 {
     CleanupContext cleanup;
+    uint32_t attempts = 0;
     {
         std::lock_guard<std::mutex> lock(_mutex);
         if (!_cleanup.valid || _cleanupState != Actuation::CleanupState::Running) {
@@ -366,7 +373,7 @@ void Provider::processCleanup()
             return;
         }
         cleanup = _cleanup;
-        ++_cleanupAttempts;
+        attempts = ++_cleanupAttempts;
         _cleanupLastAttemptMs = millis();
     }
 
@@ -407,13 +414,14 @@ void Provider::processCleanup()
             _controlOwned = false;
             _polled = false;
         } else {
+            _cleanupLastAttemptMs = millis();
             _cleanupState = Actuation::CleanupState::RetryWait;
         }
     }
 
     ESP_LOGI(TAG, "Retained control cleanup %s after %lu attempt(s)",
             success ? "succeeded" : "failed",
-            static_cast<unsigned long>(_cleanupAttempts));
+            static_cast<unsigned long>(attempts));
 }
 
 void Provider::worker()
