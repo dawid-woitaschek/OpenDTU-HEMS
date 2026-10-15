@@ -41,7 +41,11 @@
                             <div class="col-sm-8">
                                 <select id="hems-evse-profile" class="form-select" v-model="evseBinding.profile">
                                     <option value="" disabled>
-                                        {{ evseProfiles.length ? $t('storage.SelectProfile') : $t('storage.NoProfiles') }}
+                                        {{
+                                            evseProfiles.length
+                                                ? $t('hems.EvseSelectProfile')
+                                                : $t('hems.EvseNoProfiles')
+                                        }}
                                     </option>
                                     <option v-if="evseProfileUnavailable" :value="evseBinding.profile" disabled>
                                         ⚠ {{ evseBinding.profile }}
@@ -55,10 +59,10 @@
                                     class="alert alert-warning mt-2 mb-0"
                                     role="alert"
                                 >
-                                    {{ evseBinding.profile }}
+                                    {{ $t('hems.EvseProfileUnavailable') }}
                                 </div>
                                 <div v-else-if="!evseProfiles.length" class="alert alert-warning mt-2 mb-0" role="alert">
-                                    {{ $t('storage.NoProfilesHint') }}
+                                    {{ $t('hems.EvseNoProfilesHint') }}
                                 </div>
                             </div>
                         </div>
@@ -361,11 +365,11 @@ export default defineComponent({
                     return;
                 }
                 if (!this.evseBinding.profile) {
-                    this.showError(this.$t('storage.ProfileRequired'));
+                    this.showError(this.$t('hems.EvseProfileRequired'));
                     return;
                 }
                 if (this.evseProfileUnavailable) {
-                    this.showError(this.$t('storage.ProfileUnavailable'));
+                    this.showError(this.$t('hems.EvseProfileUnavailable'));
                     return;
                 }
             } else {
