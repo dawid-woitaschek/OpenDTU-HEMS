@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <esp_log.h>
 #include <new>
+#include <cinttypes>
 
 #undef TAG
 static const char* TAG = "hems-storage";
@@ -428,7 +429,7 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
     // Publish completion only after ownership/cleanup and dispatch state agree.
     _mailbox.complete(envelope.id, success);
 
-    ESP_LOGI(TAG, "Control command %lu (%s) %s", static_cast<unsigned long>(envelope.id),
+    ESP_LOGI(TAG, "Control command %" PRIu32 " (%s) %s", envelope.id,
             Actuation::actionName(envelope.command.action), success ? "succeeded" : "failed");
 }
 
@@ -486,9 +487,9 @@ void Provider::processCleanup()
         _actuatorGeneration = 0;
     }
 
-    ESP_LOGI(TAG, "Retained control cleanup %s after %lu attempt(s)",
+    ESP_LOGI(TAG, "Retained control cleanup %s after %" PRIu32 " attempt(s)",
             success ? "succeeded" : "failed",
-            static_cast<unsigned long>(attempts));
+            attempts);
 }
 
 void Provider::worker()

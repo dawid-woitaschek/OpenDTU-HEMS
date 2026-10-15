@@ -31,7 +31,8 @@ ProfileInfo describeProfile(Profiles::Profile const* profile, uint32_t fingerpri
 {
     ProfileInfo info;
     if (!profile) { return info; }
-    std::strcpy(info.id, profile->id); std::strcpy(info.revision, profile->revision);
+    std::memcpy(info.id, profile->id, sizeof(info.id));
+    std::memcpy(info.revision, profile->revision, sizeof(info.revision));
     info.schemaVersion = profile->schemaVersion;
     info.fingerprint = fingerprint;
     info.telemetry = profile->entryCount != 0;
@@ -57,7 +58,7 @@ ProfileInfo describeProfile(Profiles::Profile const* profile, uint32_t fingerpri
             auto& output = info.operations[info.operationCount++];
             output.action = action; output.hasInput = op.hasInput;
             output.minimum = op.minimum; output.maximum = op.maximum; output.step = op.step;
-            std::strcpy(output.unit, op.unit);
+            std::memcpy(output.unit, op.unit, sizeof(output.unit));
         }
     }
     info.operations[info.operationCount++].action = Action::Release;
