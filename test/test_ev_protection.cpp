@@ -90,8 +90,8 @@ int main()
     assert(snapshot.state == EvProtectionState::Inactive);
     assert(snapshot.proposedConstraints.storage.dischargeAllowed);
 
-    // Unknown telemetry while already inactive stays neutral.
-    policy.update(evseWithCharging(Signal<bool>::unknown()), 80000);
+    // Default-constructed telemetry is Unknown while already inactive.
+    policy.update(evseWithCharging(Signal<bool>{}), 80000);
     snapshot = policy.snapshot(80000);
     assert(snapshot.state == EvProtectionState::Inactive);
     assert(!snapshot.chargingKnown);
