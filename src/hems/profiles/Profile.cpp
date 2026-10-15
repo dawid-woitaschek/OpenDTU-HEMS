@@ -265,7 +265,7 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
     else if (equals(root["schema"], SchemaV2)) { p.schemaVersion = 2; }
     else { error = "Unsupported profile schema"; return false; }
     error = "Unknown fields or invalid profile id";
-    if (!fields(root, { "schema", "id", "capabilities", "metadata", "transport", "telemetry", "provenance", "control" })
+    if (!fields(root, { "schema", "id", "capabilities", "metadata", "transport", "telemetry", "provenance", "control", "identity", "recovery" })
             || !text(root["id"], p.id, sizeof(p.id)) || !validId(p.id)) { return false; }
     if (p.schemaVersion == 1 && !root["control"].isUnbound()) { error = "Control metadata requires profile schema v2"; return false; }
     error = "Invalid or unsupported profile capabilities";
@@ -287,6 +287,44 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
             || transport["unit_id"].as<uint8_t>() == 0 || transport["unit_id"].as<uint8_t>() > 247
             || !transport["address_base"].is<uint8_t>() || transport["address_base"].as<uint8_t>() > 1) { return false; }
     p.port = transport["default_port"]; p.unit = transport["unit_id"]; p.addressBase = transport["address_base"];
+    error = "Identity/recovery metadata requires schema v2";
+    if (p.schemaVersion != 2 && (!root["identity"].isUnbound() || !root["recovery"].isUnbound())) { return false; }
+    if (!root["identity"].isUnbound()) {
+        auto identity = root["identity"].as<JsonObjectConst>();
+        error = "Identity requires documented stable device_instance register_bytes fields";
+        if (!fields(identity, { "kind", "source", "fields" })
+                || !equals(identity["kind"], "device_instance")
+                || !text(identity["source"], p.identitySource, sizeof(p.identitySource))) { return false; }
+        auto reads = identity["fields"].as<JsonArrayConst>();
+        if (reads.isNull() || reads.size() == 0 || reads.size() > MaxIdentityFields) { return false; }
+        for (auto item : reads) {
+            auto obj = item.as<JsonObjectConst>();
+            if (!fields(obj, { "space", "address", "count", "encoding" })
+                    || !equals(obj["encoding"], "register_bytes")
+                    || !obj["address"].is<uint32_t>() || !obj["count"].is<uint8_t>()) { return false; }
+            auto& field = p.identityFields[p.identityFieldCount];
+            if (equals(obj["space"], "input")) { field.space = Modbus::ReadFunction::InputRegisters; }
+            else if (equals(obj["space"], "holding")) { field.space = Modbus::ReadFunction::HoldingRegisters; }
+            else { return false; }
+            uint32_t address = obj["address"];
+            field.count = obj["count"];
+            if (field.count == 0 || field.count > MaxIdentityRegisters || address < p.addressBase
+                    || address - p.addressBase + field.count > 65536) { return false; }
+            field.address = address - p.addressBase;
+            for (size_t i = 0; i < p.identityFieldCount; ++i) {
+                auto const& previous = p.identityFields[i];
+                if (field.space == previous.space && field.address < previous.address + previous.count
+                        && previous.address < field.address + field.count) { return false; }
+            }
+            ++p.identityFieldCount;
+        }
+    }
+    if (!root["recovery"].isUnbound()) {
+        auto recovery = root["recovery"].as<JsonObjectConst>();
+        error = "Invalid recovery metadata";
+        if (!fields(recovery, { "release_replay_safe" }) || !recovery["release_replay_safe"].is<bool>()) { return false; }
+        p.releaseReplaySafe = recovery["release_replay_safe"];
+    }
     auto entries = root["telemetry"].as<JsonArrayConst>();
     error = "Telemetry must contain 1..24 entries";
     if (entries.isNull() || entries.size() == 0 || entries.size() > MaxEntries) { return false; }
@@ -391,6 +429,23 @@ void serialize(Profile const& p, JsonObject root) {
     auto provenance = root["provenance"].to<JsonObject>(); provenance["author"] = static_cast<char const*>(p.author); provenance["license"] = static_cast<char const*>(p.license);
     auto t = root["transport"].to<JsonObject>(); t["protocol"] = "modbus_tcp"; t["default_port"] = p.port;
     t["unit_id"] = p.unit; t["address_base"] = p.addressBase;
+    if (p.identityFieldCount) {
+        auto identity = root["identity"].to<JsonObject>();
+        identity["kind"] = "device_instance";
+        identity["source"] = static_cast<char const*>(p.identitySource);
+        auto reads = identity["fields"].to<JsonArray>();
+        for (size_t i = 0; i < p.identityFieldCount; ++i) {
+            auto const& field = p.identityFields[i];
+            auto obj = reads.add<JsonObject>();
+            obj["space"] = spaceName(field.space);
+            obj["address"] = static_cast<uint32_t>(field.address) + p.addressBase;
+            obj["count"] = field.count;
+            obj["encoding"] = "register_bytes";
+        }
+    }
+    if (p.schemaVersion == 2) {
+        root["recovery"]["release_replay_safe"] = p.releaseReplaySafe;
+    }
     auto entries = root["telemetry"].to<JsonArray>();
     for (size_t i = 0; i < p.entryCount; ++i) {
         auto const& e = p.entries[i]; auto o = entries.add<JsonObject>();

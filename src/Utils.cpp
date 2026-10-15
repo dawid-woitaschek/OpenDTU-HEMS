@@ -6,6 +6,7 @@
 #include "Utils.h"
 #include "PinMapping.h"
 #include <LittleFS.h>
+#include <hems/recovery/PathGuard.h>
 #include <MD5Builder.h>
 
 #undef TAG
@@ -70,14 +71,14 @@ bool Utils::checkJsonAlloc(const JsonDocument& doc, const char* function, const 
     return true;
 }
 
-/// @brief Remove all files but the PINMAPPING_FILENAME
+/// @brief Reset configuration while preserving pin mapping and recovery evidence.
 void Utils::removeAllFiles()
 {
     auto root = LittleFS.open("/");
     auto file = root.getNextFileName();
 
     while (file != "") {
-        if (file != PINMAPPING_FILENAME) {
+        if (file != PINMAPPING_FILENAME && !Hems::Recovery::protectedPath(file.c_str())) {
             LittleFS.remove(file);
         }
         file = root.getNextFileName();

@@ -37,3 +37,12 @@ A profile being present in this catalog does not mean every firmware consumer ca
 The repository catalog is deliberately decoupled from firmware releases: profile files can be reviewed and updated without baking vendor mappings into the binary. Users remain in control of which profiles they import into their own OpenDTU-HEMS instance.
 
 No profile in this directory may add executable write logic.
+
+
+### Reboot recovery capability
+
+Control-capable does not imply reboot-recovery-capable. WARP input 10/11 now
+provides the manufacturer-provisioned controller eFuse UID, with exact upstream
+provenance in `docs/HEMS_CONTROL.md`. Marstek has no authoritative stable identity
+mapping. Both profiles explicitly keep `recovery.release_replay_safe` false;
+physical identity/release/replay/reboot validation is still outstanding.

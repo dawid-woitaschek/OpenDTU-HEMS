@@ -24,7 +24,7 @@ integration/hems-next
 
 PRs #18, #20 and #21 are closed without merge and were consolidated into PR #22. Do not treat them as active dependencies.
 
-PR #22 contains the consolidated foundation plus targeted lifecycle audit corrections. The audit input was `33b0f3d02a6f963a2f9ca751088fea05c7fd6e1e`. No global HEMS Active mode exists.
+PR #22 contains the consolidated foundation plus targeted lifecycle audit corrections. This recovery work started from live head `9a5341c617fbd36461dd69ac22f70d2d6613f43f`, whose HEMS firmware/native CI passed. No global HEMS Active mode exists.
 
 ## Architecture currently implemented
 
@@ -246,7 +246,15 @@ Cleanup:
 
 Audit corrections retain possible ownership after failed acquire responses/readback, block subsequent normal operations until release, reject control without a non-empty release plan, recheck generation after authorization callbacks, and publish command completion after updating ownership/cleanup state. Cleanup diagnostics use locked counter snapshots and retries wait 30 seconds after failure completion. Focused native tests include both production provider implementations, configuration changes during commands/cleanup, retry timing and orphan release.
 
-Remaining lifecycle hole: retained cleanup is RAM-resident. A hard reboot/power loss can erase ownership knowledge. Boot/power-loss recovery is **blocked on device-instance identity**: neither the profile model nor either reference profile defines validated stable identity reads. Host/port/unit/profile matching cannot distinguish a replacement at the same endpoint. A profile hash or firmware/table version is not device-instance identity. Establish documented identity semantics and a bounded worker/profile check, or define an explicit unresolved-state/operator resolution protocol, before adding automatic reboot release. This audit adds no recovery persistence and claims no reboot recovery. Active and manual validation remain blocked.
+Durable reboot awareness is now implemented. Each provider loads its bounded recovery journal before configuration/authorization is installed. A command validates its operation/acquire/release plans and authorization, captures declared identity, then synchronously persists recovery intent before any ownership-producing write. Release/readback and local ownership clearing precede durable journal clearing. An interrupted pending file, corruption, unsupported version, or filesystem error blocks actuation. Automatic filesystem formatting on mount failure is removed to preserve recovery evidence.
+
+Recovery uses the existing worker/client and semantic release executor; it never retargets a saved record to new configuration. Exact endpoint/profile recovery compatibility, persisted/current stable identity and explicit replay-safe release are all required. Missing/mismatched identity, incompatible profile or endpoint, and non-replay-safe release cause unresolved recovery without a write. Transient failures retry at most five times, 30 seconds after failed-attempt completion. Clear failures retry persistence only.
+
+WARP identity investigation found an authoritative source: input 10/11 (`box_id`) returns `ESP32Common::get_uid_num()`, initialized from provisioned eFuse block 3. The WARP profile now declares that read; see pinned provenance in `HEMS_CONTROL.md`. Marstek still has no authoritative stable identity mapping. Both reference profiles explicitly retain `release_replay_safe: false`, so real automatic reboot release remains disabled. No physical power-cut/replay validation is claimed.
+
+An authenticated exact-record operator-attestation API can resolve valid unresolved intent after independent release/reset through the physical device/vendor interface. It queues worker-only durable clearing, issues no Modbus write, rejects stale record IDs, and remains blocked on clear failure. Corrupt/unsupported journals cannot use this protocol.
+
+Temporary maintenance validation sessions now exist (C1): admin-authenticated, random RAM-only token, default two-minute TTL, one-second command rate, common readiness and the exact production worker/mailbox/actuator/journal path. Expiry/revocation/config changes request retained cleanup, including ownership produced during a running-command race. Both real reference profiles are still blocked by `recovery_automatic_unsupported`. The settings UI exposes session lifecycle and diagnostics; real semantic control UI/hardware validation remain deferred. Global Active and automatic policy actuation remain unavailable.
 
 The networking audit found only small DNS callbacks; Modbus operations and mDNS waits run in the isolated provider workers. No demonstrated HEMS cause for the observed TCP/IP stack pressure or client-dependent remote-access problem was found. Task stack sizes are unchanged.
 
@@ -304,10 +312,10 @@ No physical write behavior should be described as completed until exercised on t
 ## Immediate next order
 
 ```text
-1. validate and merge PR #22
-2. resolve the boot-recovery device-instance identity blocker, then implement crash-consistent ownership persistence/recovery
-3. add deliberately gated semantic hardware-validation path
-4. validate WARP3 and Marstek on real hardware
+1. validate/review PR #22 recovery and maintenance-session foundation; do not merge in this work block
+2. physically validate journal/power-cut behavior and WARP identity/release replay; establish Marstek identity/replay provenance
+3. enable reference recovery capability only after those gates pass
+4. exercise gated semantic WARP3/Marstek validation on real hardware
 5. introduce global Active + arbitration
 6. make EV protection the first Active policy
 7. add dynamic tariff provider

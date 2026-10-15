@@ -19,6 +19,9 @@ Readiness evaluateReadiness(ReadinessInput const& input)
     add(ReadinessBlocker::TelemetryNotFresh, !input.telemetryFresh);
     add(ReadinessBlocker::DeviceFault, input.faulted);
     add(ReadinessBlocker::CleanupPending, input.cleanupPending);
+    add(ReadinessBlocker::RecoveryPending, input.recoveryPending);
+    add(ReadinessBlocker::ValidationInactive, input.validationInactive);
+    add(ReadinessBlocker::RecoveryUnsupported, input.recoveryUnsupported);
     return result;
 }
 
@@ -34,6 +37,9 @@ char const* readinessBlockerName(ReadinessBlocker blocker)
         case ReadinessBlocker::TelemetryNotFresh: return "telemetry_not_fresh";
         case ReadinessBlocker::DeviceFault: return "device_fault";
         case ReadinessBlocker::CleanupPending: return "cleanup_pending";
+        case ReadinessBlocker::RecoveryPending: return "recovery_pending";
+        case ReadinessBlocker::ValidationInactive: return "validation_session_inactive";
+        case ReadinessBlocker::RecoveryUnsupported: return "recovery_automatic_unsupported";
         case ReadinessBlocker::None:
         default: return "none";
     }

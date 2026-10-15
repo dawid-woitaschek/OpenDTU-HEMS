@@ -22,6 +22,7 @@
         <div v-else-if="!dataLoading && !loadFailed" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
         </div>
+        <HemsValidationPanel v-if="!dataLoading && !loadFailed" />
     </BasePage>
 </template>
 
@@ -29,6 +30,7 @@
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
+import HemsValidationPanel from '@/components/HemsValidationPanel.vue';
 import FormFooter from '@/components/FormFooter.vue';
 import InputElement from '@/components/InputElement.vue';
 import type { AlertResponse } from '@/types/AlertResponse';
@@ -37,7 +39,7 @@ import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
-    components: { BasePage, BootstrapAlert, CardElement, FormFooter, InputElement },
+    components: { BasePage, BootstrapAlert, CardElement, FormFooter, InputElement, HemsValidationPanel },
     data() {
         return {
             dataLoading: true,

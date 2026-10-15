@@ -17,6 +17,12 @@ struct RegisterIo {
     // before every write, so a command cannot continue after authorization was
     // revoked while it was waiting or between bounded profile writes.
     bool (*authorized)(void* context) = nullptr;
+    // Session lifecycle hooks. Production providers always install these.
+    // Called only after bounded plans and last-moment authorization validate.
+    bool (*prepareOwnership)(void* context) = nullptr;
+    bool (*clearOwnership)(void* context) = nullptr;
+    Modbus::Result (*readInputRegisters)(void* context, uint16_t address,
+            uint16_t count, uint8_t* payload) = nullptr;
 };
 
 enum class ExecutionError : uint8_t {

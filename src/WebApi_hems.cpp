@@ -9,6 +9,7 @@
 #include <hems/storage/Telemetry.h>
 #include <memory>
 #include <mutex>
+#include <new>
 
 namespace {
 
@@ -88,14 +89,21 @@ void serializeLimit(JsonObject target, Hems::Constraints::UpperLimit const& limi
 void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarget)
 {
     auto readiness = HemsController.getActuationReadiness(controlTarget);
+    auto validationReadiness = HemsController.getValidationReadiness(controlTarget);
     auto command = HemsController.getActuationCommandSnapshot(controlTarget);
     auto cleanup = HemsController.getActuationCleanupSnapshot(controlTarget);
 
+    char profileId[Hems::Profiles::MaxId + 1] {};
+    HemsController.getControlProfileId(controlTarget, profileId, sizeof(profileId));
+    target["profile"] = static_cast<char const*>(profileId);
     target["control_mode"] = Hems::controlModeName(HemsController.getControlMode(controlTarget));
     target["permission_granted"] = HemsController.controlPermissionGranted(controlTarget);
     target["allowed"] = readiness.allowed();
     target["ready_for_active"] = readiness.readyForActive();
 
+    auto validation = target["validation"].to<JsonObject>();
+    validation["allowed"] = validationReadiness.allowed();
+    auto validationBlockers = validation["blockers"].to<JsonArray>();
     auto blockers = target["blockers"].to<JsonArray>();
     for (auto blocker : {
             Hems::Actuation::ReadinessBlocker::GlobalModeInactive,
@@ -107,11 +115,22 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
             Hems::Actuation::ReadinessBlocker::TelemetryNotFresh,
             Hems::Actuation::ReadinessBlocker::DeviceFault,
             Hems::Actuation::ReadinessBlocker::CleanupPending,
+            Hems::Actuation::ReadinessBlocker::RecoveryPending,
+            Hems::Actuation::ReadinessBlocker::ValidationInactive,
+            Hems::Actuation::ReadinessBlocker::RecoveryUnsupported,
         }) {
         if (readiness.has(blocker)) { blockers.add(Hems::Actuation::readinessBlockerName(blocker)); }
+        if (validationReadiness.has(blocker)) { validationBlockers.add(Hems::Actuation::readinessBlockerName(blocker)); }
     }
 
+    auto commandResult = HemsController.getActuationCommandResult(controlTarget);
+    target["ownership_uncertain"] = HemsController.ownershipUncertain(controlTarget);
     JsonObject mailbox = target["command"].to<JsonObject>();
+    mailbox["last_error"] = Hems::Actuation::commandErrorName(commandResult.error);
+    mailbox["last_stage"] = Hems::Actuation::commandStageName(commandResult.stage);
+    mailbox["execution_error"] = Hems::Actuation::executionErrorName(commandResult.execution.error);
+    mailbox["transport_error"] = Hems::Modbus::errorName(commandResult.execution.transport.error);
+    mailbox["planning_error"] = Hems::Profiles::controlPlanErrorName(commandResult.planning.error);
     mailbox["state"] = Hems::Actuation::mailboxStateName(command.state);
     mailbox["id"] = nullptr;
     mailbox["generation"] = nullptr;
@@ -123,6 +142,29 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
         mailbox["action"] = Hems::Actuation::actionName(command.command.action);
         if (command.command.hasValue) { mailbox["value"] = command.command.value; }
     }
+
+    auto recovery = HemsController.getRecoverySnapshot(controlTarget);
+    auto recoveryJson = target["recovery"].to<JsonObject>();
+    recoveryJson["state"] = Hems::Recovery::stateName(recovery.state);
+    recoveryJson["target"] = controlTarget == Hems::ControlTarget::Storage ? "storage" : "evse";
+    recoveryJson["journal_present"] = recovery.journalPresent;
+    recoveryJson["automatic_supported"] = recovery.automaticSupported;
+    recoveryJson["identity_available"] = recovery.identityAvailable;
+    recoveryJson["identity_supported"] = recovery.identitySupported;
+    recoveryJson["blocked"] = recovery.blocked;
+    recoveryJson["reason"] = Hems::Recovery::reasonName(recovery.reason);
+    recoveryJson["attempts"] = recovery.attempts;
+    recoveryJson["retry_in_ms"] = recovery.retryInMs;
+    recoveryJson["clear_pending"] = recovery.clearPending;
+    recoveryJson["record_checksum"] = recovery.recordChecksum;
+    recoveryJson["record_id"] = static_cast<char const*>(recovery.recordId);
+    recoveryJson["resolution_available"] = recovery.resolutionAvailable;
+    recoveryJson["resolution_pending"] = recovery.resolutionPending;
+    recoveryJson["operator_acknowledged"] = recovery.operatorAcknowledged;
+    recoveryJson["last_error"] = Hems::Actuation::commandErrorName(recovery.lastResult.error);
+    recoveryJson["last_stage"] = Hems::Actuation::commandStageName(recovery.lastResult.stage);
+    recoveryJson["execution_error"] = Hems::Actuation::executionErrorName(recovery.lastResult.execution.error);
+    recoveryJson["transport_error"] = Hems::Modbus::errorName(recovery.lastResult.execution.transport.error);
 
     JsonObject cleanupJson = target["cleanup"].to<JsonObject>();
     cleanupJson["state"] = Hems::Actuation::cleanupStateName(cleanup.state);
@@ -140,6 +182,12 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
 void WebApiHemsClass::init(AsyncWebServer& server)
 {
     using std::placeholders::_1;
+    server.on("/api/hems/validation/session", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onValidationStart, this, _1)));
+    server.on("/api/hems/validation/session", HTTP_DELETE, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onValidationRevoke, this, _1)));
+    server.on("/api/hems/validation/command", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onValidationCommand, this, _1)));
+    server.on("/api/hems/validation/status", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onValidationStatus, this, _1)));
+    server.on("/api/hems/recovery/record", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onRecoveryRecord, this, _1)));
+    server.on("/api/hems/recovery/resolve", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onRecoveryResolve, this, _1)));
     server.on("/api/hems/status", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onStatus, this, _1)));
     server.on("/api/hems/config", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onConfigGet, this, _1)));
     server.on("/api/hems/config", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onConfigPost, this, _1)));
@@ -153,6 +201,12 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     auto& root = response->getRoot();
     root["state"] = HemsController.getMode() == Hems::Mode::Monitor ? "Monitor" : "Disabled";
     root["decision"] = "None";
+    auto session = HemsController.getValidationSnapshot();
+    auto validation = root["validation"].to<JsonObject>();
+    validation["state"] = Hems::Validation::stateName(session.state);
+    validation["active"] = session.active;
+    validation["remaining_ms"] = session.remainingMs;
+    validation["commands_accepted"] = session.commandsAccepted;
 
     auto warpSnapshot = HemsController.getWarpSnapshot();
     auto storageSnapshot = HemsController.getStorageSnapshot();
@@ -412,5 +466,132 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
         retMsg["message"] = "Settings saved!";
         retMsg["code"] = WebApiError::GenericSuccess;
     }
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+// These handlers only copy bounded RAM or queue work. Durable clearing belongs
+// exclusively to the provider worker, never the AsyncTCP callback stack.
+void WebApiHemsClass::onRecoveryRecord(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    if (!request->hasParam("target")) { request->send(400, "application/json", "{\"error\":\"target_required\"}"); return; }
+    auto name = request->getParam("target")->value();
+    if (name != "evse" && name != "storage") { request->send(400); return; }
+    auto target = name == "evse" ? Hems::ControlTarget::Evse : Hems::ControlTarget::Storage;
+    auto record = std::unique_ptr<Hems::Recovery::Record>(new (std::nothrow) Hems::Recovery::Record());
+    if (!record) { request->send(503); return; }
+    Hems::Recovery::Snapshot snapshot;
+    if (!HemsController.getRecoveryRecord(target, *record, snapshot)) { request->send(409); return; }
+    auto* response = new AsyncJsonResponse(); auto& root = response->getRoot();
+    root["record_id"] = static_cast<char const*>(snapshot.recordId);
+    root["target"] = name;
+    root["host"] = static_cast<char const*>(record->endpoint.host);
+    root["port"] = record->endpoint.port; root["unit"] = record->endpoint.unit;
+    root["profile"] = static_cast<char const*>(record->profile);
+    root["reason"] = Hems::Recovery::reasonName(snapshot.reason);
+    root["resolution_available"] = snapshot.resolutionAvailable;
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiHemsClass::onRecoveryResolve(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    if (!request->hasParam("data", true) || request->getParam("data", true)->value().length() > 512) {
+        request->send(400); return;
+    }
+    auto* response = new AsyncJsonResponse();
+    Hems::Profiles::BoundedAllocator allocator; JsonDocument root(&allocator);
+    if (!WebApi.parseRequestData(request, response, root)) { return; }
+    bool valid = root["target"].is<char const*>() && root["record_id"].is<char const*>()
+        && root["independently_released"].is<bool>() && root["independently_released"].as<bool>()
+        && root["attestation"].is<char const*>()
+        && !strcmp(root["attestation"].as<char const*>(), "I independently cleared remote control on this physical device");
+    auto name = root["target"].as<char const*>();
+    valid = valid && (!strcmp(name, "evse") || !strcmp(name, "storage"));
+    bool accepted = valid && HemsController.requestRecoveryResolution(
+        !strcmp(name, "evse") ? Hems::ControlTarget::Evse : Hems::ControlTarget::Storage,
+        root["record_id"].as<char const*>(), true);
+    auto& result = response->getRoot();
+    result["accepted"] = accepted;
+    result["message"] = accepted ? "Exact-record attestation queued; recovery stays blocked until durable clearing succeeds."
+        : "Attestation rejected: stale record, unresolved record unavailable, or independent release not attested.";
+    response->setCode(accepted ? 202 : 409);
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiHemsClass::onValidationStart(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    uint32_t ttl = Hems::Validation::DefaultTtlMs;
+    auto* response = new AsyncJsonResponse();
+    if (request->hasParam("data", true)) {
+        if (request->getParam("data", true)->value().length() > 128) { delete response; request->send(400); return; }
+        Hems::Profiles::BoundedAllocator allocator; JsonDocument data(&allocator);
+        if (!WebApi.parseRequestData(request, response, data)) { return; }
+        if (!data["ttl_ms"].is<uint32_t>()) { delete response; request->send(400); return; }
+        ttl = data["ttl_ms"];
+    }
+    char token[33] {};
+    bool started = HemsController.startValidation(ttl, token);
+    auto& root = response->getRoot(); root["accepted"] = started;
+    if (started) { root["token"] = static_cast<char const*>(token); }
+    root["message"] = "Temporary hardware validation only. Device permission, readiness and recovery gates remain authoritative.";
+    response->setCode(started ? 201 : 409);
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiHemsClass::onValidationRevoke(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    if (!request->hasHeader("X-HEMS-Validation-Token")) { request->send(400); return; }
+    auto token = request->getHeader("X-HEMS-Validation-Token")->value();
+    bool revoked = HemsController.revokeValidation(token.c_str());
+    request->send(revoked ? 202 : 409, "application/json", revoked ? "{\"revoked\":true}" : "{\"revoked\":false}");
+}
+
+void WebApiHemsClass::onValidationCommand(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    if (!request->hasHeader("X-HEMS-Validation-Token") || !request->hasParam("data", true)
+            || request->getParam("data", true)->value().length() > 384) { request->send(400); return; }
+    auto* response = new AsyncJsonResponse();
+    Hems::Profiles::BoundedAllocator allocator; JsonDocument data(&allocator);
+    if (!WebApi.parseRequestData(request, response, data)) { return; }
+    auto name = data["target"].as<char const*>(); auto action = data["action"].as<char const*>();
+    Hems::Actuation::Command command;
+    bool valid = name && action && (!strcmp(name, "evse") || !strcmp(name, "storage"));
+    if (valid) {
+        command.target = !strcmp(name, "evse") ? Hems::ControlTarget::Evse : Hems::ControlTarget::Storage;
+        bool found = false;
+        for (auto candidate : { Hems::Actuation::Action::SetCurrentA, Hems::Actuation::Action::SetChargePowerW,
+                Hems::Actuation::Action::SetDischargePowerW, Hems::Actuation::Action::SetTargetSocPct,
+                Hems::Actuation::Action::Stop, Hems::Actuation::Action::Release }) {
+            if (!strcmp(action, Hems::Actuation::actionName(candidate))) { command.action = candidate; found = true; break; }
+        }
+        valid = found;
+        command.hasValue = !data["value"].isUnbound();
+        if (command.hasValue) {
+            valid = valid && data["value"].is<double>() && !data["value"].is<bool>();
+            command.value = data["value"].as<double>();
+        }
+    }
+    auto token = request->getHeader("X-HEMS-Validation-Token")->value(); uint32_t id = 0;
+    bool accepted = valid && HemsController.submitValidation(command, token.c_str(), id);
+    auto& root = response->getRoot(); root["accepted"] = accepted; root["command_id"] = id;
+    root["message"] = accepted ? "Queued through production worker; inspect command/recovery diagnostics."
+        : "Rejected by semantic command, validation session, rate limit or readiness/recovery gate.";
+    response->setCode(accepted ? 202 : 409);
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiHemsClass::onValidationStatus(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    auto session = HemsController.getValidationSnapshot();
+    auto* response = new AsyncJsonResponse(); auto& root = response->getRoot();
+    root["state"] = Hems::Validation::stateName(session.state); root["active"] = session.active;
+    root["remaining_ms"] = session.remainingMs; root["commands_accepted"] = session.commandsAccepted;
+    serializeActuationTarget(root["evse"].to<JsonObject>(), Hems::ControlTarget::Evse);
+    serializeActuationTarget(root["storage"].to<JsonObject>(), Hems::ControlTarget::Storage);
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }

@@ -16,6 +16,7 @@ CommandResult ProfileSession::runPlan(RegisterIo const& io, Profiles::ControlPla
     }
     CommandResult command;
     command.stage = stage;
+    command.execution = result;
     return command;
 }
 
@@ -35,7 +36,7 @@ CommandResult ProfileSession::acquire(RegisterIo const& io, Profiles::Profile co
     }
 
     auto result = runPlan(io, plan, CommandStage::Acquire, verifyReadback);
-    if (result) {
+    if (result && plan.count) {
         _owned = true;
     } else if (result.execution.writeAttempted) {
         // The acquire may have reached the device even if its response or
@@ -79,9 +80,44 @@ CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile co
         return command;
     }
 
+    // A rejected command or invalid acquire must not arm a journal.
+    Profiles::ControlPlan acquirePlan;
+    planned = Profiles::planAcquire(profile, acquirePlan);
+    if (!planned) {
+        CommandResult command;
+        command.error = CommandError::PlanningFailed;
+        command.stage = CommandStage::Acquire;
+        command.planning = planned;
+        return command;
+    }
+    if (io.authorized && !io.authorized(io.context)) {
+        CommandResult command;
+        command.error = CommandError::ExecutionFailed;
+        command.execution.error = ExecutionError::AuthorizationRevoked;
+        return command;
+    }
+    if (!_owned && io.prepareOwnership && !io.prepareOwnership(io.context)) {
+        CommandResult command;
+        command.error = CommandError::PersistenceFailed;
+        command.stage = CommandStage::Journal;
+        return command;
+    }
     auto acquired = acquire(io, profile, verifyReadback);
-    if (!acquired) { return acquired; }
-    return runPlan(io, operationPlan, CommandStage::Operation, verifyReadback);
+    if (!acquired) {
+        if (!_owned && !acquired.execution.writeAttempted && io.clearOwnership && !io.clearOwnership(io.context)) {
+            acquired.error = CommandError::PersistenceFailed;
+            acquired.stage = CommandStage::Journal;
+        }
+        return acquired;
+    }
+    auto result = runPlan(io, operationPlan, CommandStage::Operation, verifyReadback);
+    // Acquire-less profiles establish ownership on the first operation write.
+    if (result.execution.writeAttempted || (result && operationPlan.count)) { _owned = true; }
+    else if (!_owned && io.clearOwnership && !io.clearOwnership(io.context)) {
+        result.error = CommandError::PersistenceFailed;
+        result.stage = CommandStage::Journal;
+    }
+    return result;
 }
 
 CommandResult ProfileSession::release(RegisterIo const& io, Profiles::Profile const& profile,
@@ -100,7 +136,14 @@ CommandResult ProfileSession::release(RegisterIo const& io, Profiles::Profile co
     }
 
     auto result = runPlan(io, plan, CommandStage::Release, verifyReadback);
-    if (result) { _owned = false; _acquireUncertain = false; }
+    if (result) {
+        _owned = false; _acquireUncertain = false;
+        // Release/readback and local ownership publication precede durable clear.
+        if (io.clearOwnership && !io.clearOwnership(io.context)) {
+            result.error = CommandError::PersistenceFailed;
+            result.stage = CommandStage::Journal;
+        }
+    }
     return result;
 }
 

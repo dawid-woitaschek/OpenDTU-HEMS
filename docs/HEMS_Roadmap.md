@@ -30,9 +30,9 @@ That baseline includes the repository-backed firmware update infrastructure from
 
 **Current branch:** `feature/hems-actuation-foundation`
 
-**Audit input branch head:** `33b0f3d02a6f963a2f9ca751088fea05c7fd6e1e`
+**Recovery work input head:** `9a5341c617fbd36461dd69ac22f70d2d6613f43f` (live #22 head checked before implementation; HEMS build/tests succeeded)
 
-**Current phase:** 🟡 Validation
+**Current phase:** 🟡 Validation — durable recovery and temporary validation-session foundation in #22
 
 Branch structure is intentionally flat:
 
@@ -70,7 +70,12 @@ PRs #18, #20 and #21 were closed without merge and consolidated into #22. Their 
 | Profile schema v2 control metadata | 🟢 Completed | Declarative bounded control metadata only |
 | Firmware update channels | 🟢 Completed | PR #19 merged into `integration/hems-next` |
 | Actuation foundation | 🟡 Validation | PR #22 |
-| Real device write validation | ⚪ Planned | WARP + Marstek hardware gate |
+| Durable reboot awareness (B1) | 🟡 Validation | Crash-consistent per-target journal; unresolved recovery blocks commands |
+| Generic automatic recovery (B2) | 🟡 Validation | Exact identity and replay-safe release required; synthetic native coverage |
+| Reference-device identity (B3) | 🔵 Partial | WARP eFuse UID provenance established; Marstek unsupported |
+| Real automatic reboot recovery (B4) | 🔴 Blocked | Both reference profiles retain replay-safe=false; physical validation outstanding |
+| Temporary validation sessions (C1) | 🟡 Validation | Admin API/lifecycle UI; real commands blocked by recovery readiness |
+| Real semantic hardware validation (C2) | ⚪ Planned | WARP + Marstek hardware gate |
 | Global HEMS Active mode | ⚪ Planned | Must wait for lifecycle + hardware validation |
 | EV protection Active | ⚪ Planned | First automatic control policy |
 | Dynamic tariff provider | ⚪ Planned | No active economic control initially |
@@ -236,93 +241,69 @@ PR #22 must remain unable to perform production actuation automatically:
 - Native regression coverage exercises both production providers with pending/running configuration changes, old endpoint/profile pinning, failed writes, retry delays and release/unblocking. No physical validation is claimed.
 - HEMS uses small DNS callbacks and worker-side Modbus I/O; no demonstrated cause for TCP/IP stack pressure, heap leakage or the client-dependent remote-access issue was found. No task stack sizing changed.
 
-## Milestone B: boot and power-loss ownership recovery
+## Milestone B: durable ownership awareness and identity-verified recovery
 
-**Status:** 🔴 Blocked — stable device identity is not available in the current profiles
+**Status:** 🟡 B1/B2 implemented, validation pending; 🔴 real automatic recovery remains blocked
 
-### Goal
+| Layer | State | Scope |
+|---|---|---|
+| B1 crash-consistent ownership awareness | Implemented in #22 | Per-target LittleFS journal, durable prepare before ownership writes, durable clear only after release, fail-closed boot/corruption/IO handling |
+| B2 generic identity/recovery framework | Implemented in #22 | Bounded read-only identities, exact recovery compatibility, replay-safe opt-in, shared worker/client/release executor, bounded retries |
+| B3 real-device identity verification | Partial | WARP input 10/11 traces to provisioned eFuse UID; Marstek has no authoritative validated identity mapping |
+| B4 real automatic reboot recovery | Blocked | Both reference releases remain replay-safe=false; actual identity/replay/reboot behavior must be physically validated |
 
-Do not lose safety knowledge when the controller reboots while an external device may still be in a persistent remote-control mode.
+The initial blocker was configuration tuples being mistaken for physical identity. B1 now safely remembers possible ownership without that assumption. Host/port/unit/profile matching alone never authorizes reboot writes. Profile compatibility pins exact release/identity semantics; it is not device identity.
 
-Current retained cleanup is RAM-resident and handles live configuration-generation changes. A hard reboot/power loss can erase that knowledge.
+Implemented transitions:
 
-### Identity prerequisite / implementation blocker
+- validated bounded command/release -> identity read if declared -> durable journal -> acquire/ownership write;
+- failed/unverifiable write -> intent retained;
+- live config change -> old retained release context + same durable intent;
+- boot with intent -> pending -> identity checks/release only if every prerequisite holds;
+- unsupported/corrupt/incomplete journal, missing/incompatible profile, endpoint/identity mismatch -> unresolved, no write;
+- release/readback -> local ownership released -> atomic durable tombstone;
+- clear failure -> blocked flash-only retry, never replay an unvalidated release merely to retry clearing;
+- retry delays start after attempt completion, at most five automatic attempts, 30 seconds between failed attempts;
+- exact-record admin attestation of independent physical/vendor-interface release -> worker-only durable clear, no Modbus write.
 
-The current `Profile` model and both curated reference profiles provide no validated stable device-instance identifier or identity-read semantics. Vendor/model/source revision, host, effective port, unit ID and profile content identify a configuration, not a physical instance. The same tuple can address a replacement device after DHCP, DNS or device replacement. Persisting that tuple alone cannot authorize an automatic reboot release safely.
+Any interrupted pending file is evidence, including zero bytes. Filesystem mount failure no longer triggers automatic formatting. Downgrading/erasing the filesystem while remote ownership is possible is outside the safe protocol.
 
-Before implementing automatic recovery, establish documented, readable instance identity for WARP and Marstek and add a bounded profile-driven identity check through the existing worker/client. If identity cannot be established, recovery must remain explicitly unresolved and block actuation; an operator resolution protocol would need a separate concrete design. Do not invent serial-number registers, treat a profile hash as device identity, or authorize release based only on an unchanged address. No boot-recovery persistence or release path is implemented by this audit block. Global Active and the manual validation path remain unavailable.
-
-### Required design
-
-- define which devices/operations can leave persistent remote state;
-- persist only the minimal ownership/recovery intent needed for safe recovery;
-- never blindly write to a changed/replaced endpoint after reboot;
-- bind recovery context to device/profile identity strongly enough to avoid retargeting;
-- bounded retry/backoff;
-- explicit diagnostic state when safe recovery cannot be proven;
-- normal actuation blocked while unresolved recovery exists.
+The WARP identity provenance is pinned in `HEMS_CONTROL.md`. Neither reference profile claims replay eligibility or physical reboot validation. Marstek identity remains explicitly unsupported. Corrupt/unsupported records cannot use operator acknowledgement because their device context cannot be trusted.
 
 ### Exit criteria
 
-- [ ] validated device-instance identity / unresolved-state resolution design established;
-- [ ] reboot during owned Marstek control has deterministic behavior;
-- [ ] reboot during WARP current limitation has deterministic behavior;
-- [ ] stale endpoint/profile recovery cannot write to a replacement device;
-- [ ] unresolved recovery is visible in `/api/hems/status`;
-- [ ] recovery failure remains fail-closed;
-- [ ] native tests cover persistence/corruption/mismatch cases;
-- [ ] physical reboot test completed before Active mode exists.
+- [x] durable prepare-before-write and release-before-clear ordering;
+- [x] corruption/truncation/version/endpoint/profile/identity failures remain blocked;
+- [x] readiness and `/api/hems/status` recovery diagnostics;
+- [x] synthetic identity/replay policy and production provider regression tests;
+- [x] worker-based authenticated exact-record operator protocol;
+- [ ] final #22 firmware/native CI succeeds;
+- [ ] LittleFS power-cut behavior verified on reference hardware;
+- [ ] Marstek stable physical identity established from authoritative source;
+- [ ] reference release replay semantics and reboot behavior physically verified;
+- [ ] real automatic recovery enabled only after its profile/hardware gate is satisfied.
 
 ## Milestone C: gated manual hardware validation path
 
-**Status:** ⚪ Planned
+**Status:** 🟡 C1 implemented / validation pending; ⚪ C2 real semantic validation not performed
 
-### Goal
+C1 provides authenticated temporary sessions (default 120 seconds, maximum 300), RAM-only 128-bit random tokens, a depth-one production command handoff and a one-second session command rate limit. The session never enables global Active. The common readiness model still requires device permission, fresh telemetry, valid profile, no cleanup/recovery blocker, and automatic-recovery capability. Both real reference profiles currently fail that last gate.
 
-Provide an intentionally restricted maintenance/validation path for exercising semantic actuator operations on real devices without enabling automatic HEMS Active mode.
+Expiry/revocation/config changes revoke subsequent writes immediately and request the existing retained cleanup path. Running-command completion retains ownership created concurrently with revocation. Expiry causes no periodic flash writes when there is no ownership.
 
-This is a validation tool, not a general raw Modbus console.
-
-### Required behavior
-
-- explicit maintenance/validation enable step;
-- per-device `HEMS control` permission still required;
-- semantic operations only;
-- same readiness/authorization/worker/actuator path as future production control;
-- no arbitrary register/address/value input;
-- visible command result, readback and cleanup state;
-- obvious stop/release actions;
-- bounded command rate;
-- automatic expiry or revocation of the validation session.
-
-### Initial validation operations
-
-```text
-WARP3:
-  setCurrent(6 A)
-  setCurrent(10 A)
-  stop()
-  releaseControl()
-
-Marstek:
-  acquire
-  setChargePower(500 W)
-  stop()
-  setDischargePower(500 W)
-  setTargetSoc(...)
-  releaseControl()
-```
-
-Exact hardware test values may be adjusted to safe real-device conditions.
+The settings UI can start/revoke a session and shows countdown, per-device profile, readiness, recovery and command/cleanup results. Semantic command testing uses the authenticated maintenance API; there are no raw register controls or generic journal-delete controls. Real command controls remain deferred while the reference recovery gate is blocked.
 
 ### Exit criteria
 
-- [ ] no raw register write UI/API exposed;
-- [ ] maintenance enable is explicit and temporary;
-- [ ] command path is identical to production actuator path after the authorization gate;
-- [ ] failed command leaves diagnosable state;
-- [ ] release/cleanup can be exercised independently;
-- [ ] validation UI/API cannot silently enable global Active mode.
+- [x] explicit temporary admin session and rate limiting;
+- [x] same provider mailbox/worker/planner/executor/journal path;
+- [x] common readiness blocks real commands while recovery support is unavailable;
+- [x] expiry/revocation requests safe release including running-command races;
+- [x] token/TTL/rate/revocation and production-provider cleanup native regressions;
+- [ ] authenticated API and lifecycle UI verified on reference firmware;
+- [ ] reference devices pass B3/B4 gates before real ownership-producing commands;
+- [ ] actual bounded EVSE/storage commands, stop and release physically validated;
+- [ ] real reboot/power-loss validation; no physical validation is claimed by native tests.
 
 ## Milestone D: physical WARP3 and Marstek validation
 

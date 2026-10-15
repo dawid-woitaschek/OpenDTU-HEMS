@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include <Configuration.h>
 #include <Hoymiles.h>
+#include <esp_system.h>
 
 Hems::Controller HemsController;
 
@@ -78,11 +79,16 @@ namespace Hems {
 
 bool Controller::providerAuthorization(void* context, ControlTarget target)
 {
-    return context && static_cast<Controller*>(context)->actuationAllowed(target);
+    if (!context) { return false; }
+    auto& controller = *static_cast<Controller*>(context);
+    return controller.actuationAllowed(target) || controller.getValidationReadiness(target).allowed();
 }
 
 void Controller::init(Scheduler& scheduler)
 {
+    // Loaded before configure/authorization and before the Web API starts.
+    _warp.initRecovery();
+    _storage.initRecovery();
     Evse::BindingSettings.init();
     Storage::StorageSettings.init();
     _warp.setAuthorization(this, providerAuthorization);
@@ -90,6 +96,7 @@ void Controller::init(Scheduler& scheduler)
 
     scheduler.addTask(_loopTask);
     _loopTask.setCallback([this] {
+        serviceValidation();
         _warp.loop();
         _storage.loop();
 
@@ -105,6 +112,7 @@ void Controller::init(Scheduler& scheduler)
 
 void Controller::updateSettings()
 {
+    if (_validation.revoke()) { releaseValidationOwnership(); }
     auto const& config = Configuration.get().Hems;
     _mode.store(config.Version == CONFIG_VERSION_HEMS && config.Enabled
             ? Mode::Monitor : Mode::Disabled);
@@ -120,6 +128,13 @@ void Controller::updateSettings()
 Mode Controller::getMode() const
 {
     return _mode.load();
+}
+
+void Controller::getControlProfileId(ControlTarget target, char* buffer, size_t capacity) const
+{
+    if (target == ControlTarget::Evse) { _warp.controlProfileId(buffer, capacity); }
+    else if (target == ControlTarget::Storage) { _storage.controlProfileId(buffer, capacity); }
+    else if (capacity) { buffer[0] = 0; }
 }
 
 ControlMode Controller::getControlMode(ControlTarget target) const
@@ -138,9 +153,25 @@ bool Controller::controlPermissionGranted(ControlTarget target) const
 
 Actuation::Readiness Controller::getActuationReadiness(ControlTarget target) const
 {
+    return readiness(target, false);
+}
+Actuation::Readiness Controller::getValidationReadiness(ControlTarget target) const
+{
+    return readiness(target, true);
+}
+Actuation::Readiness Controller::readiness(ControlTarget target, bool validation) const
+{
     Actuation::ReadinessInput input;
-    input.globalActive = false;
+    input.globalActive = validation; // Scoped maintenance gate, never global Active.
+    if (validation) {
+        input.validationInactive = !_validation.snapshot(millis()).active
+            || (getMode() != Mode::Disabled && getMode() != Mode::Monitor);
+        // Until reference-device replay/recovery semantics are validated, even
+        // maintenance ownership writes remain blocked by the common model.
+        input.recoveryUnsupported = !getRecoverySnapshot(target).automaticSupported;
+    }
     input.permissionGranted = controlPermissionGranted(target);
+    input.recoveryPending = getRecoverySnapshot(target).blocked;
 
     switch (target) {
         case ControlTarget::Evse: {
@@ -181,6 +212,37 @@ bool Controller::actuationAllowed(ControlTarget target) const
     return getActuationReadiness(target).allowed();
 }
 
+void Controller::releaseValidationOwnership()
+{
+    _warp.requestRelease(); _storage.requestRelease();
+}
+void Controller::serviceValidation()
+{
+    if (_validation.expire(millis())) { releaseValidationOwnership(); }
+}
+bool Controller::startValidation(uint32_t ttlMs, char* token)
+{
+    serviceValidation();
+    if (getMode() != Mode::Disabled && getMode() != Mode::Monitor) { return false; }
+    if (getRecoverySnapshot(ControlTarget::Evse).blocked || getRecoverySnapshot(ControlTarget::Storage).blocked
+            || !_warp.resumeCommands() || !_storage.resumeCommands()) { return false; }
+    return _validation.start(millis(), ttlMs, esp_fill_random, token);
+}
+bool Controller::revokeValidation(char const* token)
+{
+    if (!_validation.revoke(token)) { return false; }
+    releaseValidationOwnership(); return true;
+}
+bool Controller::submitValidation(Actuation::Command const& command, char const* token, uint32_t& id)
+{
+    id = 0; serviceValidation();
+    if (!Actuation::validCommand(command) || !getValidationReadiness(command.target).allowed()
+            || !_validation.accept(token, millis())) { return false; }
+    // Same production mailbox, generation checks, planner, worker and journal.
+    return command.target == ControlTarget::Evse ? _warp.submitCommand(command, id)
+        : command.target == ControlTarget::Storage && _storage.submitCommand(command, id);
+}
+
 bool Controller::submitActuation(Actuation::Command const& command, uint32_t& id)
 {
     id = 0;
@@ -210,11 +272,41 @@ Actuation::MailboxSnapshot Controller::getActuationCommandSnapshot(ControlTarget
     }
 }
 
+Actuation::CommandResult Controller::getActuationCommandResult(ControlTarget target) const
+{
+    return target == ControlTarget::Evse ? _warp.commandResult() : _storage.commandResult();
+}
+bool Controller::ownershipUncertain(ControlTarget target) const
+{
+    return target == ControlTarget::Evse ? _warp.ownershipUncertain() : _storage.ownershipUncertain();
+}
+
 Actuation::CleanupSnapshot Controller::getActuationCleanupSnapshot(ControlTarget target) const
 {
     switch (target) {
         case ControlTarget::Evse: return _warp.cleanupSnapshot();
         case ControlTarget::Storage: return _storage.cleanupSnapshot();
+        default: return {};
+    }
+}
+
+bool Controller::getRecoveryRecord(ControlTarget target, Recovery::Record& record, Recovery::Snapshot& snapshot) const
+{
+    return target == ControlTarget::Evse ? _warp.recoveryRecord(record, snapshot)
+        : target == ControlTarget::Storage && _storage.recoveryRecord(record, snapshot);
+}
+bool Controller::requestRecoveryResolution(ControlTarget target, char const* recordId, bool independentlyReleased)
+{
+    if (getMode() != Mode::Disabled && getMode() != Mode::Monitor) { return false; }
+    return target == ControlTarget::Evse ? _warp.requestRecoveryResolution(recordId, independentlyReleased)
+        : target == ControlTarget::Storage && _storage.requestRecoveryResolution(recordId, independentlyReleased);
+}
+
+Recovery::Snapshot Controller::getRecoverySnapshot(ControlTarget target) const
+{
+    switch (target) {
+        case ControlTarget::Evse: return _warp.recoverySnapshot();
+        case ControlTarget::Storage: return _storage.recoverySnapshot();
         default: return {};
     }
 }

@@ -19,6 +19,14 @@
     "unit_id": 1,
     "address_base": 0
   },
+  "identity": {
+    "kind": "device_instance",
+    "source": "Tinkerforge esp32-firmware cb474182: Modbus box_id -> ESP32Common eFuse UID; see HEMS_CONTROL.md",
+    "fields": [
+      { "space": "input", "address": 10, "count": 2, "encoding": "register_bytes" }
+    ]
+  },
+  "recovery": { "release_replay_safe": false },
   "telemetry": [
     {
       "key": "register_table_version",

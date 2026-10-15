@@ -26,6 +26,9 @@ public:
         _orphaned = false;
         return true;
     }
+    // Called only by the worker after authenticated exact-record operator
+    // attestation and successful durable clearing; never a normal reset path.
+    void confirmOperatorRelease() { _session.reset(); _orphaned = false; }
     bool ownsControl() const { return _session.ownsControl(); }
     bool ownershipOrphaned() const { return _orphaned; }
 

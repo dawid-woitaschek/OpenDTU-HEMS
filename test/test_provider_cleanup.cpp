@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Production provider dispatch/session/cleanup, with deterministic task and wire
 // seams. No private-field access and no network threads or wall-clock waits.
+#include "recovery_files.h"
 #include <hems/storage/Provider.h>
 #include <hems/warp/Provider.h>
 #include <hems/profiles/FlashStore.h>
@@ -47,6 +48,7 @@ static void runWorker()
 using namespace Hems;
 static Profiles::Profile selectedProfile;
 static std::function<void()> onWrite;
+static std::function<void()> onIdentityRead;
 struct Write { std::string host; uint16_t port; uint8_t unit; uint16_t address; };
 static std::vector<Write> writes;
 static std::string wireHost;
@@ -99,6 +101,7 @@ Result Client::readHoldingRegisters(uint16_t address, uint16_t count, uint8_t* p
         payload[i * 2] = value >> 8;
         payload[i * 2 + 1] = value;
     }
+    if (address == 90 && onIdentityRead) { auto callback = std::move(onIdentityRead); onIdentityRead = {}; callback(); }
     return { Error::None, 0, true };
 }
 Result Client::readInputRegisters(uint16_t address, uint16_t count, uint8_t* payload)
@@ -202,8 +205,91 @@ static void lifecycle(Provider& provider, ControlTarget target, Configure config
     assert(writes.back().host == "new.invalid" && writes.back().address == 21);
 }
 
+// Actual provider reboot dispatch: both targets use one existing worker/client,
+// reject normal commands before loading, and never release a replacement config.
+template<typename Provider, typename Configure>
+static void rebootLifecycle(ControlTarget target, Configure configure, Profiles::Profile profile)
+{
+    tasks.clear(); writes.clear(); registers.clear();
+    writeFails = false; NetworkSettings.connected = true;
+    profile.identityFieldCount = 0; profile.releaseReplaySafe = false;
+    selectedProfile = profile;
+    MemoryJournalFiles files;
+    Provider live;
+    live.setAuthorization(nullptr, authorized);
+    configure(live, false);
+    Actuation::Command command { target, Actuation::Action::Stop };
+    uint32_t id;
+    assert(!live.submitCommand(command, id)); // NotLoaded always fails closed.
+    live.initRecovery(files);
+    assert(live.submitCommand(command, id)); runWorker();
+    assert(live.recoverySnapshot().journalPresent);
+    auto before = writes.size();
+    Provider rebooted; rebooted.initRecovery(files); rebooted.setAuthorization(nullptr, authorized);
+    configure(rebooted, false);
+    assert(!rebooted.submitCommand(command, id));
+    rebooted.loop(); runWorker();
+    assert(rebooted.recoverySnapshot().state == Recovery::State::Unresolved);
+    assert(rebooted.recoverySnapshot().reason == Recovery::Reason::IdentityUnsupported);
+    configure(rebooted, true); rebooted.loop(); runWorker();
+    assert(writes.size() == before && !rebooted.submitCommand(command, id));
+
+    // Synthetic identity and replay-safe semantics, with a new separate journal.
+    tasks.clear(); writes.clear();
+    MemoryJournalFiles verifiedFiles;
+    profile.identityFieldCount = 1; profile.identityFields[0] = { Modbus::ReadFunction::InputRegisters, 90, 2 };
+    strcpy(profile.identitySource, "Synthetic provider identity fixture"); profile.releaseReplaySafe = true;
+    selectedProfile = profile; registers[90] = 0x1234; registers[91] = 0x5678;
+    Provider verifiedLive; verifiedLive.initRecovery(verifiedFiles); verifiedLive.setAuthorization(nullptr, authorized);
+    configure(verifiedLive, false);
+    assert(verifiedLive.submitCommand(command, id)); runWorker();
+    auto armedFiles = verifiedFiles;
+    before = writes.size();
+    Provider verifiedBoot; verifiedBoot.initRecovery(verifiedFiles); configure(verifiedBoot, false);
+    verifiedBoot.loop(); runWorker();
+    assert(verifiedBoot.recoverySnapshot().state == Recovery::State::Recovered);
+    assert(writes.size() == before + 1 && writes.back().host == "old.invalid" && writes.back().address == 12);
+
+    Provider changedBoot; changedBoot.initRecovery(armedFiles); configure(changedBoot, false);
+    onIdentityRead = [&] { configure(changedBoot, true); };
+    before = writes.size(); changedBoot.loop(); runWorker();
+    assert(writes.size() == before && changedBoot.recoverySnapshot().blocked);
+    assert(changedBoot.recoverySnapshot().reason == Recovery::Reason::ConfigurationChanged);
+
+    // Live retained cleanup + failed durable clear retries only persistence;
+    // an unvalidated/non-replay-safe release is never repeated due to flash I/O.
+    tasks.clear(); writes.clear();
+    MemoryJournalFiles clearFiles;
+    Provider clearLive; clearLive.initRecovery(clearFiles); clearLive.setAuthorization(nullptr, authorized);
+    configure(clearLive, false); assert(clearLive.submitCommand(command, id)); runWorker();
+    configure(clearLive, true); clearFiles.fail = true;
+    clearLive.loop(); runWorker(); before = writes.size();
+    assert(clearLive.recoverySnapshot().clearPending && clearLive.recoverySnapshot().blocked);
+    assert(clearLive.cleanupSnapshot().retainedContext);
+    testNow += Recovery::RetryMs; clearFiles.fail = false;
+    clearLive.loop(); runWorker();
+    assert(writes.size() == before && !clearLive.recoverySnapshot().blocked);
+    assert(!clearLive.cleanupSnapshot().retainedContext);
+
+    // Expiry/revocation while an ownership write is running must retain exact
+    // context at completion, then release via the existing cleanup path.
+    assert(clearLive.resumeCommands());
+    configure(clearLive, false);
+    assert(clearLive.submitCommand(command, id));
+    onWrite = [&] { clearLive.requestRelease(); };
+    runWorker();
+    assert(clearLive.cleanupSnapshot().retainedContext);
+    assert(!clearLive.submitCommand(command, id));
+    clearLive.loop(); runWorker();
+    assert(!clearLive.cleanupSnapshot().retainedContext && !clearLive.recoverySnapshot().journalPresent);
+    assert(!clearLive.submitCommand(command, id)); // new session must explicitly resume
+    assert(clearLive.resumeCommands());
+}
+
 int main()
 {
+    MemoryJournalFiles recoveryFiles;
+    std::strcpy(selectedProfile.id, "test.synthetic");
     selectedProfile.schemaVersion = 2;
     selectedProfile.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
     selectedProfile.port = 1502;
@@ -227,6 +313,7 @@ int main()
     replacement.controlWrites[1].address = 22;
     replacement.controlWrites[2].address = 21;
     Storage::Provider storage;
+    storage.initRecovery(recoveryFiles);
     lifecycle(storage, ControlTarget::Storage, [&](bool changed) {
         selectedProfile = changed ? replacement : old;
         StorageConfig config;
@@ -244,6 +331,7 @@ int main()
     replacement.controlWrites[1].address = 22;
     replacement.controlWrites[2].address = 21;
     Warp::Provider warp;
+    warp.initRecovery(recoveryFiles);
     lifecycle(warp, ControlTarget::Evse, [&](bool changed) {
         selectedProfile = changed ? replacement : old;
         WarpConfig config;
@@ -254,5 +342,25 @@ int main()
         std::strcpy(binding.Profile, "test.evse");
         warp.configure(config, binding, true);
     });
-    std::cout << "Provider retained cleanup lifecycle tests passed\n";
+    auto configureStorage = [](Storage::Provider& provider, bool changed) {
+        StorageConfig config; config.Enabled = true;
+        strcpy(config.Host, changed ? "new.invalid" : "old.invalid"); strcpy(config.Profile, "test.synthetic");
+        provider.configure(config, true);
+    };
+    auto storageProfile = selectedProfile;
+    storageProfile.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
+    strcpy(storageProfile.entries[0].key, "soc_pct"); strcpy(storageProfile.controlOperations[0].key, "stop");
+    storageProfile.controlWrites[1].address = 12;
+    rebootLifecycle<Storage::Provider>(ControlTarget::Storage, configureStorage, storageProfile);
+    auto configureWarp = [](Warp::Provider& provider, bool changed) {
+        WarpConfig config; config.Enabled = true; config.Port = 1502;
+        strcpy(config.Host, changed ? "new.invalid" : "old.invalid");
+        Evse::BindingConfig binding; strcpy(binding.Profile, "test.synthetic");
+        provider.configure(config, binding, true);
+    };
+    auto evseProfile = storageProfile;
+    evseProfile.capabilities = Profiles::capabilityBit(Profiles::Capability::Evse);
+    strcpy(evseProfile.entries[0].key, "charging_state"); strcpy(evseProfile.controlOperations[0].key, "stop_charging");
+    rebootLifecycle<Warp::Provider>(ControlTarget::Evse, configureWarp, evseProfile);
+    std::cout << "Provider retained cleanup and reboot recovery lifecycle tests passed\n";
 }

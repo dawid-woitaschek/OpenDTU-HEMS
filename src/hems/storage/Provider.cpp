@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <esp_log.h>
 #include <new>
+#include <esp_system.h>
 
 #undef TAG
 static const char* TAG = "hems-storage";
@@ -93,6 +94,14 @@ Snapshot Provider::snapshot() const
     return _state.snapshot(millis());
 }
 
+void Provider::controlProfileId(char* buffer, size_t capacity) const
+{
+    if (!capacity) { return; }
+    std::lock_guard<std::mutex> lock(_mutex);
+    std::strncpy(buffer, _profile ? _profile->id : "", capacity - 1);
+    buffer[capacity - 1] = 0;
+}
+
 bool Provider::controlCapable() const
 {
     std::lock_guard<std::mutex> lock(_mutex);
@@ -103,6 +112,126 @@ Actuation::CleanupSnapshot Provider::cleanupSnapshot() const
 {
     std::lock_guard<std::mutex> lock(_mutex);
     return { _cleanupState, _cleanup.valid, _cleanupAttempts, _cleanupLastResult };
+}
+
+void Provider::initRecovery(Recovery::Files& files)
+{
+    _recovery.load(files, millis, esp_fill_random);
+}
+
+Recovery::Snapshot Provider::recoverySnapshot() const
+{
+    auto snapshot = _recovery.snapshot(millis());
+    std::lock_guard<std::mutex> lock(_mutex);
+    snapshot.automaticSupported = _profile && Recovery::automaticSupported(*_profile);
+    snapshot.identitySupported = _profile && _profile->identityFieldCount && _profile->identitySource[0];
+    return snapshot;
+}
+
+bool Provider::prepareOwnership(void* context)
+{
+    auto& io = *static_cast<CommandIoContext*>(context);
+    if (!io.provider || !io.profile || !io.provider->commandAuthorized(io.generation)) { return false; }
+    Actuation::RegisterIo identityIo { &io, nullptr, commandIoRead, nullptr, nullptr, nullptr, commandIoReadInput };
+    return io.provider->_recovery.arm(io.endpoint, *io.profile, io.generation, identityIo);
+}
+
+bool Provider::clearOwnership(void* context)
+{
+    auto& io = *static_cast<CommandIoContext*>(context);
+    { std::lock_guard<std::mutex> lock(io.provider->_mutex); io.provider->_controlOwned = false; }
+    return io.provider->_recovery.clearReleased(millis());
+}
+
+bool Provider::clearCleanupOwnership(void* context)
+{
+    auto& io = *static_cast<CleanupIoContext*>(context);
+    { std::lock_guard<std::mutex> lock(io.provider->_mutex); io.provider->_controlOwned = false; }
+    return io.provider->_recovery.clearReleased(millis());
+}
+
+Modbus::Result Provider::commandIoReadInput(void* context, uint16_t address,
+        uint16_t count, uint8_t* payload)
+{
+    auto& io = *static_cast<CommandIoContext*>(context);
+    return io.provider->_client.readInputRegisters(address, count, payload);
+}
+
+bool Provider::recoveryAuthorized(uint32_t generation) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return generation == _generation && _recovery.snapshot().state == Recovery::State::Running;
+}
+
+bool Provider::recoveryIoAuthorized(void* context)
+{
+    auto& io = *static_cast<CommandIoContext*>(context);
+    // CheckingIdentity is permitted only for the pre-release gate; the write
+    // wrapper below requires Running. Configuration changes revoke both.
+    std::lock_guard<std::mutex> lock(io.provider->_mutex);
+    auto state = io.provider->_recovery.snapshot().state;
+    return io.generation == io.provider->_generation
+        && (state == Recovery::State::CheckingIdentity || state == Recovery::State::Running);
+}
+
+Modbus::Result Provider::recoveryIoWrite(void* context, uint16_t address,
+        uint16_t count, uint16_t const* values)
+{
+    auto& io = *static_cast<CommandIoContext*>(context);
+    if (!io.provider->recoveryAuthorized(io.generation)) { return { Modbus::Error::InvalidData }; }
+    return io.provider->_client.writeHoldingRegisters(address, count, values);
+}
+
+void Provider::finishDurableClear()
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_cleanup.valid) {
+        _cleanup.valid = false;
+        _cleanup.profile.reset();
+        _cleanupState = Actuation::CleanupState::Succeeded;
+    }
+    if (_recovery.snapshot().operatorAcknowledged) { _actuator.confirmOperatorRelease(); }
+    _controlOwned = false;
+    _ownershipUncertain = false;
+    _polled = false;
+}
+
+void Provider::processRecovery()
+{
+    auto recovery = _recovery.snapshot();
+    if (recovery.resolutionPending) {
+        bool cleared = _recovery.resolve(millis());
+        ESP_LOGW(TAG, "Operator attested independent device release for recovery record %s; durable clear %s",
+                recovery.recordId, cleared ? "succeeded" : "failed");
+        if (cleared) { finishDurableClear(); }
+    } else if (_recovery.snapshot().clearPending) {
+        if (_recovery.retryClear(millis())) { finishDurableClear(); }
+    } else {
+        Recovery::Endpoint endpoint;
+        std::shared_ptr<Profiles::Profile const> profile;
+        uint32_t generation;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            std::strncpy(endpoint.host, _config.Host, Recovery::MaxHost);
+            endpoint.port = _port; endpoint.unit = _unit;
+            generation = _generation; profile = _profile;
+        }
+        if (_recovery.begin(endpoint, profile.get(), millis())) {
+            auto open = NetworkSettings.isConnected()
+                ? _client.open(endpoint.host, endpoint.port, endpoint.unit) : Modbus::Result { Modbus::Error::Network };
+            if (!open) { _recovery.failed(Recovery::Reason::TransportFailed, millis(), cleanupTransportFailure(open)); }
+            else {
+                CommandIoContext context { this, generation, endpoint, profile.get() };
+                Actuation::RegisterIo io { &context, recoveryIoWrite, commandIoRead, recoveryIoAuthorized,
+                    nullptr, nullptr, commandIoReadInput };
+                _recovery.recover(*profile, io, millis);
+            }
+            _client.close();
+        }
+    }
+    _recovery.attemptFinished(millis());
+    std::lock_guard<std::mutex> lock(_mutex);
+    _busy = false;
 }
 
 void Provider::setAuthorization(void* context, Actuation::AuthorizationCallback callback)
@@ -118,7 +247,7 @@ bool Provider::commandAuthorized(uint32_t generation) const
     Actuation::AuthorizationCallback callback = nullptr;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (!_enabled || !_profile || _cleanup.valid || generation != _generation) { return false; }
+        if (_releaseRequested || _recovery.blocked() || !_enabled || !_profile || _cleanup.valid || generation != _generation) { return false; }
         context = _authorizationContext;
         callback = _authorization;
     }
@@ -126,13 +255,13 @@ bool Provider::commandAuthorized(uint32_t generation) const
     // The callback runs without our mutex and can race with reconfiguration.
     // Its approval must still refer to the generation checked above.
     std::lock_guard<std::mutex> lock(_mutex);
-    return _enabled && _profile && !_cleanup.valid && generation == _generation;
+    return !_releaseRequested && !_recovery.blocked() && _enabled && _profile && !_cleanup.valid && generation == _generation;
 }
 
 bool Provider::cleanupAuthorized(uint32_t token) const
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    return _cleanup.valid && token != 0 && token == _cleanup.token
+    return !_recovery.blocked() && _cleanup.valid && token != 0 && token == _cleanup.token
         && _cleanupState == Actuation::CleanupState::Running;
 }
 
@@ -150,7 +279,7 @@ bool Provider::submitCommand(Actuation::Command const& command, uint32_t& id)
     uint32_t generation;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (!_enabled || !_profile || _cleanup.valid) { return false; }
+        if (_releaseRequested || _recovery.blocked() || !_enabled || !_profile || _cleanup.valid) { return false; }
         generation = _generation;
     }
     if (!commandAuthorized(generation)) { return false; }
@@ -159,7 +288,7 @@ bool Provider::submitCommand(Actuation::Command const& command, uint32_t& id)
     TaskHandle_t worker = nullptr;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (generation == _generation && !_cleanup.valid && ensureWorkerLocked()) { worker = _worker; }
+        if (!_releaseRequested && !_recovery.blocked() && generation == _generation && !_cleanup.valid && ensureWorkerLocked()) { worker = _worker; }
     }
     if (!worker) {
         _mailbox.cancelPending(id);
@@ -170,9 +299,39 @@ bool Provider::submitCommand(Actuation::Command const& command, uint32_t& id)
     return true;
 }
 
+void Provider::requestRelease()
+{
+    _mailbox.cancelPending();
+    std::lock_guard<std::mutex> lock(_mutex);
+    _releaseRequested = true;
+    if (_controlOwned && !_cleanup.valid) { retainCleanupLocked(_config, _profile, _port, _unit); }
+    _controlOwned = false;
+}
+
+bool Provider::resumeCommands()
+{
+    auto command = _mailbox.snapshot().state;
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_busy || _controlOwned || _cleanup.valid || _recovery.blocked()
+            || command == Actuation::MailboxState::Pending || command == Actuation::MailboxState::Running) { return false; }
+    _releaseRequested = false;
+    return true;
+}
+
 bool Provider::cancelPendingCommand(uint32_t id)
 {
     return _mailbox.cancelPending(id);
+}
+
+Actuation::CommandResult Provider::commandResult() const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _commandLastResult;
+}
+bool Provider::ownershipUncertain() const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _ownershipUncertain;
 }
 
 Actuation::MailboxSnapshot Provider::commandSnapshot() const
@@ -194,11 +353,19 @@ void Provider::loop()
         if (_busy) { return; }
 
         uint32_t now = millis();
-        bool cleanupDue = _cleanup.valid
+        bool cleanupDue = !_recovery.blocked() && _cleanup.valid
             && (_cleanupState == Actuation::CleanupState::Pending
                 || (_cleanupState == Actuation::CleanupState::RetryWait
                     && now - _cleanupLastAttemptMs >= Actuation::CleanupRetryMs));
-        if (cleanupDue) {
+        if (_recovery.due(now)) {
+            if (!ensureWorkerLocked()) {
+                _recovery.unresolved(Recovery::Reason::TransportFailed);
+                return;
+            }
+            _recoveryWork = true;
+            _busy = true;
+            worker = _worker;
+        } else if (cleanupDue) {
             if (!ensureWorkerLocked()) {
                 ++_cleanupAttempts;
                 _cleanupLastAttemptMs = now;
@@ -290,7 +457,7 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
     uint32_t generation = envelope.generation;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (_enabled && !_cleanup.valid && generation != 0 && generation == _generation) {
+        if (!_releaseRequested && !_recovery.blocked() && _enabled && !_cleanup.valid && generation != 0 && generation == _generation) {
             config = _config;
             profile = _profile;
             port = _port;
@@ -298,6 +465,10 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         }
     }
 
+    Actuation::CommandResult result;
+    result.error = Actuation::CommandError::ExecutionFailed;
+    result.stage = Actuation::CommandStage::Operation;
+    result.execution.error = Actuation::ExecutionError::AuthorizationRevoked;
     bool success = false;
     if (profile && port && unit && commandAuthorized(generation) && NetworkSettings.isConnected()) {
         if (_actuatorGeneration != generation) {
@@ -306,16 +477,21 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         }
 
         auto open = _client.open(config.Host, port, unit);
+        if (!open) { result = cleanupTransportFailure(open); result.stage = Actuation::CommandStage::Operation; }
         if (open && commandAuthorized(generation)) {
-            CommandIoContext context { this, generation };
+            CommandIoContext context { this, generation, {}, profile.get() };
+            std::strncpy(context.endpoint.host, config.Host, Recovery::MaxHost);
+            context.endpoint.port = port; context.endpoint.unit = unit;
             Actuation::RegisterIo io {
                 &context,
                 commandIoWrite,
                 commandIoRead,
                 commandIoAuthorized,
+                prepareOwnership,
+                clearOwnership,
+                commandIoReadInput,
             };
 
-            Actuation::CommandResult result;
             bool handled = true;
             switch (envelope.command.action) {
                 case Actuation::Action::SetChargePowerW:
@@ -340,14 +516,23 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
             success = handled && static_cast<bool>(result);
         }
     }
+    if (!NetworkSettings.isConnected() && result.execution.error == Actuation::ExecutionError::AuthorizationRevoked) {
+        result = cleanupTransportFailure({ Modbus::Error::Network }); result.stage = Actuation::CommandStage::Operation;
+    }
     _client.close();
 
     bool ownsControl = _actuator.ownsControl();
     {
         std::lock_guard<std::mutex> lock(_mutex);
         _busy = false;
+        _commandLastResult = result;
+        _ownershipUncertain = ownsControl && !success;
         if (generation == _generation) {
             _controlOwned = ownsControl;
+            if (ownsControl && _releaseRequested && !_cleanup.valid) {
+                retainCleanupLocked(config, profile, port, unit);
+                _controlOwned = false;
+            }
             _polled = false;
         } else if (ownsControl && !_cleanup.valid && profile && port && unit) {
             retainCleanupLocked(config, profile, port, unit);
@@ -391,6 +576,8 @@ void Provider::processCleanup()
                 cleanupIoWrite,
                 cleanupIoRead,
                 cleanupIoAuthorized,
+                nullptr,
+                clearCleanupOwnership,
             };
             result = _actuator.releaseRetainedControl(io, *cleanup.profile);
         } else {
@@ -412,6 +599,7 @@ void Provider::processCleanup()
             _cleanup.profile.reset();
             _cleanupState = Actuation::CleanupState::Succeeded;
             _controlOwned = false;
+            _ownershipUncertain = false;
             _polled = false;
         } else {
             _cleanupLastAttemptMs = millis();
@@ -428,6 +616,14 @@ void Provider::worker()
 {
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        bool recoveryWork;
+        {
+            std::lock_guard<std::mutex> lock(_mutex);
+            recoveryWork = _recoveryWork;
+            _recoveryWork = false;
+        }
+        if (recoveryWork) { processRecovery(); continue; }
 
         Actuation::Envelope command;
         if (_mailbox.take(command)) {

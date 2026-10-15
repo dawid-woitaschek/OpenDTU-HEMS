@@ -12,6 +12,7 @@ enum class CommandStage : uint8_t {
     Acquire,
     Operation,
     Release,
+    Journal,
 };
 
 enum class CommandError : uint8_t {
@@ -19,6 +20,7 @@ enum class CommandError : uint8_t {
     PlanningFailed,
     ExecutionFailed,
     OwnershipOrphaned,
+    PersistenceFailed,
 };
 
 struct CommandResult {

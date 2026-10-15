@@ -66,6 +66,7 @@ int main()
     assert(hasCapability(marstek, Capability::Storage));
     assert(!hasCapability(marstek, Capability::Evse));
     assert(marstek.entryCount == 11);
+    assert(marstek.identityFieldCount == 0 && !marstek.releaseReplaySafe);
 
     auto soc = findEntry(marstek, "soc_pct");
     assert(soc && soc->address == 34002 && soc->type == Type::Uint16);
@@ -145,6 +146,10 @@ int main()
     assert(hasCapability(warp, Capability::Evse));
     assert(!hasCapability(warp, Capability::Storage));
     assert(warp.entryCount == 4);
+    assert(warp.identityFieldCount == 1 && !warp.releaseReplaySafe);
+    assert(warp.identityFields[0].space == Hems::Modbus::ReadFunction::InputRegisters);
+    assert(warp.identityFields[0].address == 10 && warp.identityFields[0].count == 2);
+    assert(warp.identitySource[0]);
     assert(findEntry(warp, "uptime_s") == nullptr);
 
     auto tableVersion = findEntry(warp, "register_table_version");

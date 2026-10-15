@@ -19,6 +19,7 @@
     "unit_id": 1,
     "address_base": 0
   },
+  "recovery": { "release_replay_safe": false },
   "telemetry": [
     {
       "key": "soc_pct",
