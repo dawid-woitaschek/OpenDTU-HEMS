@@ -12,7 +12,7 @@ OpenDTU-HEMS is supervisory home-energy automation, not the primary hardware saf
 - Independent Storage and EVSE Monitor only / HEMS control permissions, used by the policy core and providers now.
 - Authenticated manual semantic control in Monitor or Active when target readiness allows it.
 - Active automatic commands require target write permission; Monitor emits no automatic writes.
-- EV protection is the first Active policy. It observes even monitor-only EVSE telemetry and uses stop/release to protect writable storage, with 120 seconds of continuous fresh-false debounce.
+- EV protection is the first Active policy. It observes even monitor-only EVSE telemetry and blocks new discharge commands and stops only fresh observed storage discharge, preserving charging and idle modes. Release follows 120 seconds of continuous fresh-false only after an actual intervention.
 - One provider worker/client/mailbox for manual and automatic commands; bounded plans/readback, freshness and generation checks remain.
 - Release is attempted once as a courtesy on control/configuration changes. Failure never permanently locks control.
 - Durable recovery and temporary sessions are removed. Old journal files are ignored and administratively removable. Identity/replay metadata never authorizes or blocks normal commands.

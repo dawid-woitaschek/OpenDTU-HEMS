@@ -53,7 +53,7 @@ static void runWorker()
 using namespace Hems;
 static std::map<std::string, Profiles::Profile> selectedProfiles;
 static std::function<void()> onWrite;
-struct Write { std::string host; uint16_t port; uint8_t unit; uint16_t address; };
+struct Write { std::string host; uint16_t port; uint8_t unit; uint16_t address; uint16_t value; };
 static std::vector<Write> writes;
 static std::string wireHost;
 static uint16_t wirePort;
@@ -92,7 +92,7 @@ Result Client::open(char const* host, uint16_t port, uint8_t unit)
 void Client::close() {}
 Result Client::writeHoldingRegisters(uint16_t address, uint16_t count, uint16_t const* values)
 {
-    writes.push_back({ wireHost, wirePort, wireUnit, address });
+    writes.push_back({ wireHost, wirePort, wireUnit, address, values[0] });
     for (uint16_t i = 0; i < count; ++i) { registers[address + i] = values[i]; }
     if (onWrite) { auto callback = std::move(onWrite); onWrite = {}; callback(); }
     return writeFails ? Result { Error::Timeout } : Result {};
@@ -165,6 +165,84 @@ int main()
     StorageConfig storage; storage.Enabled = true; strcpy(storage.Host, "storage.invalid"); strcpy(storage.Profile, storageProfile.id);
     Evse::BindingConfig evse; strcpy(evse.Profile, evseProfile.id);
 
+    auto storageWrites = [](uint16_t address, uint16_t value) {
+        size_t count = 0;
+        for (auto const& write : writes) {
+            if (write.host == "storage.invalid" && write.address == address && write.value == value) { ++count; }
+        }
+        return count;
+    };
+    // EV protection restricts discharge without interrupting charging or idle storage.
+    // Exercise all four permissions in both Monitor and Active through the production worker.
+    for (auto mode : { Mode::Monitor, Mode::Active })
+    for (bool storageControl : { false, true }) for (bool evseControl : { false, true })
+    for (int16_t power : { -500, 500, 0 }) {
+        tasks.clear(); writes.clear(); registers.clear(); inputRegisters.clear(); testNow = 1000;
+        writeFails = readFails = false; NetworkSettings.connected = true; freshRegisters();
+        registers[30006] = static_cast<uint16_t>(-power); // Profile normalizes AC power with scale -1.
+        storage.Control = storageControl ? ControlMode::HemsControl : ControlMode::MonitorOnly;
+        evse.Control = evseControl ? ControlMode::HemsControl : ControlMode::MonitorOnly;
+        Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse); config.Mode = mode;
+        Controller controller; Scheduler scheduler; controller.init(scheduler);
+        auto tick = [&] { ++testNow; scheduler.execute(); runWorker(); };
+        tick(); tick(); tick();
+        bool actionable = mode == Mode::Active && storageControl;
+        bool intervened = actionable && power < 0;
+        assert(!controller.getEvProtectionShadowSnapshot().proposedConstraints.storage.dischargeAllowed);
+        assert(controller.getConstraints().storage.dischargeAllowed == !actionable);
+        assert(storageWrites(42010, 0) == (intervened ? 1u : 0u));
+        assert(storageWrites(42000, 21947) == 0);
+        if (intervened) {
+            auto command = controller.getActuationCommandSnapshot(ControlTarget::Storage);
+            assert(command.command.automatic && command.command.action == Actuation::Action::Stop);
+            registers[30006] = 0; // Observe the stopped storage on the next normal poll.
+        }
+        if (actionable) {
+            uint32_t id;
+            Actuation::Command discharge { ControlTarget::Storage, Actuation::Action::SetDischargePowerW, true, 500 };
+            assert(!controller.submitManual(discharge, id));
+            assert(!controller.submitActuation(discharge, id));
+            if (!intervened) {
+                Actuation::Command charge { ControlTarget::Storage, Actuation::Action::SetChargePowerW, true, 500 };
+                assert(controller.submitManual(charge, id)); runWorker(); tick(); tick();
+                // A manual charge owns the provider session but must not acquire an EV-protection release.
+                assert(storageWrites(42010, 0) == 0);
+            }
+        }
+        inputRegisters[1003] = 2;
+        for (int i = 0; i < 26; ++i) { testNow += 5000; tick(); tick(); }
+        assert(controller.getConstraints().storage.dischargeAllowed);
+        assert(storageWrites(42010, 0) == (intervened ? 1u : 0u));
+        assert(storageWrites(42000, 21947) == (intervened ? 1u : 0u));
+    }
+
+    // Release only an actual intervention, and never interrupt a subsequent manual charge.
+    for (bool cancelledStop : { false, true }) {
+        tasks.clear(); writes.clear(); registers.clear(); inputRegisters.clear(); testNow = 1000; freshRegisters();
+        registers[30006] = 500; // Discharging.
+        storage.Control = ControlMode::HemsControl; evse.Control = ControlMode::MonitorOnly;
+        Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse); config.Mode = Mode::Active;
+        Controller controller; Scheduler scheduler; controller.init(scheduler);
+        auto tick = [&] { ++testNow; scheduler.execute(); runWorker(); };
+        tick(); ++testNow; scheduler.execute(); // Stop queued but not yet executed.
+        assert(controller.getActuationCommandSnapshot(ControlTarget::Storage).state == Actuation::MailboxState::Pending);
+        if (cancelledStop) { assert(controller.cancelPendingActuation(ControlTarget::Storage)); }
+        runWorker(); registers[30006] = 0; tick();
+        testNow += 5000; tick(); tick();
+        if (!cancelledStop) {
+            uint32_t id;
+            Actuation::Command charge { ControlTarget::Storage, Actuation::Action::SetChargePowerW, true, 500 };
+            assert(controller.submitManual(charge, id)); runWorker();
+            registers[30006] = static_cast<uint16_t>(-500); // Fresh charging after manual override.
+            tick(); tick(); testNow += 5000; tick(); tick();
+            assert(controller.getStorageSnapshot().sample.acPowerW.value == 500);
+        }
+        inputRegisters[1003] = 2;
+        for (int i = 0; i < 26; ++i) { testNow += 5000; tick(); tick(); }
+        assert(storageWrites(42010, 0) == (cancelledStop ? 0u : 1u));
+        assert(storageWrites(42000, 21947) == 0);
+    }
+
     // Actual controller, policy, providers, mailbox, planner and executor for all four permissions.
     for (bool storageControl : { false, true }) for (bool evseControl : { false, true }) {
         tasks.clear(); writes.clear(); registers.clear(); testNow = 1000;
@@ -196,6 +274,7 @@ int main()
         if (evseControl) { assert(controller.getActuationCommandResult(ControlTarget::Evse).execution.readbackVerified); }
         if (storageControl) { assert(controller.getActuationCommandResult(ControlTarget::Storage).execution.readbackVerified); }
         assert(!controller.submitActuation(command, id)); // Monitor never queues automatic writes.
+        registers[30006] = 500; testNow += 5000; tick(); tick(); // Fresh actual discharge before Active.
         writes.clear(); config.Mode = Mode::Active; controller.updateSettings(); tick(); tick();
         assert(controller.getConstraints().storage.dischargeAllowed == !storageControl);
         if (storageControl) {
@@ -207,6 +286,7 @@ int main()
         assert(controller.submitActuation(command, id) == evseControl); runWorker(); tick(); tick();
         command = { ControlTarget::Storage, Actuation::Action::Stop };
         assert(controller.submitActuation(command, id) == storageControl); runWorker(); tick(); tick();
+        registers[30006] = 0; // Storage has stopped; no repeated intervention while idle.
         // Real stop-debounce release with continuously refreshed false EV telemetry.
         inputRegisters[1003] = 2;
         for (int i = 0; i < 26; ++i) { testNow += 5000; tick(); tick(); }

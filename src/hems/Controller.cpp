@@ -187,16 +187,26 @@ void Controller::applyEvProtection()
     auto current = _storage.commandSnapshot();
     if (_policyCommandId && current.id == _policyCommandId) {
         if (current.state == Actuation::MailboxState::Pending || current.state == Actuation::MailboxState::Running) { return; }
+        if (current.command.action == Actuation::Action::Stop) {
+            // Queueing alone is not an intervention: cancelled/revoked work may never write.
+            _evProtectionOwned = _evProtectionOwned || _storage.commandResult().execution.writeAttempted;
+        }
         _policyCommandId = 0;
     }
+    if (!current.command.automatic && current.state == Actuation::MailboxState::Succeeded
+            && current.command.action != Actuation::Action::SetTargetSocPct) {
+        // A later manual operating command supersedes the protection stop.
+        _evProtectionOwned = false;
+    }
     bool block = !getConstraints().storage.dischargeAllowed;
-    bool completedStop = current.state == Actuation::MailboxState::Succeeded && current.command.automatic
-        && current.command.action == Actuation::Action::Stop;
-    // Reassert after a manual override, observed discharge, or an actual failed command.
     auto storage = _storage.snapshot();
     bool observedDischarge = storage.valid && !storage.stale
-        && storage.sample.acPowerW.valid && storage.sample.acPowerW.value < -10;
-    if (block && _evProtectionOwned && completedStop && !observedDischarge) { return; }
+        && storage.sample.acPowerW.valid && storage.sample.acPowerW.value < 0;
+    if (storage.valid && !storage.stale && storage.sample.acPowerW.valid && storage.sample.acPowerW.value > 0) {
+        // Charging has superseded the stopped state; do not release that charging mode later.
+        _evProtectionOwned = false;
+    }
+    if (block && !observedDischarge) { return; }
     if (!block && !_evProtectionOwned) { return; }
     auto now = millis();
     if (_lastPolicyAttemptMs && now - _lastPolicyAttemptMs < 5000) { return; }
@@ -206,8 +216,7 @@ void Controller::applyEvProtection()
     if (submitActuation(command, id)) {
         _lastPolicyAttemptMs = now;
         _policyCommandId = id;
-        // A failed stop may still have reached the device; retain release courtesy.
-        _evProtectionOwned = block;
+        if (!block) { _evProtectionOwned = false; } // Best-effort release, once.
     }
 }
 

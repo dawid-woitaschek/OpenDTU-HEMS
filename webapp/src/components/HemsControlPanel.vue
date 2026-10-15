@@ -32,7 +32,7 @@
                         {{
                             status.constraints.storage.discharge_allowed
                                 ? 'Discharge permitted'
-                                : 'EV protection blocks discharge (semantic stop)'
+                                : 'EV protection blocks discharge'
                         }}
                     </dd>
                     <dt class="col-sm-4">EV protection proposal</dt>

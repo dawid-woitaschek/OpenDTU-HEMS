@@ -20,7 +20,7 @@ Durable journals, ownership reconstruction, attestation and temporary-session co
 
 Fresh EV charging immediately proposes discharge protection. Protection clears only after 120 seconds of continuously fresh not-charging observations; resumed charging cancels debounce, and unknown/stale telemetry cannot clear it.
 
-Active plus Storage HEMS control applies the discharge constraint and semantic stop; the curated storage profile has no dedicated discharge-only limit, so forced charging also stops. Release follows debounce. Monitor-only EVSE telemetry remains fully usable. Proposed versus actionable constraints and actual command results are observable. No automatic EVSE/economic policy is installed yet; its generic Active command path is permission-gated and tested.
+Active plus Storage HEMS control rejects new discharge commands while allowing charge commands. Semantic Stop is sent only for fresh observed storage discharge; charging and idle storage are left alone. After debounce, release is attempted only after an actual protection intervention that has not been superseded by charging or a later manual operating command. Monitor-only EVSE telemetry remains fully usable. Proposed versus actionable constraints and actual command results are observable. No automatic EVSE/economic policy is installed yet; its generic Active command path is permission-gated and tested.
 
 ## Visible UI
 
@@ -46,7 +46,7 @@ No physical WARP/Marstek control or watchdog/reboot behavior is claimed as teste
 2. Log in. In HEMS → Devices / Profiles import the current repository WARP and Marstek JSON. Replace existing same-ID runtime profiles; bind the appropriate profile and configure endpoint/port/unit for each device.
 3. In HEMS → Settings choose Monitor. Set each desired device type to HEMS control; leave the other Monitor only if desired. Save each permission.
 4. Wait for reachable, fresh telemetry. Exercise WARP current/stop/release and storage bounded charge/discharge/stop/SoC/release. Inspect request, transport, verified readback and fresh observed telemetry separately.
-5. For EV protection choose Storage HEMS control, optionally EVSE Monitor only, then Active. Confirm fresh EV charging leads to storage stop; fresh-false for 120 seconds leads to release. Returning to Monitor stops the automatic producer and attempts release.
+5. For EV protection choose Storage HEMS control, optionally EVSE Monitor only, then Active. Confirm fresh EV charging blocks new discharge requests, stops fresh observed storage discharge, and leaves charging/idle storage alone; fresh-false for 120 seconds permits release only after protection actually intervened. Returning to Monitor stops the automatic producer and attempts release.
 6. If a command fails, inspect exact error and telemetry. Once communication/freshness return, controls re-enable automatically. Device-side reset/disconnection remains available independently.
 
 Next work is reference-hardware validation and actual mapping corrections, then tariff provider → optimizer Shadow → optimizer Active → PV forecast → polish/release. See [Roadmap](HEMS_Roadmap.md).
