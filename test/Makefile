@@ -15,6 +15,8 @@ TEST_PROFILE_CATALOG = test_profile_catalog
 TEST_MODBUS_PROFILES = test_modbus_profiles
 TEST_CONTROL_EXECUTION = test_control_execution
 TEST_SEMANTIC_ACTUATORS = test_semantic_actuators
+TEST_CONTROL_READINESS = test_control_readiness
+TEST_ACTUATION_MAILBOX = test_actuation_mailbox
 TEST_STORAGE = test_storage
 TEST_HOST = test_host
 TEST_HEMS_MODEL = test_hems_model
@@ -25,7 +27,7 @@ ARDUINOJSON ?= ../.pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 
 .PHONY: all clean test help
 
-all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
+all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_CONTROL_READINESS) $(TEST_ACTUATION_MAILBOX) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
 
 $(TEST_OVERSCALING): test_overscaling.cpp ../src/OverscalingCalculator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $< ../src/OverscalingCalculator.cpp
@@ -63,6 +65,12 @@ $(TEST_CONTROL_EXECUTION): test_control_execution.cpp ../src/hems/profiles/Contr
 $(TEST_SEMANTIC_ACTUATORS): test_semantic_actuators.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
+$(TEST_CONTROL_READINESS): test_control_readiness.cpp ../src/hems/actuation/Readiness.cpp
+	$(CXX) $(CXXFLAGS) -I../include -o $@ $^
+
+$(TEST_ACTUATION_MAILBOX): test_actuation_mailbox.cpp ../src/hems/actuation/Mailbox.cpp
+	$(CXX) $(CXXFLAGS) -I../include -pthread -o $@ $^
+
 $(TEST_STORAGE): test_storage.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/storage/State.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
@@ -96,6 +104,8 @@ test: all
 	./$(TEST_MODBUS_PROFILES)
 	./$(TEST_CONTROL_EXECUTION)
 	./$(TEST_SEMANTIC_ACTUATORS)
+	./$(TEST_CONTROL_READINESS)
+	./$(TEST_ACTUATION_MAILBOX)
 	./$(TEST_STORAGE)
 	./$(TEST_HOST)
 	./$(TEST_HEMS_MODEL)
@@ -104,7 +114,7 @@ test: all
 	./$(TEST_FIRMWARE_UPDATE)
 
 clean:
-	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
+	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_CONTROL_READINESS) $(TEST_ACTUATION_MAILBOX) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE)
 
 help:
 	@echo "Available targets:"

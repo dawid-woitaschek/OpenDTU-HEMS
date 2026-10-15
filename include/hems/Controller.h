@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <hems/Control.h>
+#include <hems/actuation/Readiness.h>
 #include <hems/constraints/Constraints.h>
 #include <hems/model/State.h>
 #include <hems/policies/EvProtection.h>
@@ -23,6 +24,7 @@ public:
     Mode getMode() const;
     ControlMode getControlMode(ControlTarget target) const;
     bool controlPermissionGranted(ControlTarget target) const;
+    Actuation::Readiness getActuationReadiness(ControlTarget target) const;
     bool actuationAllowed(ControlTarget target) const;
     Warp::Snapshot getWarpSnapshot() const;
     Storage::Snapshot getStorageSnapshot() const;

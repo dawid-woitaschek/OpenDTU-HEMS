@@ -17,6 +17,7 @@ public:
     void configure(WarpConfig const& config, Evse::BindingConfig const& binding, bool monitor);
     void loop(); // Scheduler only: dispatches, never performs network I/O.
     Snapshot snapshot() const;
+    bool controlCapable() const;
 
 private:
     static void workerEntry(void* context);

@@ -54,6 +54,12 @@ Snapshot Provider::snapshot() const
     return result;
 }
 
+bool Provider::controlCapable() const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _profile && Profiles::hasControl(*_profile);
+}
+
 void Provider::loop()
 {
     std::lock_guard<std::mutex> lock(_mutex);

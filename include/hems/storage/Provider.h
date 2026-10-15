@@ -16,6 +16,7 @@ public:
     void configure(StorageConfig const& config, bool monitor);
     void loop(); // Scheduler only: dispatches, never performs network I/O.
     Snapshot snapshot() const;
+    bool controlCapable() const;
 
 private:
     static void workerEntry(void* context);

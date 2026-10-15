@@ -135,14 +135,47 @@ bool Controller::controlPermissionGranted(ControlTarget target) const
     return getControlMode(target) == ControlMode::HemsControl;
 }
 
+Actuation::Readiness Controller::getActuationReadiness(ControlTarget target) const
+{
+    Actuation::ReadinessInput input;
+    // There is deliberately no global Active mode yet. Keeping this false makes
+    // the readiness model observable without turning any future command path on.
+    input.globalActive = false;
+    input.permissionGranted = controlPermissionGranted(target);
+
+    switch (target) {
+        case ControlTarget::Evse: {
+            auto snapshot = _warp.snapshot();
+            input.configured = snapshot.configured;
+            input.enabled = snapshot.enabled;
+            input.profileControllable = _warp.controlCapable();
+            input.reachable = snapshot.reachable;
+            input.telemetryFresh = snapshot.valid && !snapshot.stale;
+            input.faulted = snapshot.valid && snapshot.sample.chargingState == 4;
+            break;
+        }
+        case ControlTarget::Storage: {
+            auto snapshot = _storage.snapshot();
+            input.configured = snapshot.configured;
+            input.enabled = snapshot.enabled;
+            input.profileControllable = _storage.controlCapable();
+            input.reachable = snapshot.reachable;
+            input.telemetryFresh = snapshot.valid && !snapshot.stale;
+            input.faulted = snapshot.valid
+                && ((snapshot.sample.faultActive.valid && snapshot.sample.faultActive.value)
+                    || (snapshot.sample.faultCode.valid && snapshot.sample.faultCode.value != 0));
+            break;
+        }
+        default:
+            break;
+    }
+
+    return Actuation::evaluateReadiness(input);
+}
+
 bool Controller::actuationAllowed(ControlTarget target) const
 {
-    // Persisting a device-level grant must never make this Monitor-only milestone
-    // capable of writing hardware. The future Active controller must extend this
-    // gate with its global mode, device-enabled and runtime-safety checks before
-    // any actuator can receive a command.
-    if (!controlPermissionGranted(target)) { return false; }
-    return false;
+    return getActuationReadiness(target).allowed();
 }
 
 Warp::Snapshot Controller::getWarpSnapshot() const
