@@ -24,7 +24,13 @@ A provider configuration change cancels pending work and advances the provider g
 
 The mailbox never overwrites a pending or running command and it does not accumulate stale power requests.
 
-Before a future Active mode can be enabled, shutdown/release semantics still need an explicit lifecycle policy. In particular, revoking Active or changing an endpoint while remote ownership may exist must define whether to stop, release, or both. This document does not pretend that problem vanishes merely because the write path is bounded.
+### Ownership across configuration generations
+
+A generation change is not allowed to silently erase local knowledge that the previous endpoint may still be under remote control. If an actuator still owns control when its provider resets for a new generation, the actuator enters an `OwnershipOrphaned` fail-closed state instead of clearing its session. From that state all semantic operations, including stop/release against the new generation, are rejected before any register write is emitted.
+
+This is deliberately conservative. The new generation cannot prove that its endpoint/profile is the same remote owner that was acquired previously, so attempting a release there could write to the wrong device. The orphan barrier therefore prevents accidental cross-endpoint control while preserving the fact that cleanup is still required.
+
+Before a future Active mode can be enabled, shutdown/release semantics still need the second half of this lifecycle: retain the old endpoint/profile long enough to perform an explicit bounded cleanup, define retry/failure behavior, and expose that cleanup state diagnostically. The orphan barrier is a safety stop, not a claim that remote ownership has been released.
 
 ## WARP3 Smart control provenance
 

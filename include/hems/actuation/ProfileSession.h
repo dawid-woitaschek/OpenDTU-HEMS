@@ -18,6 +18,7 @@ enum class CommandError : uint8_t {
     None,
     PlanningFailed,
     ExecutionFailed,
+    OwnershipOrphaned,
 };
 
 struct CommandResult {

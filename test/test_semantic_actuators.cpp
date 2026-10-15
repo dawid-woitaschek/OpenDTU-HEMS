@@ -216,5 +216,40 @@ int main()
     assert(!wrongProfile && wrongProfile.planning.error == Profiles::ControlPlanError::ControlUnavailable);
     assert(fake.writes.size() == before);
 
+    // A provider generation change must not silently forget ownership of the
+    // previous endpoint. reset() therefore turns an owned actuator into a
+    // fail-closed orphaned state and subsequent commands emit no writes.
+    FakeIo lifecycleStorageWire;
+    Actuation::RegisterIo lifecycleStorageIo { &lifecycleStorageWire, fakeWrite, fakeRead };
+    Storage::Actuator lifecycleBattery;
+    assert(lifecycleBattery.setChargePower(lifecycleStorageIo, storage, 500));
+    assert(lifecycleBattery.ownsControl());
+    before = lifecycleStorageWire.writes.size();
+    assert(!lifecycleBattery.reset());
+    assert(lifecycleBattery.ownershipOrphaned());
+    assert(lifecycleBattery.ownsControl());
+    auto orphanedStorage = lifecycleBattery.stop(lifecycleStorageIo, storage);
+    assert(!orphanedStorage && orphanedStorage.error == Actuation::CommandError::OwnershipOrphaned);
+    assert(lifecycleStorageWire.writes.size() == before);
+
+    FakeIo lifecycleEvseWire;
+    Actuation::RegisterIo lifecycleEvseIo { &lifecycleEvseWire, fakeWrite, fakeRead };
+    Evse::Actuator lifecycleCharger;
+    assert(lifecycleCharger.setCurrent(lifecycleEvseIo, evse, 6));
+    assert(lifecycleCharger.ownsControl());
+    before = lifecycleEvseWire.writes.size();
+    assert(!lifecycleCharger.reset());
+    assert(lifecycleCharger.ownershipOrphaned());
+    assert(lifecycleCharger.ownsControl());
+    auto orphanedEvse = lifecycleCharger.stop(lifecycleEvseIo, evse);
+    assert(!orphanedEvse && orphanedEvse.error == Actuation::CommandError::OwnershipOrphaned);
+    assert(lifecycleEvseWire.writes.size() == before);
+
+    // Reset remains harmless before ownership has ever been taken.
+    Storage::Actuator cleanBattery;
+    Evse::Actuator cleanCharger;
+    assert(cleanBattery.reset() && !cleanBattery.ownershipOrphaned());
+    assert(cleanCharger.reset() && !cleanCharger.ownershipOrphaned());
+
     std::cout << "Semantic storage and EVSE actuator tests passed\n";
 }
