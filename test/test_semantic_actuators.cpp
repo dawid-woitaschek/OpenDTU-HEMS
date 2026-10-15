@@ -121,26 +121,32 @@ Profiles::Profile evseProfile()
     Profiles::Profile p;
     p.schemaVersion = 2;
     p.capabilities = Profiles::capabilityBit(Profiles::Capability::Evse);
+    p.releaseFirstWrite = 0;
+    p.releaseWriteCount = 1;
     p.controlOperationCount = 2;
-    p.controlWriteCount = 2;
+    p.controlWriteCount = 3;
+
+    p.controlWrites[0].address = 1002;
+    p.controlWrites[0].type = Profiles::Type::Uint32;
+    p.controlWrites[0].constant = 32000;
 
     std::strcpy(p.controlOperations[0].key, "set_current_a");
     p.controlOperations[0].hasInput = true;
     p.controlOperations[0].minimum = 6;
     p.controlOperations[0].maximum = 32;
     p.controlOperations[0].step = 1;
-    p.controlOperations[0].firstWrite = 0;
+    p.controlOperations[0].firstWrite = 1;
     p.controlOperations[0].writeCount = 1;
-    p.controlWrites[0].address = 1002;
-    p.controlWrites[0].type = Profiles::Type::Uint32;
-    p.controlWrites[0].usesInput = true;
-    p.controlWrites[0].scale = 0.001;
-
-    std::strcpy(p.controlOperations[1].key, "stop_charging");
-    p.controlOperations[1].firstWrite = 1;
-    p.controlOperations[1].writeCount = 1;
     p.controlWrites[1].address = 1002;
     p.controlWrites[1].type = Profiles::Type::Uint32;
+    p.controlWrites[1].usesInput = true;
+    p.controlWrites[1].scale = 0.001;
+
+    std::strcpy(p.controlOperations[1].key, "stop_charging");
+    p.controlOperations[1].firstWrite = 2;
+    p.controlOperations[1].writeCount = 1;
+    p.controlWrites[2].address = 1002;
+    p.controlWrites[2].type = Profiles::Type::Uint32;
     return p;
 }
 
@@ -191,16 +197,19 @@ int main()
     before = fake.writes.size();
     assert(charger.setCurrent(io, evse, 6));
     assert(charger.ownsControl());
-    assert(fake.writes.size() == before + 1); // profile has no acquire write
+    assert(fake.writes.size() == before + 1); // no acquire write
     assert(fake.writes.back().address == 1002 && fake.writes.back().values.size() == 2);
     assert(fake.writes.back().values[0] == 0 && fake.writes.back().values[1] == 6000);
 
     assert(charger.stop(io, evse));
     assert(fake.writes.back().address == 1002);
     assert(fake.writes.back().values[0] == 0 && fake.writes.back().values[1] == 0);
+
     before = fake.writes.size();
     assert(charger.releaseControl(io, evse));
-    assert(!charger.ownsControl() && fake.writes.size() == before); // no release metadata
+    assert(!charger.ownsControl() && fake.writes.size() == before + 1);
+    assert(fake.writes.back().address == 1002 && fake.writes.back().values.size() == 2);
+    assert(fake.writes.back().values[0] == 0 && fake.writes.back().values[1] == 32000);
 
     before = fake.writes.size();
     auto wrongProfile = charger.setCurrent(io, storage, 6);

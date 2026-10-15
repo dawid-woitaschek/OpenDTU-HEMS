@@ -36,7 +36,8 @@ Official Tinkerforge firmware source confirms:
 - holding register `1002` is the 32-bit `allowed_current` value;
 - writes to `1002` call `evse_common.set_modbus_current(...)`;
 - that function updates the Modbus TCP charging-slot maximum current;
-- charging-slot current semantics accept `0` or `6000..32000` mA, with values below 6000 considered inoperative.
+- charging-slot current semantics accept `0` or `6000..32000` mA, with values below 6000 considered inoperative;
+- when Modbus control is enabled, Tinkerforge initializes the Modbus charging slot as active with a `32000` mA maximum current.
 
 Relevant upstream source:
 
@@ -49,7 +50,10 @@ Verified against Tinkerforge `esp32-firmware` revision `05762aabb8213219d63f8a52
 Therefore the OpenDTU-HEMS profile semantics are:
 
 - `set_current_a(6..32)` -> holding `1002/1003`, uint32, raw mA (`6 A` -> `6000`);
-- `stop_charging()` -> holding `1002/1003 = 0`.
+- `stop_charging()` -> holding `1002/1003 = 0`;
+- `releaseControl()` -> holding `1002/1003 = 32000`, restoring Tinkerforge's neutral/default Modbus-slot limit without changing the charger's Modbus-enable configuration.
+
+`stop` and `release` deliberately have different meanings: stop imposes a zero-current HEMS limit, while release removes the HEMS-specific current cap and leaves the charger's other slots, cable limits and safety logic in charge.
 
 This validates the profile metadata and semantic actuator mapping. It does not constitute a physical charger validation.
 
