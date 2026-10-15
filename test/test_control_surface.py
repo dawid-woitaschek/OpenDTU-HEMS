@@ -26,6 +26,7 @@ evse_store = (root / 'src/hems/evse/SettingsStore.cpp').read_text()
 devices_ui = (root / 'webapp/src/views/HemsDevicesView.vue').read_text()
 assert 'return enabled ? _config : BindingConfig {};' in evse_store
 assert 'effectiveConfig(candidate)' in evse_store
+assert 'if (enabled && !config.Profile[0]) { return false; }' in evse_store
 assert "this.evseBinding.profile = '';" in devices_ui
 assert "this.evseBinding.control_mode = 'monitor';" in devices_ui
 assert 'WARP (legacy)' not in devices_ui
