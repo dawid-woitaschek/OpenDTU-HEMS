@@ -1,8 +1,10 @@
 # OpenDTU-HEMS Development Roadmap
 
-> This is the living implementation tracker for OpenDTU-HEMS.
+> This is the authoritative implementation tracker for OpenDTU-HEMS.
 >
-> The architecture and long-term design live in [`HEMS_Architecture.md`](HEMS_Architecture.md). This file tracks the current milestone, acceptance criteria and implementation order.
+> Update this file whenever the active milestone, branch structure, validation state, or implementation order changes. It must be sufficient to resume work after losing conversational context.
+>
+> Long-term architecture lives in [`HEMS_Architecture.md`](HEMS_Architecture.md). Detailed current implementation facts live in [`HEMS_Current_Status.md`](HEMS_Current_Status.md).
 
 ## Status legend
 
@@ -11,644 +13,472 @@
 | ⚪ Planned | Scope defined, not started |
 | 🔵 In development | Implementation work in progress |
 | 🟡 Validation | Code exists; CI and/or hardware validation still pending |
-| 🟢 Completed | Merged and validated |
+| 🟢 Completed | Merged and sufficiently validated for this milestone |
 | 🔴 Blocked | Cannot proceed until a dependency/problem is resolved |
 
-## Current status
+## Current project position
 
-**Current milestone:** PR #5 - Generic Modbus storage telemetry
+**Snapshot:** 2026-10-15
 
-**Current phase:** 🔵 In development
+**Integration branch:** `integration/hems-next`
 
-PR #4 is merged at `61c170ea89244cf5d5aaa3dd4beb2260eb650587` and its reference ESP32-S3 import/export gate passed. PR #3 remains 🟡 Validation because the real WARP3 telemetry/recovery/packet-capture/W5500 checks were deliberately deferred by the project owner. Those deferred WARP checks do not block PR #5. Current work adds a manufacturer-neutral, read-only storage provider driven by Modbus profiles; Marstek Venus E 3.0 is the first reference profile/hardware, not a hard-coded provider.
+**Integration baseline:** `1724b5d459ec9068333b3ace178468dedbf4aaea`
 
-## Milestone overview
+That baseline includes the repository-backed firmware update infrastructure from merged PR #19.
 
-| Milestone | Scope | Status |
+**Current milestone:** PR #22, HEMS Actuation Foundation
+
+**Current branch:** `feature/hems-actuation-foundation`
+
+**Current branch head at roadmap refresh:** `4f6b8e125a6c5cb57aec94add10cdb04f4dfe14c`
+
+**Current phase:** 🟡 Validation
+
+Branch structure is intentionally flat:
+
+```text
+integration/hems-next
+└── #22 feature/hems-actuation-foundation
+```
+
+PRs #18, #20 and #21 were closed without merge and consolidated into #22. Their functionality is preserved in one commit directly on the shared integration base. Do not rebuild a stacked PR chain for this work.
+
+## Non-negotiable architecture rules
+
+- One actuator, one boss.
+- Existing DPL remains the fast physical regulation path and must not depend on slower HEMS network/policy work.
+- Telemetry and commands for one device use the same provider worker and Modbus client.
+- Missing/stale/failed telemetry is never fabricated as zero or false.
+- Importing a control-capable profile never grants permission to write.
+- Per-device `HEMS control` permission alone never grants permission to write.
+- Production writes require the global Active gate, runtime readiness and safety/arbitration.
+- No unrestricted raw-register write API is planned for normal operation.
+- Hardware validation is not implied by native tests.
+
+## Capability overview
+
+| Area | Status | Notes |
 |---|---|---|
-| PR #1 | HEMS CI build matrix and project baseline documentation | 🟢 Completed |
-| PR #2 | HEMS core, configuration model and Web UI skeleton | 🟢 Completed |
-| PR #3 | Shared Modbus TCP layer and WARP telemetry | 🟡 Validation |
-| PR #4 | Modbus profile engine and profile import/export | 🟢 Completed |
-| PR #5 | Generic Modbus storage telemetry | 🔵 In development |
-| PR #6 | Normalized HEMS state and constraint engine | ⚪ Planned |
-| PR #7 | EV protection policy in Shadow mode | ⚪ Planned |
-| PR #8 | Storage write layer and manual control tests | ⚪ Planned |
-| PR #9 | EV protection policy in Active mode | ⚪ Planned |
-| PR #10 | Dynamic tariff provider | ⚪ Planned |
-| PR #11 | Economic optimizer in Shadow mode | ⚪ Planned |
-| PR #12 | Economic optimizer in Active mode | ⚪ Planned |
-| PR #13 | PV forecast provider and forecast-aware policy | ⚪ Planned |
+| Build/CI infrastructure | 🟢 Completed | Dedicated HEMS build matrix and OTA artifacts exist |
+| HEMS core/UI | 🟢 Completed | Disabled/Monitor, config, status and UI |
+| Shared Modbus TCP read path | 🟢 Implemented / 🟡 physical validation | Real WARP/W5500 validation remains incomplete |
+| Modbus profile engine v1 | 🟢 Completed | Read-only profiles, import/export/persistence |
+| Generic storage telemetry | 🟢 Implemented / 🟡 physical validation | Manufacturer-neutral provider exists |
+| Normalized state + constraints | 🟢 Completed | Grid/Storage/EVSE normalization and quality semantics |
+| EV protection Shadow | 🟢 Implemented | Corrected debounce semantics are in #22 until merged |
+| Device profile catalog | 🟢 Completed | WARP3 Smart and Marstek Venus E 3.0 reference profiles |
+| Profile schema v2 control metadata | 🟢 Completed | Declarative bounded control metadata only |
+| Firmware update channels | 🟢 Completed | PR #19 merged into `integration/hems-next` |
+| Actuation foundation | 🟡 Validation | PR #22 |
+| Real device write validation | ⚪ Planned | WARP + Marstek hardware gate |
+| Global HEMS Active mode | ⚪ Planned | Must wait for lifecycle + hardware validation |
+| EV protection Active | ⚪ Planned | First automatic control policy |
+| Dynamic tariff provider | ⚪ Planned | No active economic control initially |
+| Economic optimizer Shadow | ⚪ Planned | Plan only, no writes |
+| Economic optimizer Active | ⚪ Planned | Only after Shadow validation |
+| PV forecast integration | ⚪ Planned | Forecast-aware optimization |
 
-The numbering above describes the intended implementation order. Actual GitHub pull-request numbers may differ if maintenance/fix PRs are required in between.
+## Completed foundation
 
----
-
-## PR #1 - HEMS build infrastructure
-
-**Status:** 🟢 Completed
-
-**Branch:** `ci/hems-build-matrix`  
-**GitHub PR:** `#1`
-
-### Goal
-
-Create a dedicated OpenDTU-HEMS build pipeline that produces flashable firmware for representative ESP32 >=8 MB targets before runtime HEMS code is introduced.
-
-### Scope
-
-- dedicated OpenDTU-HEMS GitHub Actions workflow;
-- WebApp build;
-- PlatformIO build matrix;
-- OTA firmware artifacts;
-- factory firmware artifacts;
-- reference Fusion v2 builds;
-- generic >=8 MB ESP32/S3 builds;
-- project architecture and roadmap documentation;
-- no HEMS runtime behavior changes;
-- no device writes.
-
-### Build targets
+The implemented read/decision path is:
 
 ```text
-generic_esp32_8mb
-generic_esp32_16mb_psram
-generic_esp32s3
-generic_esp32s3_usb
-generic_esp32s3_usb_octal_psram
-generic_esp32s3_usb_quad_psram
-opendtufusionv2
-opendtufusionv2_poe
+Devices / providers
+    ↓
+read-only telemetry
+    ↓
+normalized HEMS state
+    ↓
+constraint model
+    ↓
+Shadow policies
 ```
 
-### Acceptance criteria
-
-- [x] dedicated HEMS workflow created;
-- [x] generic ESP32 8 MB build succeeds;
-- [x] generic ESP32 16 MB + PSRAM build succeeds;
-- [x] ESP32-S3 builds succeed;
-- [x] Fusion v2 build succeeds;
-- [x] Fusion v2 PoE/W5500 build succeeds;
-- [x] OTA binaries generated;
-- [x] factory binaries generated;
-- [x] upstream OpenDTU-OnBattery build succeeds;
-- [x] upstream OpenDTU-OnBattery tests succeed;
-- [x] architecture document added;
-- [x] living roadmap added;
-- [x] inherited/upstream artifact messaging reviewed (HEMS workflow and PR artifact index identify this fork);
-- [x] baseline firmware flashed to reference Fusion v2;
-- [x] configuration remains intact after OTA update;
-- [x] Web UI smoke test passed;
-- [x] LAN/Wi-Fi networking smoke test passed;
-- [x] inverter communication smoke test passed;
-- [x] configured power-meter integration smoke test passed;
-- [x] DPL smoke test passed;
-- [x] MQTT smoke test passed where configured;
-- [x] reboot smoke test passed;
-- [x] PR merged into `hems`;
-- [x] post-merge smoke test completed.
-
-### Reference hardware for validation
-
-Current staging device:
+Supported profile schemas:
 
 ```text
-OpenDTU Fusion v2
-ESP32-S3
-2 cores @ 240 MHz
-8 MB flash
-current firmware environment: generic_esp32s3_usb
-PSRAM physically available on the relevant board revision but not enabled in the current build
+opendtu-hems-modbus-profile/v1
+    read-only telemetry
+
+opendtu-hems-modbus-profile/v2
+    telemetry + bounded declarative control metadata
 ```
 
-The baseline test deliberately uses `generic_esp32s3_usb` first because that matches the currently installed firmware environment. Enabling QSPI PSRAM later is treated as a separate hardware/build change rather than being mixed into PR #1 validation.
-
-### PSRAM migration note
-
-Planned later migration for the reference Fusion board:
+Reference profiles currently maintained in the repository:
 
 ```text
-current:
-generic_esp32s3_usb
-    8 MB flash
-    PSRAM not enabled
-
-one-time factory flash over USB:
-generic_esp32s3_usb_quad_psram.factory.bin
-    8 MB flash
-    2 MB QSPI PSRAM enabled
-
-subsequent OTA updates:
-generic_esp32s3_usb_quad_psram.bin
+device-profiles/
+├── evse/
+│   └── Tinkerforge-WARP3-Smart.json
+└── storage/
+    └── Marstek-Venus-E-3.0.json
 ```
 
-OpenDTU-HEMS core functionality must continue to work without PSRAM. PSRAM is an optional capability, not a hard dependency.
+Profiles remain explicit configuration and are not silently installed or activated.
 
-### Exit condition
-
-PR #1 is complete only after the build pipeline is merged and a generated baseline OTA image has been successfully validated on the reference Fusion device.
-
----
-
-## PR #2 - HEMS core and Web UI skeleton
-
-**Status:** 🟢 Completed
-
-**Branch:** `feature/hems-core`
-
-**Target:** `hems`
-
-### Goal
-
-Introduce the smallest possible real HEMS runtime skeleton without external device integrations.
-
-### Planned scope
-
-- HEMS core controller;
-- only the base operating-mode type needed by this milestone;
-- versioned HEMS configuration block;
-- default state: disabled;
-- operating modes initially exposed as `Disabled` and `Monitor` only;
-- `/settings/hems` route;
-- `/info/hems` route;
-- navigation entries;
-- API endpoints required by the Web UI;
-- translations;
-- basic status/diagnostics;
-- no Modbus dependency;
-- no storage integration;
-- no EVSE integration;
-- no hardware writes.
-
-### Expected UI
-
-Settings:
-
-```text
-HEMS enabled       [ ]
-Operating mode     Monitor
-```
-
-Status:
-
-```text
-HEMS state         Disabled / Monitor
-Decision           None
-External devices   None configured
-```
-
-### Acceptance criteria
-
-- [x] legacy configuration loads without HEMS settings (also covered by PR #3 native JSON tests);
-- [x] HEMS defaults to disabled;
-- [x] HEMS config persists across reboot;
-- [x] Settings page works;
-- [x] Info page works;
-- [x] existing OpenDTU functionality remains unchanged while HEMS is disabled;
-- [x] CI green;
-- [x] reference Fusion smoke test passed;
-- [x] PR merged;
-- [x] final PR merge candidate hardware validation passed;
-
-A redundant post-merge reflash was intentionally skipped and is not claimed.
-
-Validation used the final PR head combined with the same `hems` base on the
-reference ESP32-S3 (`generic_esp32s3_usb`, no PSRAM). Configuration persistence,
-Disabled/Monitor transitions, reboot, export, UI, MQTT, Power Meter, Hoymiles
-communication and basic DPL checks passed, as did repository links, branch metadata
-and GitHub firmware comparison. Squash merge `4ec14c32dc3ad40fd94490c61051c45596b03ea2`
-introduced no additional functional source changes. GitHub Actions is authoritative
-for the merged source; no additional hardware reflash is claimed.
-
----
-
-## PR #3 - Shared Modbus TCP layer and WARP telemetry
+## Milestone A: PR #22, HEMS Actuation Foundation
 
 **Status:** 🟡 Validation
 
-**Branch:** `feature/warp-modbus-telemetry`
+**GitHub PR:** #22
 
-**Target:** `hems` (merged; physical WARP3 validation deferred)
-
-### Goal
-
-Add the first external HEMS device integration using a read-only WARP3 Modbus TCP provider.
-
-### Planned scope
-
-- bounded read-only Modbus TCP client using the pinned ESP32/lwIP stack;
-- shared Modbus connection/request layer;
-- WARP provider configuration;
-- read-only WARP telemetry;
-- reachability and data age;
-- Web UI configuration and status;
-- no WARP write functions.
-
-### Initial WARP telemetry
-
-- charging state;
-- vehicle connected state where reliably derivable;
-- current charging power;
-- allowed charging current;
-- session energy where useful;
-- connection status;
-- data age.
-
-Implementation details, register provenance and the physical validation checklist
-are in [HEMS_WARP.md](HEMS_WARP.md). Deterministic native tests cover decoding,
-read-only requests, optional meters, invalid responses, timeouts, freshness and
-recovery. Tests do not replace real WARP validation.
-
-### Acceptance criteria
-
-- [ ] Modbus layer builds on all official HEMS CI targets;
-- [ ] W5500/Ethernet path verified where available;
-- [ ] network timeout does not block DPL;
-- [x] WARP unreachable semantics handled correctly (native fixtures/loopback; physical gate remains open);
-- [x] stale WARP data becomes unknown rather than false/zero (native state and mocked UI tests);
-- [x] no write request exists in the WARP provider (interface/framing audit and read-only wire tests);
-- [ ] CI green;
-- [ ] real WARP telemetry validated;
-- [x] PR merged;
-- [ ] post-merge smoke test passed.
-
----
-
-### Owner-reported reference validation
-
-Passed on the real reference ESP32-S3, 8 MB, `generic_esp32s3_usb`, no PSRAM:
-
-- firmware boot;
-- HEMS/WARP configuration persistence across reboot;
-- DNS failure, TCP connect timeout and TCP connection-refused paths;
-- operational values remained Unknown/null rather than false/zero during failure;
-- repeated failure polling remained stable; approximately 446 failed polls in one soak test;
-- free heap remained healthy and largest free block stable;
-- no concerning heap fragmentation trend was observed;
-- Web UI remained responsive;
-- existing OpenDTU functionality remained operational during the local failure-path test.
-
-Still deferred/open:
-
-- real WARP3 Modbus connection;
-- real vehicle connected/charging states and actual WARP telemetry;
-- physical recovery after WARP communication loss;
-- physical packet capture proving FC2/FC4 only;
-- W5500 behavior against an actual WARP where applicable.
-
-These deferred physical WARP checks do not block PR #5. PR #3 is not fully Completed.
-
----
-
-## PR #4 - Modbus profile engine
-
-**Status:** 🟢 Completed
-
-**Merge:** `61c170ea89244cf5d5aaa3dd4beb2260eb650587`
+**Branch:** `feature/hems-actuation-foundation`
 
 ### Goal
 
-Create a reusable, vendor-neutral register profile mechanism for storage and future Modbus devices.
+Complete the generic, fail-closed execution foundation required before any HEMS policy is allowed to control real hardware.
 
-### Planned scope
+### Implemented scope
 
-- `opendtu-hems-modbus-profile/v1` schema;
-- profile metadata and provenance;
-- transport defaults;
-- telemetry definitions;
-- telemetry-only v1; semantic control/failsafe definitions deliberately deferred to PR #8;
-- validation;
-- built-in profile registry;
-- import/export;
-- LittleFS persistence where appropriate;
-- read-only test functionality;
-- imported profiles do not enable writes automatically.
-
-### Tinkerforge-derived profiles
-
-Evaluate a build-time converter for definitions from:
-
-`Tinkerforge/esp32-firmware/software/src/modules/batteries_modbus_tcp`
-
-Requirements:
-
-- no runtime Python execution on the ESP32;
-- pin source repository and source revision;
-- preserve attribution/licensing requirements;
-- validate generated profiles against the OpenDTU-HEMS schema.
-
-### Acceptance criteria
-
-- [x] malformed profiles rejected (production native parser tests);
-- [x] imported profile cannot activate writes (no write path; control fields rejected);
-- [x] profile size bounded (6144 bytes, 24 entries, four imported slots);
-- [x] profile schema version handled explicitly (strict v1 only);
-- [x] source/provenance visible in diagnostics/UI;
-- [x] CI green on the final functional and documentation heads;
-- [x] reference hardware import/export/persistence/decoder/replacement/delete test passed;
-- [x] repeated profile operations showed healthy heap/largest-block behavior;
-- [x] WARP settings and existing MQTT/Power Meter/Hoymiles/DPL functionality remained operational;
-- [x] PR merged.
-
-The intrusive power-cut-during-rename and interrupted/concurrent-upload cases were not physically forced. Their bounded cleanup/preservation behavior remains covered by deterministic tests and implementation review and is accepted as residual risk for this read-only milestone.
-
-Detailed normative schema, examples, API, resource bounds and validation record: [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md).
-
----
-
-## PR #5 - Generic Modbus storage telemetry
-
-**Status:** 🔵 In development
-
-**Branch:** `feature/modbus-storage-telemetry`
-
-**Target:** `hems`
-
-### Goal
-
-Add a manufacturer-neutral, read-only Modbus storage provider driven entirely by imported/built-in profiles. AC- and DC-coupled storage systems must fit the same runtime abstraction; device-specific register addresses, data types, byte/word order and scaling belong in profiles rather than provider code.
-
-Marstek Venus E 3.0 is the first reference profile and later reference hardware. It must not become a special-case architecture dependency.
-
-### Planned scope
-
-- generic Modbus storage provider using the shared bounded Modbus TCP client;
-- profile-selected read-only FC2/FC3/FC4 telemetry;
-- semantic storage keys such as SoC, AC/DC power, voltage/current, temperature, energy totals, operating state and fault/alarm codes where a profile provides them;
-- missing optional telemetry remains unknown/null rather than false/zero;
-- common sign convention: positive storage power = charging, negative = discharging;
-- reachability, freshness/data age, last error and poll diagnostics;
-- no blocking provider I/O in DPL or HEMS policy paths;
-- storage configuration/status Web UI;
-- HEMS navigation split into a dedicated top-level area for overview, settings and profile/device administration before storage UI grows further;
-- existing `/info/hems` and `/settings/hems` links remain compatible through aliases/redirects;
-- first Marstek Venus E 3.0 read-only profile based on documented/community provenance plus explicitly recorded target-specific observations where available;
-- no Modbus writes, no storage control, no Shadow/Active policy execution.
-
-### Architecture boundary
+Per-device control permission:
 
 ```text
-Modbus profile
-    ↓
-Generic Modbus Storage Provider
-    ↓
-Storage telemetry snapshot
-    ↓
-PR #6 normalized HEMS state / constraints
+Monitor only
+HEMS control
 ```
 
-The provider must not contain `if Marstek`, `if Victron`, `if Deye`, or equivalent manufacturer-specific register logic. A different compatible storage device should be supportable by supplying another profile unless the generic schema itself demonstrably lacks a required primitive.
+Default and migration behavior remain fail-closed at `Monitor only`.
 
-### Acceptance criteria
+Generic profile-driven control execution:
 
-- [ ] provider contains no manufacturer-specific register addresses or mode logic;
-- [ ] profile selection controls register mapping and decoding;
-- [ ] both AC-only and DC-only telemetry fixtures are supported without requiring the other side;
-- [ ] valid zero remains valid; missing/stale/failed values become explicit unknown/null;
-- [ ] storage polling cannot block DPL/scheduler paths;
-- [ ] communication loss/recovery is deterministic and bounded;
-- [ ] no Modbus write request can be emitted by the storage provider;
-- [ ] HEMS overview/settings/profile navigation is coherent and responsive;
-- [ ] legacy HEMS URLs remain usable;
-- [ ] all shipped profile values have documented provenance and unverified assumptions are marked as such;
-- [ ] reference no-PSRAM ESP32 hardware smoke test passes;
-- [ ] CI green;
-- [ ] real Venus E telemetry validation completed or explicitly remains 🟡 deferred before merge;
-- [ ] PR merged.
+- semantic operation to bounded `ControlPlan` conversion;
+- semantic input range/step/scaling validation;
+- 16/32-bit holding-register values;
+- FC06/FC16 write transport;
+- ordered write sequences;
+- read-after-write verification where configured;
+- distinct transport/readback/verification failures.
 
----
-
-## PR #6 - Normalized HEMS state and constraint engine
-
-**Status:** ⚪ Planned
-
-### Goal
-
-Separate provider I/O from policy logic through a normalized state store and deterministic constraints.
-
-### Planned scope
-
-- normalized Grid/Storage/EVSE state;
-- validity and data age;
-- provider-independent snapshots;
-- constraint model;
-- initial policy priority system;
-- diagnostics for stale and invalid inputs;
-- still no automated writes.
-
-### Acceptance criteria
-
-- [ ] policies do not perform blocking provider I/O;
-- [ ] stale data is explicit;
-- [ ] conflicting constraints resolve deterministically;
-- [ ] diagnostics show decision inputs;
-- [ ] CI green;
-- [ ] reference hardware smoke test passed;
-- [ ] PR merged.
-
----
-
-## PR #7 - EV protection policy in Shadow mode
-
-**Status:** ⚪ Planned
-
-### Goal
-
-Implement the first real HEMS decision without controlling hardware.
-
-### Initial rule
+Semantic actuator API:
 
 ```text
-IF
-    WARP data is valid
-AND WARP is actively charging
-AND charging power > configured threshold
-THEN
-    desired storage mode = BlockDischarge
+Storage:
+  setChargePower(watts)
+  setDischargePower(watts)
+  setTargetSoc(percent)
+  stop()
+  releaseControl()
+
+EVSE:
+  setCurrent(amps)
+  stop()
+  releaseControl()
 ```
 
-A debounce period should prevent rapid mode oscillation after short charging interruptions.
+Worker/authorization/lifecycle foundation:
 
-### Planned scope
+- depth-one semantic command slot;
+- no overwrite of pending/running work;
+- provider-generation pinning;
+- authorization rechecked immediately before bounded writes;
+- shared telemetry/control worker and Modbus client;
+- profile acquire/release sessions;
+- retained old endpoint/profile cleanup after configuration changes;
+- bounded release retry;
+- cleanup diagnostics and blockers;
+- fresh telemetry scheduling after commands;
+- actuation/readiness state exposed through `/api/hems/status`.
 
-- `Shadow` global operating mode;
-- EV protection policy;
-- configurable active-power threshold;
-- configurable stop debounce;
-- decision reason;
-- winning policy display;
-- `WOULD_BLOCK_DISCHARGE` diagnostics;
-- no hardware write.
+EV protection Shadow correction:
 
-### Acceptance criteria
+```text
+fresh charging=true
+    -> BlockDischarge proposed immediately
 
-- [ ] multiple real EV charging sessions observed;
-- [ ] charging start detected correctly;
-- [ ] short charging pauses do not cause flapping;
-- [ ] WARP communication loss does not become `not charging`;
-- [ ] Shadow mode never writes storage registers;
-- [ ] CI green;
-- [ ] PR merged.
+fresh charging=false
+    -> protection remains for 120 s continuous fresh-false
 
----
+charging resumes inside window
+    -> protection immediately remains/restores
 
-## PR #8 - Storage write layer and manual control tests
+stale/unknown
+    -> never interpreted as not charging
+```
 
-**Status:** ⚪ Planned
+### WARP3 control semantics currently encoded
 
-### Goal
+```text
+setCurrent(6..32 A) -> 6000..32000 mA at holding 1002/1003
+stop                -> 0 mA
+release             -> 32000 mA neutral/default Modbus slot cap
+```
 
-Add storage control capabilities without yet connecting them to automatic HEMS policies.
+### Safety boundary
 
-### Planned scope
+PR #22 must remain unable to perform production actuation automatically:
 
-- semantic storage commands;
-- per-device `Allow external control` switch;
-- Safety Supervisor checks;
-- manual diagnostic controls;
-- write rate limiting;
-- readback/verification where supported;
-- explicit restore-to-normal operation;
-- still no automatic EV policy execution.
+- no global Active mode;
+- no automatic policy caller;
+- no public normal-operation write endpoint;
+- global authorization remains fail-closed.
 
-### Acceptance criteria
+### Exit criteria
 
-- [ ] external control disabled by default;
-- [ ] imported profile does not enable writes;
-- [ ] manual `Normal` verified;
-- [ ] manual `BlockDischarge` verified;
-- [ ] restore-to-normal verified;
-- [ ] communication loss behavior tested;
-- [ ] reboot behavior tested;
-- [ ] persistent command behavior documented;
-- [ ] CI green;
-- [ ] PR merged.
+- [x] #18/#20/#21 functionality consolidated into one PR directly on `integration/hems-next`;
+- [x] firmware update infrastructure lives in the shared integration base rather than a parallel dependency;
+- [x] semantic actuator and executor native coverage exists;
+- [x] command generation pinning exists;
+- [x] retained cleanup exists for configuration changes while ownership may be active;
+- [x] readiness/command/cleanup diagnostics exist;
+- [ ] current #22 CI/build validation complete;
+- [ ] review resulting `pr-22` firmware manifest/image for `generic_esp32s3_usb`;
+- [ ] reference Fusion smoke test if firmware-level changes require it;
+- [ ] merge #22 into `integration/hems-next`;
+- [ ] update this roadmap and `HEMS_Current_Status.md` immediately after merge.
 
----
-
-## PR #9 - EV protection policy in Active mode
-
-**Status:** ⚪ Planned
-
-### Goal
-
-Connect the validated EV protection policy to the validated storage write layer.
-
-### Planned scope
-
-- `Active` HEMS mode;
-- automatic BlockDischarge while EV charging;
-- safe return to Normal after debounce;
-- decision/write logging;
-- per-device external-control requirement;
-- communication-loss fallback.
-
-### Acceptance criteria
-
-- [ ] Shadow behavior already proven;
-- [ ] WARP remains read-only;
-- [ ] storage does not discharge into EV during active policy;
-- [ ] storage returns to normal correctly;
-- [ ] DTU reboot behavior tested;
-- [ ] WARP outage tested;
-- [ ] storage outage tested;
-- [ ] CI green;
-- [ ] PR merged.
-
----
-
-## PR #10 - Dynamic tariff provider
+## Milestone B: boot and power-loss ownership recovery
 
 **Status:** ⚪ Planned
 
 ### Goal
 
-Add tariff ingestion and visualization without active economic control.
+Do not lose safety knowledge when the controller reboots while an external device may still be in a persistent remote-control mode.
 
-### Planned scope
+Current retained cleanup is RAM-resident and handles live configuration-generation changes. A hard reboot/power loss can erase that knowledge.
 
-- tariff provider abstraction;
-- 15-minute slot model where supported;
+### Required design
+
+- define which devices/operations can leave persistent remote state;
+- persist only the minimal ownership/recovery intent needed for safe recovery;
+- never blindly write to a changed/replaced endpoint after reboot;
+- bind recovery context to device/profile identity strongly enough to avoid retargeting;
+- bounded retry/backoff;
+- explicit diagnostic state when safe recovery cannot be proven;
+- normal actuation blocked while unresolved recovery exists.
+
+### Exit criteria
+
+- [ ] reboot during owned Marstek control has deterministic behavior;
+- [ ] reboot during WARP current limitation has deterministic behavior;
+- [ ] stale endpoint/profile recovery cannot write to a replacement device;
+- [ ] unresolved recovery is visible in `/api/hems/status`;
+- [ ] recovery failure remains fail-closed;
+- [ ] native tests cover persistence/corruption/mismatch cases;
+- [ ] physical reboot test completed before Active mode exists.
+
+## Milestone C: gated manual hardware validation path
+
+**Status:** ⚪ Planned
+
+### Goal
+
+Provide an intentionally restricted maintenance/validation path for exercising semantic actuator operations on real devices without enabling automatic HEMS Active mode.
+
+This is a validation tool, not a general raw Modbus console.
+
+### Required behavior
+
+- explicit maintenance/validation enable step;
+- per-device `HEMS control` permission still required;
+- semantic operations only;
+- same readiness/authorization/worker/actuator path as future production control;
+- no arbitrary register/address/value input;
+- visible command result, readback and cleanup state;
+- obvious stop/release actions;
+- bounded command rate;
+- automatic expiry or revocation of the validation session.
+
+### Initial validation operations
+
+```text
+WARP3:
+  setCurrent(6 A)
+  setCurrent(10 A)
+  stop()
+  releaseControl()
+
+Marstek:
+  acquire
+  setChargePower(500 W)
+  stop()
+  setDischargePower(500 W)
+  setTargetSoc(...)
+  releaseControl()
+```
+
+Exact hardware test values may be adjusted to safe real-device conditions.
+
+### Exit criteria
+
+- [ ] no raw register write UI/API exposed;
+- [ ] maintenance enable is explicit and temporary;
+- [ ] command path is identical to production actuator path after the authorization gate;
+- [ ] failed command leaves diagnosable state;
+- [ ] release/cleanup can be exercised independently;
+- [ ] validation UI/API cannot silently enable global Active mode.
+
+## Milestone D: physical WARP3 and Marstek validation
+
+**Status:** ⚪ Planned
+
+### WARP3 validation still required
+
+- [ ] imported profile telemetry while unplugged;
+- [ ] vehicle connected state;
+- [ ] charging state;
+- [ ] allowed-current telemetry plausibility;
+- [ ] current limit 6 A / 10 A behavior;
+- [ ] stop behavior;
+- [ ] release behavior;
+- [ ] communication loss/recovery;
+- [ ] reboot behavior while a limit is/was active;
+- [ ] W5500 path where applicable;
+- [ ] packet/wire behavior checked when useful.
+
+### Marstek Venus E 3.0 validation still required
+
+- [ ] SoC/voltage/current/power/temperature plausibility;
+- [ ] energy totals plausibility;
+- [ ] state/alarm/fault semantics;
+- [ ] acquire behavior;
+- [ ] charge power behavior;
+- [ ] discharge power behavior;
+- [ ] stop behavior;
+- [ ] target-SoC behavior;
+- [ ] release behavior;
+- [ ] communication loss during ownership;
+- [ ] reboot/power-loss recovery;
+- [ ] firmware/register-map assumptions recorded against tested device version.
+
+Real-device validation may discover profile corrections. Such corrections belong in the same validation milestone and must update provenance/tests/documentation.
+
+## Milestone E: global Active mode and arbitration
+
+**Status:** ⚪ Planned
+
+### Goal
+
+Introduce the first production authorization layer that can permit actuator execution after the lower layers have been physically validated.
+
+### Required scope
+
+- explicit `Active` HEMS mode;
+- global authorization gate;
+- deterministic arbitration of policy intents;
+- hard safety/readiness constraints override optimization;
+- unresolved cleanup/recovery blocks actuation;
+- stale/unknown required telemetry suppresses unsafe writes;
+- decision reason visible in status/UI;
+- transition Active -> Monitor/Disabled performs required cleanup/release;
+- no coupling of slow HEMS policy work into the fast DPL loop.
+
+Active must not be merged merely because the write primitives exist.
+
+## Milestone F: EV protection in Active mode
+
+**Status:** ⚪ Planned
+
+### Goal
+
+Make the already-developed EV protection Shadow policy the first automatic production policy.
+
+### Intended behavior
+
+```text
+EV charging
+    -> block storage discharge immediately
+
+EV charging stops
+    -> retain block for 120 s continuous fresh-false
+
+EVSE stale/unknown
+    -> do not infer safe release
+```
+
+### Exit criteria
+
+- [ ] Shadow decisions match expected real EV sessions first;
+- [ ] automatic storage protection uses the common arbitration/actuator path;
+- [ ] communication loss remains fail-safe;
+- [ ] Active exit releases persistent external control safely;
+- [ ] reboot/recovery tested;
+- [ ] no DPL regression.
+
+## Milestone G: dynamic tariff provider
+
+**Status:** ⚪ Planned
+
+### Goal
+
+Ingest and visualize dynamic electricity prices without automatically controlling storage.
+
+### Scope
+
+- provider abstraction;
+- current and future tariff slots;
 - effective end-customer import price;
-- current/future price display;
 - validity/data age;
+- timezone/DST handling;
 - provider secrets handling;
-- no automatic storage control.
+- UI visualization;
+- no economic hardware writes.
 
-### Acceptance criteria
+### Exit criteria
 
 - [ ] provider outage handled gracefully;
-- [ ] expired tariff data becomes invalid;
+- [ ] expired tariff data invalidated;
 - [ ] secrets masked;
-- [ ] price time zones/DST validated;
-- [ ] CI green;
-- [ ] PR merged.
+- [ ] DST/time-zone behavior validated;
+- [ ] several days of real data reviewed.
 
----
-
-## PR #11 - Economic optimizer in Shadow mode
+## Milestone H: economic optimizer in Shadow mode
 
 **Status:** ⚪ Planned
 
 ### Goal
 
-Generate an economically useful storage plan without executing it.
+Generate an economically useful storage schedule without executing it.
 
 ### Planned inputs
 
 - tariff slots;
 - current SoC;
-- usable storage capacity;
-- minimum and maximum SoC;
+- usable capacity;
+- minimum/maximum SoC;
 - charge/discharge power limits;
-- round-trip efficiency;
-- optional battery cycle cost.
+- efficiency;
+- optional battery cycle cost;
+- later PV forecast input.
 
-### Planned output
+### Output
 
-A time-slot plan containing semantic decisions such as:
+A time-slot plan with explainable semantic intents, for example:
 
 ```text
 Normal
 BlockDischarge
 ForceCharge
+ForceDischarge (only if explicitly allowed by product design)
 ```
 
-### Acceptance criteria
+### Exit criteria
 
-- [ ] optimizer accounts for round-trip losses;
-- [ ] multiple time slots considered;
+- [ ] round-trip losses represented;
 - [ ] capacity/power constraints respected;
-- [ ] result explainable in UI;
-- [ ] no hardware writes in Shadow mode;
-- [ ] several days of real tariff data reviewed;
-- [ ] CI green;
-- [ ] PR merged.
+- [ ] multiple time slots optimized;
+- [ ] decisions explainable in UI;
+- [ ] no writes in Shadow mode;
+- [ ] real tariff days reviewed against expected behavior.
 
----
-
-## PR #12 - Economic optimizer in Active mode
+## Milestone I: economic optimizer in Active mode
 
 **Status:** ⚪ Planned
 
 ### Goal
 
-Allow the validated economic plan to control a supported storage system under Safety Supervisor constraints.
+Allow a validated economic plan to drive supported storage under the common Safety Supervisor/arbitration rules.
 
-### Acceptance criteria
+### Exit criteria
 
-- [ ] Shadow results previously validated;
-- [ ] external control explicitly enabled;
+- [ ] Shadow behavior previously accepted;
+- [ ] Active mode explicitly enabled;
 - [ ] invalid tariff data suppresses economic writes;
-- [ ] storage safety/SoC limits override optimizer;
-- [ ] persistent commands handled safely;
-- [ ] reboot behavior tested;
-- [ ] CI green;
-- [ ] PR merged.
+- [ ] SoC/device constraints override economics;
+- [ ] EV protection overrides conflicting economic discharge;
+- [ ] persistent commands/recovery handled safely;
+- [ ] reboot and provider-outage behavior tested.
 
----
-
-## PR #13 - PV forecast integration
+## Milestone J: PV forecast and forecast-aware optimization
 
 **Status:** ⚪ Planned
 
@@ -656,53 +486,67 @@ Allow the validated economic plan to control a supported storage system under Sa
 
 Use expected PV generation to improve storage scheduling.
 
-### Planned scope
+### Scope
 
 - forecast provider abstraction;
-- forecast validity/data age;
+- validity/data age;
 - UI visualization;
 - optimizer input;
-- reserve free storage capacity when large PV surplus is expected;
+- reserve storage capacity for expected PV surplus;
 - avoid unnecessary grid charging before sunny periods.
 
-### Acceptance criteria
+### Exit criteria
 
-- [ ] HEMS remains functional when forecast is unavailable;
-- [ ] forecast cannot override hard safety constraints;
+- [ ] HEMS remains functional without forecast data;
+- [ ] forecast never overrides hard safety constraints;
 - [ ] decisions explain forecast influence;
-- [ ] CI green;
-- [ ] PR merged.
+- [ ] forecast error does not create unsafe actuation.
 
----
+## Deferred / separate investigation
 
-## Working rule for future milestones
+An intermittent condition has been observed where existing connections to the reference DTU can continue while new inbound TCP connections time out. The issue is not currently proven to originate in HEMS code. Continue diagnosis separately using LAN/WAN path isolation and, if needed, lwIP/AsyncTCP PCB/accept instrumentation. Do not mark HEMS milestones complete or incomplete based on an unproven causal link.
 
-Only one main implementation milestone is actively developed at a time.
+## Reference hardware
 
-Workflow:
+Current staging/reference target:
 
 ```text
-Start PR N
-    -> mark PR N as 🔵 In development
-    -> implement
-    -> CI
-    -> fix within same PR
-    -> mark 🟡 Validation
-    -> hardware validation
-    -> merge
-    -> post-merge smoke test
-
-Start PR N+1
-    -> mark PR N as 🟢 Completed
-    -> mark PR N+1 as 🔵 In development
+OpenDTU Fusion Board v2.1
+Fusion Shield v1.1
+ESP32-S3
+8 MB flash
+PIO environment: generic_esp32s3_usb
+PSRAM not required for HEMS core functionality
 ```
 
-Small corrective commits remain in the current PR whenever they belong to that milestone. A new PR is not opened merely to avoid fixing the current one.
+A future PSRAM image migration remains optional and must not become a HEMS dependency.
+
+## Branch and PR discipline
+
+The previous #18 -> #20 -> #21 stack demonstrated why cross-cutting infrastructure and deep feature stacks are fragile. Use these rules going forward:
+
+1. Keep `integration/hems-next` as the shared base for accepted infrastructure.
+2. Prefer one active implementation PR for one coherent milestone.
+3. Do not stack a new milestone on an unmerged feature PR unless there is a deliberate, documented reason.
+4. Before creating a dependent PR, verify the full branch/PR graph and required shared infrastructure.
+5. Before telling an operator to flash a PR build, verify that the target PR actually contains the updater/channel infrastructure, that its `pr-<number>` snapshot is published, and that the correct PIO target exists.
+6. Close superseded PRs rather than leaving misleading open dependency chains.
 
 ## Documentation rule
 
-Every implementation PR should update this roadmap when its state changes.
+This roadmap is a release/continuity artifact, not optional prose.
 
-The roadmap should describe what has actually been validated, not what merely exists in a branch.
+Update it when any of the following changes:
 
-Architecture changes that affect long-term design should additionally update [`HEMS_Architecture.md`](HEMS_Architecture.md).
+- current milestone;
+- milestone status;
+- branch/PR topology;
+- integration baseline;
+- safety boundary;
+- hardware-validation result;
+- implementation order;
+- deferred/blocking issue that materially affects the plan.
+
+Also update [`HEMS_Current_Status.md`](HEMS_Current_Status.md) when implementation facts change.
+
+Never mark physical validation complete based only on native tests or CI. Electronics are sufficiently creative without the documentation participating.
