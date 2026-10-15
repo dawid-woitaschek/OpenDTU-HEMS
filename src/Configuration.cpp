@@ -46,6 +46,7 @@ void ConfigurationClass::serializeHemsConfig(HemsConfig const& source, JsonObjec
 {
     target["version"] = source.Version;
     target["enabled"] = source.Enabled;
+    target["mode"] = Hems::modeName(source.Enabled ? source.Mode : Hems::Mode::Disabled);
     JsonObject warp = target["warp"].to<JsonObject>();
     warp["enabled"] = source.Warp.Enabled;
     warp["host"] = source.Warp.Host;
@@ -58,6 +59,9 @@ void ConfigurationClass::deserializeHemsConfig(JsonObject const& source, HemsCon
     target.Version = source["version"].isNull() ? CONFIG_VERSION_HEMS
         : (source["version"].is<uint32_t>() ? source["version"].as<uint32_t>() : 0);
     target.Enabled = source["enabled"].is<bool>() && source["enabled"].as<bool>();
+    target.Mode = source["mode"].isNull() ? (target.Enabled ? Hems::Mode::Monitor : Hems::Mode::Disabled)
+        : Hems::parseMode(source["mode"].as<char const*>());
+    if (!source["mode"].isNull()) { target.Enabled = target.Mode != Hems::Mode::Disabled; }
     // Additive version-1 extension: PR #2 and legacy configs have no warp block.
     // Malformed provider settings disable WARP without disabling valid HEMS.
     deserializeWarpConfig(source["warp"], target.Warp);

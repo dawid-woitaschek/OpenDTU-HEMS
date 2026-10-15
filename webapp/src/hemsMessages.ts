@@ -1,36 +1,18 @@
 export const hemsSupplementMessages = {
     en: {
         hems: {
-            ValidationTitle: 'Temporary hardware validation',
-            ValidationHint:
-                'Sessions expire after two minutes. Real WARP/Marstek commands remain blocked until recovery readiness is validated. Semantic command testing currently uses the authenticated API; no raw register controls exist.',
-            ValidationStart: 'Enable 2-minute validation session',
-            ValidationRevoke: 'Revoke session and request release',
-            ValidationRejected: 'Validation request rejected. Check session, readiness and recovery diagnostics.',
-            ValidationWarning: 'Temporary hardware validation, not normal HEMS Active operation:',
-            ValidationBlockers: 'Validation blockers',
-            Recovery: 'Actuation and reboot recovery diagnostics',
-            RecoveryHint:
-                'Unresolved recovery blocks actuation. Automatic reboot release requires verified device identity and replay-safe release. No physical recovery validation is claimed.',
-            ReadinessBlockers: 'Readiness blockers',
-            RecoveryJournal: 'Durable recovery intent',
-            RecoveryAutomatic: 'Automatic recovery supported',
-            RecoveryIdentity: 'Persisted instance identity',
-            RecoveryAttempts: 'Attempts',
-            RecoveryRetry: 'Retry in',
-            RecoveryCleanup: 'Retained cleanup',
-            RecoveryCommand: 'Command',
-
-            Warp: 'EV charger — read only',
+            Active: 'Active',
+            Warp: 'EV charger',
             WarpEnabled: 'EV charger telemetry enabled',
-            WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
+            WarpSetupHint:
+                'WARP telemetry and semantic control: WARP Modbus TCP. Configure the EV charger host and TCP port.',
             ConfigLoadFailed: 'HEMS configuration could not be loaded.',
             ConfigSaveFailed: 'HEMS configuration could not be saved.',
             ControlMode: 'Control mode',
             ControlMonitorOnly: 'Monitor only',
             ControlHems: 'HEMS control',
             ControlModeHint:
-                'HEMS control grants per-device permission only. This firmware milestone remains read-only until Active control is implemented.',
+                'Monitor only uses telemetry without normal writes. HEMS control enables manual commands and automatic writes in Active.',
             InvalidWallboxHost: 'Enter a valid hostname or IPv4 address. IPv4 octets must be between 0 and 255.',
             InvalidWallboxPort: 'Enter a valid wallbox TCP port between 1 and 65535.',
             NormalizedState: 'Normalized HEMS state',
@@ -50,9 +32,9 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Fresh',
             QualityStale: 'Stale',
             QualityUnknown: 'Unknown',
-            EvProtectionShadow: 'EV protection — Shadow',
+            EvProtectionShadow: 'EV protection',
             EvProtectionShadowHint:
-                'Evaluates whether EV charging should block storage discharge. Shadow mode only observes and proposes; it does not change effective constraints or write to hardware.',
+                'Active enforces EV discharge protection only when Storage control is enabled; Monitor shows the proposal.',
             EvProtectionState: 'Policy state',
             EvProtectionCharging: 'EV charging',
             EvProtectionConditionAge: 'Condition active for',
@@ -65,7 +47,7 @@ export const hemsSupplementMessages = {
             },
         },
         storage: {
-            Title: 'Storage — read only',
+            Title: 'Storage',
             Enabled: 'Storage telemetry enabled',
             Profile: 'Modbus profile',
             SelectProfile: 'Select a storage profile…',
@@ -108,6 +90,7 @@ export const hemsSupplementMessages = {
     },
     de: {
         hems: {
+            Active: 'Active',
             Warp: 'Wallbox — nur Lesezugriff',
             WarpEnabled: 'Wallbox-Telemetrie aktiviert',
             WarpSetupHint:
@@ -118,7 +101,7 @@ export const hemsSupplementMessages = {
             ControlMonitorOnly: 'Monitor only',
             ControlHems: 'HEMS control',
             ControlModeHint:
-                'HEMS control erteilt nur die gerätespezifische Freigabe. Dieser Firmware-Stand bleibt bis zur Active-Steuerung vollständig im Lesezugriff.',
+                'Monitor only uses telemetry without normal writes. HEMS control enables manual commands and automatic writes in Active.',
             InvalidWallboxHost:
                 'Gib einen gültigen Hostnamen oder eine gültige IPv4-Adresse ein. IPv4-Oktette müssen zwischen 0 und 255 liegen.',
             InvalidWallboxPort: 'Gib einen gültigen Wallbox-TCP-Port zwischen 1 und 65535 ein.',
@@ -142,7 +125,7 @@ export const hemsSupplementMessages = {
             QualityUnknown: 'Unbekannt',
             EvProtectionShadow: 'EV-Schutz — Shadow',
             EvProtectionShadowHint:
-                'Bewertet, ob ein ladendes Fahrzeug die Speicherentladung sperren sollte. Shadow beobachtet und schlägt nur vor; wirksame Begrenzungen und Hardware bleiben unverändert.',
+                'Active enforces EV discharge protection only when Storage control is enabled; Monitor shows the proposal.',
             EvProtectionState: 'Regelzustand',
             EvProtectionCharging: 'Fahrzeug lädt',
             EvProtectionConditionAge: 'Bedingung aktiv seit',
@@ -202,6 +185,7 @@ export const hemsSupplementMessages = {
     },
     fr: {
         hems: {
+            Active: 'Active',
             Warp: 'Borne de recharge — lecture seule',
             WarpEnabled: 'Télémétrie de la borne activée',
             WarpSetupHint:
@@ -212,7 +196,7 @@ export const hemsSupplementMessages = {
             ControlMonitorOnly: 'Monitor only',
             ControlHems: 'HEMS control',
             ControlModeHint:
-                'HEMS control accorde uniquement l’autorisation par appareil. Cette version du firmware reste en lecture seule jusqu’à l’implémentation du contrôle Active.',
+                'Monitor only uses telemetry without normal writes. HEMS control enables manual commands and automatic writes in Active.',
             InvalidWallboxHost:
                 'Saisissez un nom d’hôte ou une adresse IPv4 valide. Les octets IPv4 doivent être compris entre 0 et 255.',
             InvalidWallboxPort: 'Saisissez un port TCP de borne valide entre 1 et 65535.',
@@ -236,7 +220,7 @@ export const hemsSupplementMessages = {
             QualityUnknown: 'Inconnu',
             EvProtectionShadow: 'Protection VE — Shadow',
             EvProtectionShadowHint:
-                'Évalue si la recharge du véhicule devrait bloquer la décharge du stockage. Le mode Shadow observe et propose uniquement; les contraintes effectives et le matériel restent inchangés.',
+                'Active enforces EV discharge protection only when Storage control is enabled; Monitor shows the proposal.',
             EvProtectionState: 'État de la règle',
             EvProtectionCharging: 'Véhicule en charge',
             EvProtectionConditionAge: 'Condition active depuis',

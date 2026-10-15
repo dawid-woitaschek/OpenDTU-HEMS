@@ -6,7 +6,6 @@
 #include "Utils.h"
 #include "PinMapping.h"
 #include <LittleFS.h>
-#include <hems/recovery/PathGuard.h>
 #include <MD5Builder.h>
 
 #undef TAG
@@ -78,7 +77,7 @@ void Utils::removeAllFiles()
     auto file = root.getNextFileName();
 
     while (file != "") {
-        if (file != PINMAPPING_FILENAME && !Hems::Recovery::protectedPath(file.c_str())) {
+        if (file != PINMAPPING_FILENAME) {
             LittleFS.remove(file);
         }
         file = root.getNextFileName();

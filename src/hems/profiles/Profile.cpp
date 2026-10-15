@@ -323,6 +323,7 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
         auto recovery = root["recovery"].as<JsonObjectConst>();
         error = "Invalid recovery metadata";
         if (!fields(recovery, { "release_replay_safe" }) || !recovery["release_replay_safe"].is<bool>()) { return false; }
+        p.recoveryMetadata = true;
         p.releaseReplaySafe = recovery["release_replay_safe"];
     }
     auto entries = root["telemetry"].as<JsonArrayConst>();
@@ -444,7 +445,7 @@ void serialize(Profile const& p, JsonObject root) {
         }
     }
     if (p.schemaVersion == 2) {
-        root["recovery"]["release_replay_safe"] = p.releaseReplaySafe;
+        if (p.recoveryMetadata) { root["recovery"]["release_replay_safe"] = p.releaseReplaySafe; }
     }
     auto entries = root["telemetry"].to<JsonArray>();
     for (size_t i = 0; i < p.entryCount; ++i) {

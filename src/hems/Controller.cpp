@@ -3,92 +3,23 @@
 #include <hems/evse/SettingsStore.h>
 #include <hems/model/Normalize.h>
 #include <hems/storage/SettingsStore.h>
-#include <powermeter/Controller.h>
+#include <hems/model/Sources.h>
 #include <Arduino.h>
 #include <Configuration.h>
-#include <Hoymiles.h>
-#include <esp_system.h>
 
 Hems::Controller HemsController;
 
-namespace {
-
-PowerLimiterInverterConfig const* findPowerSourceConfig(PowerLimiterConfig const& config, uint64_t serial)
-{
-    for (size_t i = 0; i < INV_MAX_COUNT; ++i) {
-        auto const& candidate = config.Inverters[i];
-        if (candidate.Serial == 0ULL) { break; }
-        if (candidate.Serial == serial) { return &candidate; }
-    }
-    return nullptr;
-}
-
-Hems::Model::Signal<double> normalizedPvPower()
-{
-    auto const powerLimiter = Configuration.get().PowerLimiter;
-    bool classificationComplete = true;
-    bool anyStale = false;
-    uint8_t configuredSolarSources = 0;
-    uint8_t observedSolarSources = 0;
-    double totalPowerW = 0.0;
-
-    for (size_t i = 0; i < INV_MAX_COUNT; ++i) {
-        auto const& candidate = powerLimiter.Inverters[i];
-        if (candidate.Serial == 0ULL) { break; }
-
-        for (size_t j = 0; j < i; ++j) {
-            if (powerLimiter.Inverters[j].Serial == candidate.Serial) {
-                classificationComplete = false;
-                break;
-            }
-        }
-
-        if (candidate.PowerSource == PowerLimiterInverterConfig::InverterPowerSource::Solar) {
-            ++configuredSolarSources;
-        }
-    }
-
-    for (uint8_t i = 0; i < Hoymiles.getNumInverters(); ++i) {
-        auto inverter = Hoymiles.getInverterByPos(i);
-        if (!inverter || !inverter->getEnablePolling()) { continue; }
-
-        auto const* classification = findPowerSourceConfig(powerLimiter, inverter->serial());
-        if (!classification) {
-            classificationComplete = false;
-            continue;
-        }
-        if (classification->PowerSource != PowerLimiterInverterConfig::InverterPowerSource::Solar) {
-            continue;
-        }
-
-        auto statistics = inverter->Statistics();
-        if (statistics->getLastUpdate() == 0) { continue; }
-
-        ++observedSolarSources;
-        totalPowerW += statistics->getChannelFieldValue(TYPE_AC, CH0, FLD_PAC);
-        if (!inverter->isReachable()) { anyStale = true; }
-    }
-
-    return Hems::Model::normalizePvPower(totalPowerW, configuredSolarSources,
-            observedSolarSources, classificationComplete, anyStale);
-}
-
-} // namespace
-
 namespace Hems {
 
-bool Controller::providerAuthorization(void* context, ControlTarget target)
+bool Controller::providerAuthorization(void* context, Actuation::Command const& command)
 {
     if (!context) { return false; }
     auto& controller = *static_cast<Controller*>(context);
-    return controller.actuationAllowed(target) || controller.getValidationReadiness(target).allowed();
+    return controller.readiness(command.target, command.automatic, false).allowed() && controller.constraintsPermit(command);
 }
 
 void Controller::init(Scheduler& scheduler)
 {
-    // Loaded before configure/authorization and before the Web API starts.
-    _warp.initRecovery();
-    _storage.initRecovery();
     Evse::BindingSettings.init();
     Storage::StorageSettings.init();
     _warp.setAuthorization(this, providerAuthorization);
@@ -96,13 +27,15 @@ void Controller::init(Scheduler& scheduler)
 
     scheduler.addTask(_loopTask);
     _loopTask.setCallback([this] {
-        serviceValidation();
         _warp.loop();
         _storage.loop();
 
         auto normalized = Model::normalize(_warp.snapshot(), _storage.snapshot());
-        std::lock_guard<std::mutex> lock(_policyMutex);
-        _evProtectionPolicy.update(normalized.evse, millis());
+        {
+            std::lock_guard<std::mutex> lock(_policyMutex);
+            _evProtectionPolicy.update(normalized.evse, millis(), controlCapability(), getMode() == Mode::Active);
+        }
+        applyEvProtection();
     });
     _loopTask.setInterval(100);
     _loopTask.setIterations(TASK_FOREVER);
@@ -112,11 +45,15 @@ void Controller::init(Scheduler& scheduler)
 
 void Controller::updateSettings()
 {
-    if (_validation.revoke()) { releaseValidationOwnership(); }
+    auto previous = getMode();
     auto const& config = Configuration.get().Hems;
     _mode.store(config.Version == CONFIG_VERSION_HEMS && config.Enabled
-            ? Mode::Monitor : Mode::Disabled);
-    bool monitor = getMode() == Mode::Monitor;
+            ? config.Mode : Mode::Disabled);
+    bool monitor = getMode() != Mode::Disabled;
+    if (previous == Mode::Active && getMode() != Mode::Active) {
+        _warp.requestRelease(); _storage.requestRelease();
+        _evProtectionOwned = false; _policyCommandId = 0;
+    }
     _warp.configure(config.Warp, Evse::BindingSettings.get(), monitor);
     _storage.configure(Storage::StorageSettings.get(), monitor);
     if (!monitor) {
@@ -155,49 +92,34 @@ Actuation::Readiness Controller::getActuationReadiness(ControlTarget target) con
 {
     return readiness(target, false);
 }
-Actuation::Readiness Controller::getValidationReadiness(ControlTarget target) const
-{
-    return readiness(target, true);
-}
-Actuation::Readiness Controller::readiness(ControlTarget target, bool validation) const
+Actuation::Readiness Controller::readiness(ControlTarget target, bool automatic, bool includeBusy) const
 {
     Actuation::ReadinessInput input;
-    input.globalActive = validation; // Scoped maintenance gate, never global Active.
-    if (validation) {
-        input.validationInactive = !_validation.snapshot(millis()).active
-            || (getMode() != Mode::Disabled && getMode() != Mode::Monitor);
-        // Until reference-device replay/recovery semantics are validated, even
-        // maintenance ownership writes remain blocked by the common model.
-        input.recoveryUnsupported = !getRecoverySnapshot(target).automaticSupported;
-    }
+    input.globalActive = !automatic || getMode() == Mode::Active;
     input.permissionGranted = controlPermissionGranted(target);
-    input.recoveryPending = getRecoverySnapshot(target).blocked;
+    if (includeBusy) {
+        auto state = getActuationCommandSnapshot(target).state;
+        input.commandBusy = state == Actuation::MailboxState::Pending || state == Actuation::MailboxState::Running
+            || (target == ControlTarget::Storage ? _storage.workerBusy() : _warp.workerBusy());
+    }
 
     switch (target) {
         case ControlTarget::Evse: {
             auto snapshot = _warp.snapshot();
-            auto cleanup = _warp.cleanupSnapshot();
             input.configured = snapshot.configured;
             input.enabled = snapshot.enabled;
             input.profileControllable = _warp.controlCapable();
             input.reachable = snapshot.reachable;
             input.telemetryFresh = snapshot.valid && !snapshot.stale;
-            input.faulted = snapshot.valid && snapshot.sample.chargingState == 4;
-            input.cleanupPending = cleanup.retainedContext;
             break;
         }
         case ControlTarget::Storage: {
             auto snapshot = _storage.snapshot();
-            auto cleanup = _storage.cleanupSnapshot();
             input.configured = snapshot.configured;
             input.enabled = snapshot.enabled;
             input.profileControllable = _storage.controlCapable();
             input.reachable = snapshot.reachable;
             input.telemetryFresh = snapshot.valid && !snapshot.stale;
-            input.faulted = snapshot.valid
-                && ((snapshot.sample.faultActive.valid && snapshot.sample.faultActive.value)
-                    || (snapshot.sample.faultCode.valid && snapshot.sample.faultCode.value != 0));
-            input.cleanupPending = cleanup.retainedContext;
             break;
         }
         default:
@@ -212,45 +134,80 @@ bool Controller::actuationAllowed(ControlTarget target) const
     return getActuationReadiness(target).allowed();
 }
 
-void Controller::releaseValidationOwnership()
+ControlCapability Controller::controlCapability() const
 {
-    _warp.requestRelease(); _storage.requestRelease();
+    return { controlPermissionGranted(ControlTarget::Storage), controlPermissionGranted(ControlTarget::Evse) };
 }
-void Controller::serviceValidation()
+
+Actuation::ProfileInfo Controller::getProfileInfo(ControlTarget target) const
 {
-    if (_validation.expire(millis())) { releaseValidationOwnership(); }
+    return target == ControlTarget::Storage ? _storage.profileInfo() : _warp.profileInfo();
 }
-bool Controller::startValidation(uint32_t ttlMs, char* token)
+
+bool Controller::submitManual(Actuation::Command command, uint32_t& id)
 {
-    serviceValidation();
-    if (getMode() != Mode::Disabled && getMode() != Mode::Monitor) { return false; }
-    if (getRecoverySnapshot(ControlTarget::Evse).blocked || getRecoverySnapshot(ControlTarget::Storage).blocked
-            || !_warp.resumeCommands() || !_storage.resumeCommands()) { return false; }
-    return _validation.start(millis(), ttlMs, esp_fill_random, token);
+    command.automatic = false;
+    return submit(command, id);
 }
-bool Controller::revokeValidation(char const* token)
+
+bool Controller::submitActuation(Actuation::Command command, uint32_t& id)
 {
-    if (!_validation.revoke(token)) { return false; }
-    releaseValidationOwnership(); return true;
+    command.automatic = true;
+    return submit(command, id);
 }
-bool Controller::submitValidation(Actuation::Command const& command, char const* token, uint32_t& id)
+
+bool Controller::submit(Actuation::Command command, uint32_t& id)
 {
-    id = 0; serviceValidation();
-    if (!Actuation::validCommand(command) || !getValidationReadiness(command.target).allowed()
-            || !_validation.accept(token, millis())) { return false; }
-    // Same production mailbox, generation checks, planner, worker and journal.
+    id = 0;
+    if (!Actuation::validCommand(command) || !readiness(command.target, command.automatic).allowed()) { return false; }
+    if (!constraintsPermit(command)) { return false; }
     return command.target == ControlTarget::Evse ? _warp.submitCommand(command, id)
         : command.target == ControlTarget::Storage && _storage.submitCommand(command, id);
 }
 
-bool Controller::submitActuation(Actuation::Command const& command, uint32_t& id)
+bool Controller::constraintsPermit(Actuation::Command const& command) const
 {
-    id = 0;
-    if (!Actuation::validCommand(command) || !actuationAllowed(command.target)) { return false; }
-    switch (command.target) {
-        case ControlTarget::Evse: return _warp.submitCommand(command, id);
-        case ControlTarget::Storage: return _storage.submitCommand(command, id);
-        default: return false;
+    // Rechecked by the worker immediately before every bounded write too.
+    return command.target != ControlTarget::Storage || command.action != Actuation::Action::SetDischargePowerW
+        || command.value <= 0 || getConstraints().storage.dischargeAllowed;
+}
+
+void Controller::applyEvProtection()
+{
+    // No automatic producer in Monitor/Disabled, and EVSE write permission is irrelevant.
+    if (getMode() != Mode::Active || !controlCapability().storage) {
+        _evProtectionOwned = false; _policyCommandId = 0; _lastPolicyAttemptMs = 0;
+        return;
+    }
+    auto generation = _storage.generation();
+    if (_evProtectionGeneration != generation) {
+        _evProtectionGeneration = generation;
+        _evProtectionOwned = false; _policyCommandId = 0; _lastPolicyAttemptMs = 0;
+    }
+    auto current = _storage.commandSnapshot();
+    if (_policyCommandId && current.id == _policyCommandId) {
+        if (current.state == Actuation::MailboxState::Pending || current.state == Actuation::MailboxState::Running) { return; }
+        _policyCommandId = 0;
+    }
+    bool block = !getConstraints().storage.dischargeAllowed;
+    bool completedStop = current.state == Actuation::MailboxState::Succeeded && current.command.automatic
+        && current.command.action == Actuation::Action::Stop;
+    // Reassert after a manual override, observed discharge, or an actual failed command.
+    auto storage = _storage.snapshot();
+    bool observedDischarge = storage.valid && !storage.stale
+        && storage.sample.acPowerW.valid && storage.sample.acPowerW.value < -10;
+    if (block && _evProtectionOwned && completedStop && !observedDischarge) { return; }
+    if (!block && !_evProtectionOwned) { return; }
+    auto now = millis();
+    if (_lastPolicyAttemptMs && now - _lastPolicyAttemptMs < 5000) { return; }
+    Actuation::Command command; command.target = ControlTarget::Storage;
+    command.action = block ? Actuation::Action::Stop : Actuation::Action::Release;
+    uint32_t id;
+    if (submitActuation(command, id)) {
+        _lastPolicyAttemptMs = now;
+        _policyCommandId = id;
+        // A failed stop may still have reached the device; retain release courtesy.
+        _evProtectionOwned = block;
     }
 }
 
@@ -290,27 +247,6 @@ Actuation::CleanupSnapshot Controller::getActuationCleanupSnapshot(ControlTarget
     }
 }
 
-bool Controller::getRecoveryRecord(ControlTarget target, Recovery::Record& record, Recovery::Snapshot& snapshot) const
-{
-    return target == ControlTarget::Evse ? _warp.recoveryRecord(record, snapshot)
-        : target == ControlTarget::Storage && _storage.recoveryRecord(record, snapshot);
-}
-bool Controller::requestRecoveryResolution(ControlTarget target, char const* recordId, bool independentlyReleased)
-{
-    if (getMode() != Mode::Disabled && getMode() != Mode::Monitor) { return false; }
-    return target == ControlTarget::Evse ? _warp.requestRecoveryResolution(recordId, independentlyReleased)
-        : target == ControlTarget::Storage && _storage.requestRecoveryResolution(recordId, independentlyReleased);
-}
-
-Recovery::Snapshot Controller::getRecoverySnapshot(ControlTarget target) const
-{
-    switch (target) {
-        case ControlTarget::Evse: return _warp.recoverySnapshot();
-        case ControlTarget::Storage: return _storage.recoverySnapshot();
-        default: return {};
-    }
-}
-
 Warp::Snapshot Controller::getWarpSnapshot() const
 {
     return _warp.snapshot();
@@ -324,15 +260,15 @@ Storage::Snapshot Controller::getStorageSnapshot() const
 Model::SystemState Controller::getNormalizedState() const
 {
     auto result = Model::normalize(_warp.snapshot(), _storage.snapshot());
-    auto grid = PowerMeter.getSnapshot();
-    result.grid.powerW = Model::normalizeGridPower(grid.powerTotal, grid.valid, grid.lastUpdate > 0);
-    result.pv.powerW = normalizedPvPower();
+    Model::normalizeSources(result);
     return result;
 }
 
 Constraints::ConstraintSet Controller::getConstraints() const
 {
-    return {};
+    if (getMode() != Mode::Active || !controlCapability().storage) { return {}; }
+    std::lock_guard<std::mutex> lock(_policyMutex);
+    return _evProtectionPolicy.snapshot(millis()).actionableConstraints;
 }
 
 Policies::EvProtectionSnapshot Controller::getEvProtectionShadowSnapshot() const

@@ -55,17 +55,15 @@ make test ARDUINOJSON=/path/to/ArduinoJson/src
 
 CI checks out the same `v7.4.3` version before `make test`. Store tests use an
 in-memory backend with injected commit failure; real LittleFS/power-cut and heap
-behavior remain hardware validation. No writes or device activation are exercised.
+behavior remain hardware validation. Semantic writes use fake register I/O; no physical device activation is exercised.
 
 
-Focused recovery/session checks (no full firmware build):
+Focused real-control checks (no local firmware matrix):
 
 ```sh
-make -C test test_recovery test_flash_journal test_provider_cleanup test_validation_session ARDUINOJSON=../work/ArduinoJson/src
-(cd test && ./test_recovery && ./test_flash_journal && ./test_provider_cleanup && ./test_validation_session)
+make -C test test_provider_cleanup test_semantic_actuators test_control_readiness test_ev_protection test_profile_catalog ARDUINOJSON=../work/ArduinoJson/src
+(cd test && ./test_provider_cleanup && ./test_semantic_actuators && ./test_control_readiness && ./test_ev_protection && ./test_profile_catalog)
+python3 test/test_hems_config.py work/ArduinoJson/src
 ```
 
-`test_flash_journal` exercises the production VFS adapter using native files under
-`work/recovery-flash` and faulted write/fsync/rename calls. Identity fixtures are
-synthetic; only the catalog test asserts documented real profile metadata.
-Hardware reboot/replay/API validation remains a separate gate.
+`test_provider_cleanup` compiles the production controller, policy, both provider workers, mailbox, planner and executor. Only external grid/PV inputs, tasks, configuration persistence, profile loading and wire I/O are deterministic seams. It covers all four permission combinations, Monitor manual commands, Active automatic gating/EV protection, debounce, transient failures, one-shot failed release, configuration generation races and same-ID capability reload. Identity/replay metadata is deliberately absent or ineligible and does not prevent control. Parser/catalog and separate semantic/readback tests validate bounded operations. Physical register/charging behavior remains a hardware test.

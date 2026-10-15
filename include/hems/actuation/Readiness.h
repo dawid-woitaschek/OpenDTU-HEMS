@@ -14,11 +14,7 @@ enum class ReadinessBlocker : uint16_t {
     ProfileNotControllable = 1u << 4,
     DeviceUnreachable = 1u << 5,
     TelemetryNotFresh = 1u << 6,
-    DeviceFault = 1u << 7,
-    CleanupPending = 1u << 8,
-    RecoveryPending = 1u << 9,
-    ValidationInactive = 1u << 10,
-    RecoveryUnsupported = 1u << 11,
+    CommandBusy = 1u << 7,
 };
 
 constexpr uint16_t readinessBit(ReadinessBlocker blocker)
@@ -34,11 +30,7 @@ struct ReadinessInput {
     bool profileControllable = false;
     bool reachable = false;
     bool telemetryFresh = false;
-    bool faulted = false;
-    bool cleanupPending = false;
-    bool recoveryPending = false;
-    bool validationInactive = false;
-    bool recoveryUnsupported = false;
+    bool commandBusy = false;
 };
 
 struct Readiness {
@@ -51,8 +43,7 @@ struct Readiness {
 
     bool allowed() const { return blockers == 0; }
 
-    // Useful while the project is still Monitor-only: every device/runtime
-    // prerequisite is satisfied except the deliberately absent global Active mode.
+    // Device readiness independent of the automatic producer mode.
     bool readyForActive() const
     {
         return (blockers & ~readinessBit(ReadinessBlocker::GlobalModeInactive)) == 0;

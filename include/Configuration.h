@@ -59,10 +59,12 @@
 #define ZENDURE_MAX_APPKEY_STRLEN   16
 
 #include <hems/warp/Settings.h>
+#include <hems/Mode.h>
 
 struct HEMS_CONFIG_T {
     uint32_t Version;
     bool Enabled;
+    Hems::Mode Mode = Hems::Mode::Monitor;
     WarpConfig Warp;
 };
 using HemsConfig = struct HEMS_CONFIG_T;

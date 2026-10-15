@@ -11,7 +11,6 @@
         <template v-if="!dataLoading && !loadFailed && hemsConfig.version === 1">
             <form @submit.prevent="saveWarp">
                 <CardElement :text="$t('hems.Warp')" textVariant="text-bg-primary">
-                    <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
                     <InputElement
                         :label="$t('hems.WarpEnabled')"
                         v-model="hemsConfig.warp.enabled"
@@ -42,11 +41,7 @@
                             <div class="col-sm-8">
                                 <select id="hems-evse-profile" class="form-select" v-model="evseBinding.profile">
                                     <option value="">WARP (legacy)</option>
-                                    <option
-                                        v-if="evseProfileUnavailable"
-                                        :value="evseBinding.profile"
-                                        disabled
-                                    >
+                                    <option v-if="evseProfileUnavailable" :value="evseBinding.profile" disabled>
                                         ⚠ {{ evseBinding.profile }}
                                     </option>
                                     <option v-for="profile in evseProfiles" :key="profile.id" :value="profile.id">
@@ -57,7 +52,7 @@
                         </div>
                         <div class="row mb-3">
                             <label for="hems-evse-control-mode" class="col-sm-4 col-form-label">{{
-                                $t('hems.ControlMode')
+                                'EVSE control'
                             }}</label>
                             <div class="col-sm-8">
                                 <select
@@ -79,7 +74,6 @@
 
             <form @submit.prevent="saveStorage">
                 <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
-                    <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
                     <InputElement
                         :label="$t('storage.Enabled')"
                         v-model="hemsConfig.storage.enabled"
@@ -158,7 +152,7 @@
                         />
                         <div class="row mb-3">
                             <label for="hems-storage-control-mode" class="col-sm-4 col-form-label">{{
-                                $t('hems.ControlMode')
+                                'Storage control'
                             }}</label>
                             <div class="col-sm-8">
                                 <select
@@ -250,17 +244,20 @@ export default defineComponent({
                 return (
                     parts.length === 4 &&
                     parts.every(
-                        (part) => /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
+                        (part) =>
+                            /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
                     )
                 );
             }
 
-            return host.split('.').every(
-                (label) =>
-                    label.length >= 1 &&
-                    label.length <= 63 &&
-                    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
-            );
+            return host
+                .split('.')
+                .every(
+                    (label) =>
+                        label.length >= 1 &&
+                        label.length <= 63 &&
+                        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
+                );
         },
         validInteger(value: unknown, minimum: number, maximum: number): boolean {
             const number = typeof value === 'number' ? value : Number(value);
@@ -354,9 +351,7 @@ export default defineComponent({
                 }
             }
 
-            const warp = this.hemsConfig.warp.enabled
-                ? this.hemsConfig.warp
-                : { enabled: false, host: '', port: 502 };
+            const warp = this.hemsConfig.warp.enabled ? this.hemsConfig.warp : { enabled: false, host: '', port: 502 };
             if (!(await this.postConfig({ version: this.hemsConfig.version, warp }))) return;
             if (!(await this.postEvseBinding())) return;
             this.getConfig();

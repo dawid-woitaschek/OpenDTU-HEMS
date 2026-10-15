@@ -10,7 +10,6 @@
 #include "WebApi_errors.h"
 #include <AsyncJson.h>
 #include <LittleFS.h>
-#include <hems/recovery/PathGuard.h>
 
 void WebApiFileClass::init(AsyncWebServer& server, Scheduler& scheduler)
 {
@@ -43,7 +42,7 @@ void WebApiFileClass::onFileListGet(AsyncWebServerRequest* request)
     File rootfs = LittleFS.open("/");
     File file = rootfs.openNextFile();
     while (file) {
-        if (!file.isDirectory() && !Hems::Recovery::protectedPath(file.name())) {
+        if (!file.isDirectory()) {
             JsonObject obj = data.add<JsonObject>();
             obj["name"] = String(file.name());
             obj["size"] = file.size();
@@ -99,10 +98,6 @@ void WebApiFileClass::onFileDelete(AsyncWebServerRequest* request)
     }
 
     String name = "/" + root["file"].as<String>();
-    if (Hems::Recovery::protectedPath(name.c_str())) {
-        request->send(403, "application/json", "{\"error\":\"recovery_record_protected\"}");
-        return;
-    }
     if (!LittleFS.exists(name)) {
         request->send(404);
         return;
@@ -161,10 +156,6 @@ void WebApiFileClass::onFileUpload(AsyncWebServerRequest* request, String filena
         return;
     }
 
-    if (request->hasParam("file") && Hems::Recovery::protectedPath(request->getParam("file")->value().c_str())) {
-        if (!index) { request->send(403, "application/json", "{\"error\":\"recovery_record_protected\"}"); }
-        return;
-    }
     if (!index) {
         // open the file on first call and store the file handle in the request object
         if (!request->hasParam("file")) {
@@ -192,7 +183,6 @@ void WebApiFileClass::onFileUploadFinish(AsyncWebServerRequest* request)
         return;
     }
 
-    if (request->hasParam("file") && Hems::Recovery::protectedPath(request->getParam("file")->value().c_str())) { return; }
 
     // the request handler is triggered after the upload has finished...
     // create the response, add header, and send response

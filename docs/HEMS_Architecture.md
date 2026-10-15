@@ -1,6 +1,6 @@
 # OpenDTU-HEMS Architecture
 
-> Status: architectural baseline for early development.
+> Status: supervisory control model; updated 2026-10-15.
 >
 > This document describes the intended design constraints and responsibilities of OpenDTU-HEMS. Individual implementation details may evolve as real hardware integrations are validated, but changes to the core principles should be deliberate and documented.
 
@@ -19,6 +19,18 @@ The project keeps the existing OpenDTU-OnBattery functionality, especially inver
 - observable, fail-safe energy-management decisions.
 
 The HEMS must remain useful without a mandatory cloud service, Home Assistant instance, Node-RED server or external database.
+
+## Current operational model
+
+OpenDTU-HEMS is supervisory home-energy automation. Hardware/device protections remain authoritative; HEMS command failures are operational failures, not permanent authorization lockouts.
+
+Storage and EVSE each have an independent Monitor only / HEMS control permission consumed by the logic core and provider. Manual semantic commands work in Monitor and Active when target readiness permits them. Automatic writes additionally require Active. Disabled preserves disabled provider behavior. Policies expose both proposals and actionable constraints; a monitor-only EVSE can provide telemetry for writable-storage EV protection.
+
+One worker/client and depth-one mailbox per provider serialize all telemetry, manual commands, automatic commands and best-effort release. Commands are profile-bounded and generation-pinned, with last-moment permission/freshness checks and register readback. A command failure closes the client, records the error and schedules telemetry; fresh communication restores availability automatically.
+
+Recovery/release is best effort and diagnostic. No durable ownership intent, identity/replay eligibility, attestation or temporary session lies in the normal command path. Known old ownership receives a single retained-endpoint release attempt on change; it cannot permanently block a new configuration. Old #22 journal files are ignored and administratively removable.
+
+See [HEMS_CONTROL.md](HEMS_CONTROL.md) for the implemented contract and [HEMS_Roadmap.md](HEMS_Roadmap.md) for the short remaining path to release.
 
 ## 2. Core design principles
 
@@ -53,7 +65,7 @@ For the initial reference installation:
 ```text
 Hoymiles inverter(s)  <- DPL controls output
 Marstek storage       <- HEMS may control storage policy
-WARP3 Smart           -> HEMS reads telemetry only
+WARP3 Smart           <- HEMS reads telemetry and optionally controls current/stop/release
 ```
 
 Home Assistant, vendor apps and other automation systems may observe state, but simultaneous autonomous writers should be avoided.
@@ -183,44 +195,9 @@ External device providers update normalized state. The optimizer consumes snapsh
 
 ## 6. HEMS operating modes
 
-HEMS has four global operating modes.
+HEMS has three global modes: Disabled, Monitor and Active.
 
-### Disabled
-
-The HEMS is inactive. Existing OpenDTU-OnBattery behavior should remain unchanged.
-
-### Monitor
-
-Telemetry is collected and displayed, but no policy decisions are executed.
-
-### Shadow
-
-The full policy and optimizer logic is evaluated, but hardware writes are suppressed.
-
-Example:
-
-```text
-Decision: BLOCK_STORAGE_DISCHARGE
-Reason: EV_CHARGING
-Would write: Marstek -> Block discharge
-Execution: SHADOW
-```
-
-### Active
-
-Validated HEMS decisions may be written to devices that have explicit external control enabled.
-
-Active mode alone is not sufficient to enable a write. A controllable device also requires a per-device write permission.
-
-```text
-HEMS Active
-    +
-Device external control enabled
-    +
-Safety checks passed
-    =
-Hardware write allowed
-```
+Disabled stops automatic control and HEMS polling. Monitor calculates observable policy proposals and permits authenticated manual semantic commands for target types set to HEMS control. Active additionally permits automatic policy commands for those writable target types. Manual commands in Active may be overridden by automation. Shadow is policy behavior in Monitor, not an additional global mode.
 
 ## 7. State store
 
@@ -500,19 +477,9 @@ A profile that contains write registers is not enough to authorize writes.
 
 Write enablement requires explicit user action.
 
-Before a write, the safety supervisor should validate at least:
+Normal semantic writes require target HEMS-control permission, configured device/profile, reachability, fresh telemetry, supported bounded operation and serialized worker access. Automatic writes additionally require Active. Manual writes work in Monitor. Readback is verified where supported. Physical protections stay authoritative.
 
-- HEMS is in Active mode;
-- device external control is enabled;
-- device is reachable;
-- required telemetry is fresh;
-- no relevant device fault is active;
-- SoC and other required values are valid;
-- requested mode/target is within configured limits;
-- rate limits / minimum runtimes / hysteresis are satisfied;
-- the command does not duplicate an unchanged persistent target unnecessarily.
-
-Where the device supports readback, writes should be verified.
+Release/cleanup is best effort, never a durable authorization prerequisite. Optional identity/recovery/lifecycle metadata may inform diagnostics and hardware validation, but cannot block normal commands. Old journal files are ignored and can be cleared administratively.
 
 ## 16. Failsafe model
 
@@ -848,7 +815,9 @@ Depending on scope, completion should include:
 
 The current milestone and detailed acceptance criteria are tracked in [`HEMS_Roadmap.md`](HEMS_Roadmap.md).
 
-## PR #2 implementation boundary
+## Historical implementation notes (superseded by the current operational model)
+
+### PR #2 implementation boundary
 
 The first runtime skeleton implements only `Disabled` and `Monitor`. It has no
 providers, telemetry snapshots, policy decisions or hardware writes. Monitor
@@ -880,7 +849,7 @@ not an automatic release installer. GitHub rate limits, network failures and
 unpublished local commits can still make version information unavailable. A new
 release/update architecture is outside this milestone.
 
-## PR #3 implementation boundary
+### PR #3 implementation boundary
 
 The controller now dispatches a WARP-specific read-only provider through the
 existing scheduler. A small shared Modbus TCP client uses bounded lwIP socket
@@ -895,7 +864,7 @@ This additive change preserves PR #2 configurations without migration.
 See [HEMS_WARP.md](HEMS_WARP.md) for provenance, timing/state semantics, resource
 bounds, tests and the required physical validation gate.
 
-## PR #4 implementation boundary
+### PR #4 implementation boundary
 
 The shipped v1 profile schema is deliberately narrower than the conceptual
 future profile example above. It contains telemetry, transport defaults, metadata

@@ -9,12 +9,7 @@ public:
 
 private:
     void onStatus(AsyncWebServerRequest* request);
-    void onValidationStart(AsyncWebServerRequest* request);
-    void onValidationRevoke(AsyncWebServerRequest* request);
-    void onValidationCommand(AsyncWebServerRequest* request);
-    void onValidationStatus(AsyncWebServerRequest* request);
-    void onRecoveryRecord(AsyncWebServerRequest* request);
-    void onRecoveryResolve(AsyncWebServerRequest* request);
+    void onCommand(AsyncWebServerRequest* request);
     void onConfigGet(AsyncWebServerRequest* request);
     void onConfigPost(AsyncWebServerRequest* request);
 };

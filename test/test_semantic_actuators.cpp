@@ -230,67 +230,22 @@ int main()
     assert(!wrongProfile && wrongProfile.planning.error == Profiles::ControlPlanError::ControlUnavailable);
     assert(fake.writes.size() == before);
 
-    // A provider generation change must not silently forget ownership of the
-    // previous endpoint. reset() therefore turns an owned actuator into a
-    // fail-closed orphaned state and subsequent commands emit no writes.
-    FakeIo lifecycleStorageWire;
-    Actuation::RegisterIo lifecycleStorageIo { &lifecycleStorageWire, fakeWrite, fakeRead };
-    Storage::Actuator lifecycleBattery;
-    assert(lifecycleBattery.setChargePower(lifecycleStorageIo, storage, 500));
-    assert(lifecycleBattery.ownsControl());
-    before = lifecycleStorageWire.writes.size();
-    assert(!lifecycleBattery.reset());
-    assert(lifecycleBattery.ownershipOrphaned());
-    assert(lifecycleBattery.ownsControl());
-    auto orphanedStorage = lifecycleBattery.stop(lifecycleStorageIo, storage);
-    assert(!orphanedStorage && orphanedStorage.error == Actuation::CommandError::OwnershipOrphaned);
-    assert(lifecycleStorageWire.writes.size() == before);
-
-    FakeIo lifecycleEvseWire;
-    Actuation::RegisterIo lifecycleEvseIo { &lifecycleEvseWire, fakeWrite, fakeRead };
-    Evse::Actuator lifecycleCharger;
-    assert(lifecycleCharger.setCurrent(lifecycleEvseIo, evse, 6));
-    assert(lifecycleCharger.ownsControl());
-    before = lifecycleEvseWire.writes.size();
-    assert(!lifecycleCharger.reset());
-    assert(lifecycleCharger.ownershipOrphaned());
-    assert(lifecycleCharger.ownsControl());
-    auto orphanedEvse = lifecycleCharger.stop(lifecycleEvseIo, evse);
-    assert(!orphanedEvse && orphanedEvse.error == Actuation::CommandError::OwnershipOrphaned);
-    assert(lifecycleEvseWire.writes.size() == before);
-
-    // Retained release is the only allowed escape for an orphaned actuator.
-    assert(lifecycleBattery.releaseRetainedControl(lifecycleStorageIo, storage));
-    assert(!lifecycleBattery.ownsControl() && !lifecycleBattery.ownershipOrphaned());
-    assert(lifecycleBattery.reset());
-    assert(lifecycleBattery.stop(lifecycleStorageIo, storage));
-    assert(lifecycleCharger.releaseRetainedControl(lifecycleEvseIo, evse));
-    assert(!lifecycleCharger.ownsControl() && !lifecycleCharger.ownershipOrphaned());
-    assert(lifecycleCharger.reset());
-    assert(lifecycleCharger.setCurrent(lifecycleEvseIo, evse, 10));
-
-    // Lost acquire response, failed readback and verification mismatch all mean
-    // ownership may exist. Block later operations until a verified release.
+    // Failed acquire/readback can be retried through the same actuator without acknowledgement.
     for (int failure = 0; failure < 3; ++failure) {
-        FakeIo failedWire;
-        failedWire.failWrite = failure == 0;
-        failedWire.failRead = failure == 1;
-        failedWire.mismatch = failure == 2;
-        Actuation::RegisterIo failedIo { &failedWire, fakeWrite, fakeRead, fakeAuthorized };
-        Storage::Actuator uncertain;
-        auto acquired = uncertain.setChargePower(failedIo, storage, 500);
-        assert(!acquired && acquired.stage == Actuation::CommandStage::Acquire);
-        assert(acquired.execution.writeAttempted && uncertain.ownsControl());
-        before = failedWire.writes.size();
-        assert(uncertain.stop(failedIo, storage).error == Actuation::CommandError::OwnershipOrphaned);
-        assert(failedWire.writes.size() == before);
-        assert(!uncertain.reset());
-        assert(!uncertain.releaseRetainedControl(failedIo, storage));
-        assert(uncertain.ownsControl() && uncertain.ownershipOrphaned());
-        failedWire.failWrite = failedWire.failRead = failedWire.mismatch = false;
-        assert(uncertain.releaseRetainedControl(failedIo, storage));
-        assert(!uncertain.ownsControl() && !uncertain.ownershipOrphaned());
-        assert(uncertain.setChargePower(failedIo, storage, 500));
+        FakeIo wire; wire.failWrite = failure == 0; wire.failRead = failure == 1; wire.mismatch = failure == 2;
+        Actuation::RegisterIo failedIo { &wire, fakeWrite, fakeRead, fakeAuthorized };
+        Storage::Actuator actuator;
+        assert(!actuator.setChargePower(failedIo, storage, 500));
+        assert(actuator.ownsControl());
+        wire.failWrite = wire.failRead = wire.mismatch = false;
+        assert(actuator.setChargePower(failedIo, storage, 500));
+        wire.failWrite = true;
+        assert(!actuator.releaseControl(failedIo, storage));
+        wire.failWrite = false;
+        assert(actuator.stop(failedIo, storage));
+        assert(actuator.releaseControl(failedIo, storage));
+        actuator.reset();
+        assert(actuator.stop(failedIo, storage));
     }
 
     // An acquire revoked after an earlier write retains possible ownership.
@@ -322,10 +277,10 @@ int main()
     Evse::Actuator uncertainCharger;
     assert(!uncertainCharger.setCurrent(warpFailureIo, evse, 6));
     assert(uncertainCharger.ownsControl());
-    assert(!uncertainCharger.reset());
+    uncertainCharger.reset();
     warpFailure.failWrite = false;
     assert(uncertainCharger.releaseRetainedControl(warpFailureIo, evse));
-    assert(!uncertainCharger.ownsControl() && !uncertainCharger.ownershipOrphaned());
+    assert(!uncertainCharger.ownsControl());
 
     // Missing release metadata must never become a successful no-op cleanup,
     // nor permit establishing control that cannot subsequently be relinquished.
@@ -343,8 +298,10 @@ int main()
     // Reset remains harmless before ownership has ever been taken.
     Storage::Actuator cleanBattery;
     Evse::Actuator cleanCharger;
-    assert(cleanBattery.reset() && !cleanBattery.ownershipOrphaned());
-    assert(cleanCharger.reset() && !cleanCharger.ownershipOrphaned());
+    cleanBattery.reset();
+    assert(!cleanBattery.ownsControl());
+    cleanCharger.reset();
+    assert(!cleanCharger.ownsControl());
 
     std::cout << "Semantic storage and EVSE actuator tests passed\n";
 }

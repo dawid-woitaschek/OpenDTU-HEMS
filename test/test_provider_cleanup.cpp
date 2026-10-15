@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Production provider dispatch/session/cleanup, with deterministic task and wire
 // seams. No private-field access and no network threads or wall-clock waits.
-#include "recovery_files.h"
+#include <hems/Controller.h>
+#include <hems/model/Sources.h>
+#include <hems/evse/SettingsStore.h>
+#include <hems/storage/SettingsStore.h>
+#include <fstream>
+#include <sstream>
 #include <hems/storage/Provider.h>
 #include <hems/warp/Provider.h>
 #include <hems/profiles/FlashStore.h>
@@ -46,17 +51,16 @@ static void runWorker()
 }
 
 using namespace Hems;
-static Profiles::Profile selectedProfile;
+static std::map<std::string, Profiles::Profile> selectedProfiles;
 static std::function<void()> onWrite;
-static std::function<void()> onIdentityRead;
 struct Write { std::string host; uint16_t port; uint8_t unit; uint16_t address; };
 static std::vector<Write> writes;
 static std::string wireHost;
 static uint16_t wirePort;
 static uint8_t wireUnit;
-static std::map<uint16_t, uint16_t> registers;
+static std::map<uint16_t, uint16_t> registers, inputRegisters;
 static bool writeFails;
-static bool delayedFailure;
+static bool readFails;
 
 namespace Hems::Profiles {
 // Profile loading is stubbed; planning/execution and provider state are real.
@@ -70,9 +74,9 @@ static Store store(files);
 static std::mutex storeMutex;
 Store& runtimeStore() { return store; }
 std::mutex& runtimeStoreMutex() { return storeMutex; }
-bool Store::get(char const*, Profile& output, bool& builtIn, char const*& error)
+bool Store::get(char const* id, Profile& output, bool& builtIn, char const*& error)
 {
-    output = selectedProfile;
+    output = selectedProfiles.at(id);
     builtIn = false;
     error = nullptr;
     return true;
@@ -91,22 +95,25 @@ Result Client::writeHoldingRegisters(uint16_t address, uint16_t count, uint16_t 
     writes.push_back({ wireHost, wirePort, wireUnit, address });
     for (uint16_t i = 0; i < count; ++i) { registers[address + i] = values[i]; }
     if (onWrite) { auto callback = std::move(onWrite); onWrite = {}; callback(); }
-    if (writeFails && delayedFailure) { testNow += Actuation::CleanupRetryMs + 1000; }
     return writeFails ? Result { Error::Timeout } : Result {};
 }
 Result Client::readHoldingRegisters(uint16_t address, uint16_t count, uint8_t* payload)
 {
+    if (readFails) { return { Error::Timeout }; }
     for (uint16_t i = 0; i < count; ++i) {
         auto value = registers[address + i];
         payload[i * 2] = value >> 8;
         payload[i * 2 + 1] = value;
     }
-    if (address == 90 && onIdentityRead) { auto callback = std::move(onIdentityRead); onIdentityRead = {}; callback(); }
     return { Error::None, 0, true };
 }
 Result Client::readInputRegisters(uint16_t address, uint16_t count, uint8_t* payload)
 {
-    return readHoldingRegisters(address, count, payload);
+    if (readFails) { return { Error::Timeout }; }
+    for (uint16_t i = 0; i < count; ++i) {
+        auto value = inputRegisters[address + i]; payload[i * 2] = value >> 8; payload[i * 2 + 1] = value;
+    }
+    return { Error::None, 0, true };
 }
 Result Client::readDiscreteInputs(uint16_t, uint16_t, uint8_t* payload)
 {
@@ -115,252 +122,171 @@ Result Client::readDiscreteInputs(uint16_t, uint16_t, uint8_t* payload)
 }
 } // namespace Hems::Modbus
 
-static std::function<void()> onAuthorization;
-static int authorizationChecks;
-static int reconfigureAt = -1;
-static bool authorized(void*, ControlTarget)
-{
-    if (++authorizationChecks == reconfigureAt && onAuthorization) { onAuthorization(); }
-    return true;
+
+
+namespace Hems::Storage {
+SettingsStore StorageSettings;
+void SettingsStore::init() {}
+StorageConfig SettingsStore::get() const { return _config; }
+bool SettingsStore::set(StorageConfig const& value) { _config = value; return true; }
 }
-
-// Both provider implementations must keep old identity and recover after a
-// failed acquire/operation even when config changes inside the remote write.
-template<typename Provider, typename Configure>
-static void lifecycle(Provider& provider, ControlTarget target, Configure configure)
-{
-    tasks.clear();
-    writes.clear();
-    registers.clear();
-    testNow = 0;
-    writeFails = false;
-    NetworkSettings.connected = true;
-    provider.setAuthorization(nullptr, authorized);
-    configure(false);
-    Actuation::Command command { target, Actuation::Action::Stop };
-    uint32_t id = 0;
-    assert(provider.submitCommand(command, id));
-    configure(true); // Pending commands must be cancelled, never retargeted.
-    runWorker();
-    assert(writes.empty());
-    assert(provider.commandSnapshot().state == Actuation::MailboxState::Cancelled);
-
-    // Reconfiguration in the final authorization callback must revoke the
-    // approval before the transport can send the ownership-producing write.
-    configure(false);
-    authorizationChecks = 0;
-    reconfigureAt = 5; // submit, dispatch, open, executor gate, write gate
-    onAuthorization = [&] { configure(true); };
-    assert(provider.submitCommand(command, id));
-    runWorker();
-    assert(writes.empty());
-    reconfigureAt = -1;
-    onAuthorization = {};
-    // Conservatively retained context is releasable even after a revoked write.
-    provider.loop();
-    runWorker();
-    assert(!provider.cleanupSnapshot().retainedContext);
-    writes.clear();
-
-    configure(false);
-    assert(provider.submitCommand(command, id));
-    writeFails = true;
-    onWrite = [&] { configure(true); };
-    runWorker();
-    assert(writes.size() == 1 && writes.back().host == "old.invalid");
-    auto cleanup = provider.cleanupSnapshot();
-    assert(cleanup.retainedContext && cleanup.state == Actuation::CleanupState::Pending);
-    assert(provider.commandSnapshot().state == Actuation::MailboxState::Failed);
-    assert(!provider.submitCommand(command, id));
-
-    delayedFailure = true;
-    provider.loop();
-    runWorker();
-    delayedFailure = false;
-    auto failureTime = testNow;
-    cleanup = provider.cleanupSnapshot();
-    assert(cleanup.retainedContext && cleanup.attempts == 1);
-    assert(cleanup.state == Actuation::CleanupState::RetryWait);
-    assert(cleanup.lastResult.stage == Actuation::CommandStage::Release);
-    assert(writes.back().host == "old.invalid");
-    assert(writes.back().port == 1502 && writes.back().unit == 7);
-    size_t before = writes.size();
-    configure(true); // Must not reset/retry or replace the retained context.
-    testNow = failureTime + Actuation::CleanupRetryMs - 1;
-    provider.loop();
-    runWorker();
-    assert(writes.size() == before && provider.cleanupSnapshot().attempts == 1);
-    testNow = failureTime + Actuation::CleanupRetryMs;
-    writeFails = false;
-    provider.loop();
-    runWorker();
-    cleanup = provider.cleanupSnapshot();
-    assert(!cleanup.retainedContext && cleanup.attempts == 2);
-    assert(cleanup.state == Actuation::CleanupState::Succeeded);
-    assert(writes.back().host == "old.invalid" && writes.back().address == 12);
-    assert(writes.back().port == 1502 && writes.back().unit == 7);
-    assert(provider.submitCommand(command, id));
-    runWorker();
-    assert(provider.commandSnapshot().state == Actuation::MailboxState::Succeeded);
-    assert(writes.back().host == "new.invalid" && writes.back().address == 21);
+namespace Hems::Evse {
+SettingsStore BindingSettings;
+void SettingsStore::init() {}
+BindingConfig SettingsStore::get() const { return _config; }
+bool SettingsStore::set(BindingConfig const& value) { _config = value; return true; }
 }
+namespace Hems::Model { void normalizeSources(SystemState&) {} }
 
-// Actual provider reboot dispatch: both targets use one existing worker/client,
-// reject normal commands before loading, and never release a replacement config.
-template<typename Provider, typename Configure>
-static void rebootLifecycle(ControlTarget target, Configure configure, Profiles::Profile profile)
+static Profiles::Profile load(char const* path)
 {
-    tasks.clear(); writes.clear(); registers.clear();
-    writeFails = false; NetworkSettings.connected = true;
-    profile.identityFieldCount = 0; profile.releaseReplaySafe = false;
-    selectedProfile = profile;
-    MemoryJournalFiles files;
-    Provider live;
-    live.setAuthorization(nullptr, authorized);
-    configure(live, false);
-    Actuation::Command command { target, Actuation::Action::Stop };
-    uint32_t id;
-    assert(!live.submitCommand(command, id)); // NotLoaded always fails closed.
-    live.initRecovery(files);
-    assert(live.submitCommand(command, id)); runWorker();
-    assert(live.recoverySnapshot().journalPresent);
-    auto before = writes.size();
-    Provider rebooted; rebooted.initRecovery(files); rebooted.setAuthorization(nullptr, authorized);
-    configure(rebooted, false);
-    assert(!rebooted.submitCommand(command, id));
-    rebooted.loop(); runWorker();
-    assert(rebooted.recoverySnapshot().state == Recovery::State::Unresolved);
-    assert(rebooted.recoverySnapshot().reason == Recovery::Reason::IdentityUnsupported);
-    configure(rebooted, true); rebooted.loop(); runWorker();
-    assert(writes.size() == before && !rebooted.submitCommand(command, id));
-
-    // Synthetic identity and replay-safe semantics, with a new separate journal.
-    tasks.clear(); writes.clear();
-    MemoryJournalFiles verifiedFiles;
-    profile.identityFieldCount = 1; profile.identityFields[0] = { Modbus::ReadFunction::InputRegisters, 90, 2 };
-    strcpy(profile.identitySource, "Synthetic provider identity fixture"); profile.releaseReplaySafe = true;
-    selectedProfile = profile; registers[90] = 0x1234; registers[91] = 0x5678;
-    Provider verifiedLive; verifiedLive.initRecovery(verifiedFiles); verifiedLive.setAuthorization(nullptr, authorized);
-    configure(verifiedLive, false);
-    assert(verifiedLive.submitCommand(command, id)); runWorker();
-    auto armedFiles = verifiedFiles;
-    before = writes.size();
-    Provider verifiedBoot; verifiedBoot.initRecovery(verifiedFiles); configure(verifiedBoot, false);
-    verifiedBoot.loop(); runWorker();
-    assert(verifiedBoot.recoverySnapshot().state == Recovery::State::Recovered);
-    assert(writes.size() == before + 1 && writes.back().host == "old.invalid" && writes.back().address == 12);
-
-    Provider changedBoot; changedBoot.initRecovery(armedFiles); configure(changedBoot, false);
-    onIdentityRead = [&] { configure(changedBoot, true); };
-    before = writes.size(); changedBoot.loop(); runWorker();
-    assert(writes.size() == before && changedBoot.recoverySnapshot().blocked);
-    assert(changedBoot.recoverySnapshot().reason == Recovery::Reason::ConfigurationChanged);
-
-    // Live retained cleanup + failed durable clear retries only persistence;
-    // an unvalidated/non-replay-safe release is never repeated due to flash I/O.
-    tasks.clear(); writes.clear();
-    MemoryJournalFiles clearFiles;
-    Provider clearLive; clearLive.initRecovery(clearFiles); clearLive.setAuthorization(nullptr, authorized);
-    configure(clearLive, false); assert(clearLive.submitCommand(command, id)); runWorker();
-    configure(clearLive, true); clearFiles.fail = true;
-    clearLive.loop(); runWorker(); before = writes.size();
-    assert(clearLive.recoverySnapshot().clearPending && clearLive.recoverySnapshot().blocked);
-    assert(clearLive.cleanupSnapshot().retainedContext);
-    testNow += Recovery::RetryMs; clearFiles.fail = false;
-    clearLive.loop(); runWorker();
-    assert(writes.size() == before && !clearLive.recoverySnapshot().blocked);
-    assert(!clearLive.cleanupSnapshot().retainedContext);
-
-    // Expiry/revocation while an ownership write is running must retain exact
-    // context at completion, then release via the existing cleanup path.
-    assert(clearLive.resumeCommands());
-    configure(clearLive, false);
-    assert(clearLive.submitCommand(command, id));
-    onWrite = [&] { clearLive.requestRelease(); };
-    runWorker();
-    assert(clearLive.cleanupSnapshot().retainedContext);
-    assert(!clearLive.submitCommand(command, id));
-    clearLive.loop(); runWorker();
-    assert(!clearLive.cleanupSnapshot().retainedContext && !clearLive.recoverySnapshot().journalPresent);
-    assert(!clearLive.submitCommand(command, id)); // new session must explicitly resume
-    assert(clearLive.resumeCommands());
+    std::ifstream file(path); std::stringstream content; content << file.rdbuf();
+    auto json = content.str(); Profiles::Profile profile; char const* error = nullptr;
+    assert(Profiles::parse(json.c_str(), json.size(), profile, error));
+    return profile;
+}
+static void freshRegisters()
+{
+    inputRegisters[1] = 2; // uint32 WARP table version
+    inputRegisters[1001] = 2; inputRegisters[1003] = 3; // connected and charging
+    inputRegisters[1011] = 6000;
+    registers[34002] = 500; // storage 50% SoC
 }
 
 int main()
 {
-    MemoryJournalFiles recoveryFiles;
-    std::strcpy(selectedProfile.id, "test.synthetic");
-    selectedProfile.schemaVersion = 2;
-    selectedProfile.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
-    selectedProfile.port = 1502;
-    selectedProfile.unit = 7;
-    selectedProfile.entryCount = 1;
-    std::strcpy(selectedProfile.entries[0].key, "soc_pct");
-    selectedProfile.controlOperationCount = 1;
-    selectedProfile.controlWriteCount = 3;
-    selectedProfile.acquireWriteCount = 1;
-    selectedProfile.releaseFirstWrite = 1;
-    selectedProfile.releaseWriteCount = 1;
-    selectedProfile.controlWrites[0].address = 10;
-    selectedProfile.controlWrites[1].address = 12;
-    selectedProfile.controlWrites[2].address = 11;
-    auto& operation = selectedProfile.controlOperations[0];
-    std::strcpy(operation.key, "stop");
-    operation.firstWrite = 2;
-    operation.writeCount = 1;
-    auto old = selectedProfile;
-    auto replacement = old;
-    replacement.controlWrites[1].address = 22;
-    replacement.controlWrites[2].address = 21;
-    Storage::Provider storage;
-    storage.initRecovery(recoveryFiles);
-    lifecycle(storage, ControlTarget::Storage, [&](bool changed) {
-        selectedProfile = changed ? replacement : old;
-        StorageConfig config;
-        config.Enabled = true;
-        std::strcpy(config.Host, changed ? "new.invalid" : "old.invalid");
-        std::strcpy(config.Profile, "test.storage");
-        storage.configure(config, true);
-    });
+    auto storageProfile = load("../device-profiles/storage/Marstek-Venus-E-3.0.json");
+    auto evseProfile = load("../device-profiles/evse/Tinkerforge-WARP3-Smart.json");
+    selectedProfiles[storageProfile.id] = storageProfile;
+    selectedProfiles[evseProfile.id] = evseProfile;
+    assert(!storageProfile.identityFieldCount && !storageProfile.releaseReplaySafe);
+    auto& config = Configuration.data.Hems;
+    config.Warp.Enabled = true; strcpy(config.Warp.Host, "warp.invalid");
+    StorageConfig storage; storage.Enabled = true; strcpy(storage.Host, "storage.invalid"); strcpy(storage.Profile, storageProfile.id);
+    Evse::BindingConfig evse; strcpy(evse.Profile, evseProfile.id);
 
-    old.capabilities = Profiles::capabilityBit(Profiles::Capability::Evse);
-    old.acquireWriteCount = 0; // WARP establishes control in the operation itself.
-    std::strcpy(old.entries[0].key, "charging_state");
-    std::strcpy(old.controlOperations[0].key, "stop_charging");
-    replacement = old;
-    replacement.controlWrites[1].address = 22;
-    replacement.controlWrites[2].address = 21;
-    Warp::Provider warp;
-    warp.initRecovery(recoveryFiles);
-    lifecycle(warp, ControlTarget::Evse, [&](bool changed) {
-        selectedProfile = changed ? replacement : old;
-        WarpConfig config;
-        config.Enabled = true;
-        config.Port = changed ? 2502 : 1502;
-        std::strcpy(config.Host, changed ? "new.invalid" : "old.invalid");
-        Evse::BindingConfig binding;
-        std::strcpy(binding.Profile, "test.evse");
-        warp.configure(config, binding, true);
-    });
-    auto configureStorage = [](Storage::Provider& provider, bool changed) {
-        StorageConfig config; config.Enabled = true;
-        strcpy(config.Host, changed ? "new.invalid" : "old.invalid"); strcpy(config.Profile, "test.synthetic");
-        provider.configure(config, true);
-    };
-    auto storageProfile = selectedProfile;
-    storageProfile.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
-    strcpy(storageProfile.entries[0].key, "soc_pct"); strcpy(storageProfile.controlOperations[0].key, "stop");
-    storageProfile.controlWrites[1].address = 12;
-    rebootLifecycle<Storage::Provider>(ControlTarget::Storage, configureStorage, storageProfile);
-    auto configureWarp = [](Warp::Provider& provider, bool changed) {
-        WarpConfig config; config.Enabled = true; config.Port = 1502;
-        strcpy(config.Host, changed ? "new.invalid" : "old.invalid");
-        Evse::BindingConfig binding; strcpy(binding.Profile, "test.synthetic");
-        provider.configure(config, binding, true);
-    };
-    auto evseProfile = storageProfile;
-    evseProfile.capabilities = Profiles::capabilityBit(Profiles::Capability::Evse);
-    strcpy(evseProfile.entries[0].key, "charging_state"); strcpy(evseProfile.controlOperations[0].key, "stop_charging");
-    rebootLifecycle<Warp::Provider>(ControlTarget::Evse, configureWarp, evseProfile);
-    std::cout << "Provider retained cleanup and reboot recovery lifecycle tests passed\n";
+    // Actual controller, policy, providers, mailbox, planner and executor for all four permissions.
+    for (bool storageControl : { false, true }) for (bool evseControl : { false, true }) {
+        tasks.clear(); writes.clear(); registers.clear(); testNow = 1000;
+        writeFails = readFails = false; freshRegisters();
+        storage.Control = storageControl ? ControlMode::HemsControl : ControlMode::MonitorOnly;
+        evse.Control = evseControl ? ControlMode::HemsControl : ControlMode::MonitorOnly;
+        Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse);
+        config.Mode = Mode::Monitor;
+        Controller controller; Scheduler scheduler; controller.init(scheduler);
+        auto tick = [&] { ++testNow; scheduler.execute(); runWorker(); };
+        tick(); tick();
+        assert(controller.getWarpSnapshot().valid && controller.getStorageSnapshot().valid);
+        assert(writes.empty()); // Monitor automatic producer stays inactive even while EV charges.
+        auto proposal = controller.getEvProtectionShadowSnapshot();
+        assert(!proposal.proposedConstraints.storage.dischargeAllowed);
+        assert(controller.getConstraints().storage.dischargeAllowed);
+        assert(controller.controlCapability().storage == storageControl);
+        assert(controller.controlCapability().evse == evseControl);
+        uint32_t id;
+        Actuation::Command command { ControlTarget::Storage, Actuation::Action::SetChargePowerW, true, 500 };
+        assert(controller.submitManual(command, id) == storageControl);
+        runWorker(); tick(); tick();
+        command = { ControlTarget::Evse, Actuation::Action::SetCurrentA, true, 6 };
+        assert(controller.submitManual(command, id) == evseControl);
+        runWorker(); tick(); tick();
+        for (auto const& write : writes) {
+            assert(write.host == "storage.invalid" ? storageControl : evseControl);
+        }
+        if (evseControl) { assert(controller.getActuationCommandResult(ControlTarget::Evse).execution.readbackVerified); }
+        if (storageControl) { assert(controller.getActuationCommandResult(ControlTarget::Storage).execution.readbackVerified); }
+        assert(!controller.submitActuation(command, id)); // Monitor never queues automatic writes.
+        writes.clear(); config.Mode = Mode::Active; controller.updateSettings(); tick(); tick();
+        assert(controller.getConstraints().storage.dischargeAllowed == !storageControl);
+        if (storageControl) {
+            assert(!writes.empty());
+            assert(controller.getActuationCommandSnapshot(ControlTarget::Storage).command.action == Actuation::Action::Stop);
+            for (auto const& write : writes) { assert(write.host == "storage.invalid"); }
+        } else { assert(writes.empty()); }
+        command = { ControlTarget::Evse, Actuation::Action::SetCurrentA, true, 10 };
+        assert(controller.submitActuation(command, id) == evseControl); runWorker(); tick(); tick();
+        command = { ControlTarget::Storage, Actuation::Action::Stop };
+        assert(controller.submitActuation(command, id) == storageControl); runWorker(); tick(); tick();
+        // Real stop-debounce release with continuously refreshed false EV telemetry.
+        inputRegisters[1003] = 2;
+        for (int i = 0; i < 26; ++i) { testNow += 5000; tick(); tick(); }
+        assert(controller.getConstraints().storage.dischargeAllowed);
+        if (storageControl) { assert(controller.getActuationCommandSnapshot(ControlTarget::Storage).command.action == Actuation::Action::Release); }
+    }
+
+    // Both production providers: failure is transient, permission change releases once,
+    // failed old-endpoint release never locks the replacement, generation pins writes.
+    tasks.clear(); writes.clear(); registers.clear(); testNow = 1000; freshRegisters();
+    storage.Control = evse.Control = ControlMode::HemsControl;
+    Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse); config.Mode = Mode::Monitor;
+    Controller controller; Scheduler scheduler; controller.init(scheduler);
+    auto tick = [&] { ++testNow; scheduler.execute(); runWorker(); };
+    tick(); tick();
+    for (auto target : { ControlTarget::Storage, ControlTarget::Evse }) {
+        uint32_t id;
+        Actuation::Command command { target, Actuation::Action::Stop };
+        assert(controller.submitManual(command, id)); writeFails = true; runWorker();
+        assert(controller.getActuationCommandSnapshot(target).state == Actuation::MailboxState::Failed);
+        assert(!controller.submitManual(command, id)); // fresh telemetry naturally gates retry
+        writeFails = false; tick(); tick();
+        assert(controller.submitManual(command, id)); runWorker(); tick(); tick();
+        command.action = Actuation::Action::Release;
+        assert(controller.submitManual(command, id)); writeFails = true; runWorker();
+        writeFails = false; tick(); tick();
+        command.action = Actuation::Action::Stop;
+        assert(controller.submitManual(command, id)); runWorker(); tick(); tick();
+        // Failed permission-transition release is attempted once with old permission.
+        writes.clear();
+        if (target == ControlTarget::Storage) { storage.Control = ControlMode::MonitorOnly; Storage::StorageSettings.set(storage); }
+        else { evse.Control = ControlMode::MonitorOnly; Evse::BindingSettings.set(evse); }
+        controller.updateSettings(); writeFails = true; tick();
+        auto cleanup = controller.getActuationCleanupSnapshot(target);
+        assert(cleanup.state == Actuation::CleanupState::Failed && !cleanup.retainedContext && cleanup.attempts == 1);
+        auto before = writes.size(); tick(); tick(); assert(writes.size() == before);
+        writeFails = false;
+        if (target == ControlTarget::Storage) { storage.Control = ControlMode::HemsControl; Storage::StorageSettings.set(storage); }
+        else { evse.Control = ControlMode::HemsControl; Evse::BindingSettings.set(evse); }
+        controller.updateSettings(); tick(); tick();
+        assert(controller.submitManual(command, id));
+        // Configuration race during first write retains exact old endpoint; later writes revoked.
+        onWrite = [&] {
+            if (target == ControlTarget::Storage) { strcpy(storage.Host, "new-storage.invalid"); Storage::StorageSettings.set(storage); }
+            else { strcpy(config.Warp.Host, "new-warp.invalid"); }
+            controller.updateSettings();
+        };
+        runWorker();
+        assert(controller.getActuationCleanupSnapshot(target).retainedContext);
+        writes.clear(); writeFails = true; tick();
+        assert(!writes.empty() && writes.back().host == (target == ControlTarget::Storage ? "storage.invalid" : "warp.invalid"));
+        writeFails = false; tick(); tick();
+        assert(controller.submitManual(command, id)); runWorker(); tick(); tick();
+        assert(writes.back().host == (target == ControlTarget::Storage ? "new-storage.invalid" : "new-warp.invalid"));
+    }
+    // Same-ID runtime replacement updates bound capabilities without reboot.
+    auto old = evseProfile; old.controlOperationCount = old.controlWriteCount = old.releaseWriteCount = 0; old.schemaVersion = 1;
+    selectedProfiles[old.id] = old; controller.updateSettings(); tick(); tick();
+    assert(!strcmp(controller.getProfileInfo(ControlTarget::Evse).reason, "schema_v1_read_only"));
+    uint32_t id; Actuation::Command current { ControlTarget::Evse, Actuation::Action::SetCurrentA, true, 6 };
+    assert(!controller.submitManual(current, id));
+    old.schemaVersion = 2; selectedProfiles[old.id] = old; controller.updateSettings(); tick(); tick();
+    assert(!strcmp(controller.getProfileInfo(ControlTarget::Evse).reason, "missing_control_metadata"));
+    selectedProfiles[evseProfile.id] = evseProfile; controller.updateSettings(); tick(); tick();
+    assert(controller.getProfileInfo(ControlTarget::Evse).control);
+    assert(controller.submitManual(current, id)); runWorker();
+    // An EV constraint becoming actionable mid-command revokes subsequent discharge writes.
+    config.Mode = Mode::Monitor; controller.updateSettings(); tick(); tick();
+    Actuation::Command discharge { ControlTarget::Storage, Actuation::Action::SetDischargePowerW, true, 500 };
+    inputRegisters[1003] = 3; testNow += 5000; tick(); tick();
+    assert(controller.submitManual(discharge, id));
+    writes.clear();
+    onWrite = [&] { config.Mode = Mode::Active; controller.updateSettings(); scheduler.execute(); };
+    runWorker();
+    assert(controller.getActuationCommandSnapshot(ControlTarget::Storage).state == Actuation::MailboxState::Failed);
+    assert(controller.getActuationCommandResult(ControlTarget::Storage).execution.error == Actuation::ExecutionError::AuthorizationRevoked);
+    assert(writes.size() == 1);
+    for (auto const& write : writes) { assert(write.address != 42010); }
+    // No raw semantic operation is accepted.
+    auto invalid = discharge; invalid.action = static_cast<Actuation::Action>(255);
+    assert(!controller.submitManual(invalid, id));
+    std::cout << "Control permissions, Active EV protection, transient failure, release, generation and profile reload tests passed\n";
 }

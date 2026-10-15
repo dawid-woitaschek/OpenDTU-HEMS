@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <hems/Mode.h>
 #include <hems/constraints/Constraints.h>
 #include <hems/model/State.h>
 
@@ -25,15 +26,17 @@ struct EvProtectionSnapshot {
     bool charging = false;
     uint32_t conditionAgeMs = 0;
     Constraints::ConstraintSet proposedConstraints;
+    Constraints::ConstraintSet actionableConstraints;
 };
 
 class EvProtectionPolicy {
 public:
     void reset();
-    void update(Model::EvseState const& evse, uint32_t nowMs);
+    void update(Model::EvseState const& evse, uint32_t nowMs, ControlCapability capability = {}, bool active = false);
     EvProtectionSnapshot snapshot(uint32_t nowMs) const;
 
 private:
+    bool _controlEnabled = false;
     bool _chargingKnown = false;
     bool _charging = false;
     bool _conditionActive = false; // valid not-charging stop-debounce window

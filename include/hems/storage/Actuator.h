@@ -23,28 +23,11 @@ public:
     Actuation::CommandResult releaseRetainedControl(Actuation::RegisterIo const& io,
             Profiles::Profile const& profile);
 
-    // A provider generation change must never silently forget that a previous
-    // endpoint may still be under remote control. Once orphaned, the actuator
-    // rejects normal commands until retained-context cleanup resolves ownership.
-    bool reset()
-    {
-        if (_session.ownsControl()) {
-            _orphaned = true;
-            return false;
-        }
-        _session.reset();
-        _orphaned = false;
-        return true;
-    }
-    // Called only by the worker after authenticated exact-record operator
-    // attestation and successful durable clearing; never a normal reset path.
-    void confirmOperatorRelease() { _session.reset(); _orphaned = false; }
+    void reset() { _session.reset(); }
     bool ownsControl() const { return _session.ownsControl(); }
-    bool ownershipOrphaned() const { return _orphaned; }
 
 private:
     Actuation::ProfileSession _session;
-    bool _orphaned = false;
 };
 
 } // namespace Hems::Storage

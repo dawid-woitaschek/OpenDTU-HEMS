@@ -73,6 +73,7 @@ struct Profile {
     IdentityField identityFields[MaxIdentityFields] {};
     char identitySource[MaxText + 1] {};
     uint8_t identityFieldCount = 0;
+    bool recoveryMetadata = false;
     bool releaseReplaySafe = false;
 };
 inline bool hasCapability(Profile const& profile, Capability capability)
