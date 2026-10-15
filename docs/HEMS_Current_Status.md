@@ -2,30 +2,33 @@
 
 > Snapshot date: 2026-10-15
 >
-> This file is the short, authoritative hand-off for the current HEMS implementation state. `HEMS_Roadmap.md` remains the historical/forward plan and intentionally contains older milestone numbering in places.
+> This file is the short implementation hand-off. The authoritative implementation order and milestone acceptance criteria live in [`HEMS_Roadmap.md`](HEMS_Roadmap.md).
 
-## Current integration baseline
+## Current branch topology
 
-`integration/hems-next` currently points to:
-
-```text
-a77b16a599cfa7cba60c55f444864b6eca2543c4
-```
-
-That baseline includes the profile-driven telemetry/control-metadata foundation through PR #17. Current development work is intentionally split into a short dependency stack:
+Shared integration base:
 
 ```text
 integration/hems-next
-└── #18  per-device HEMS control permission
-    └── #20  guarded profile-driven Modbus write executor
-        └── #21  semantic actuators + worker command bridge
-
-#19 firmware update channels is independent of that control stack.
+1724b5d459ec9068333b3ace178468dedbf4aaea
 ```
 
-None of the control-stack PRs introduces a global Active mode.
+That baseline includes the firmware-update infrastructure from merged PR #19.
+
+Current development:
+
+```text
+integration/hems-next
+└── PR #22  feature/hems-actuation-foundation
+```
+
+PRs #18, #20 and #21 are closed without merge and were consolidated into PR #22. Do not treat them as active dependencies.
+
+At this document refresh, #22 contains one consolidated functional commit plus documentation updates. No global HEMS Active mode exists.
 
 ## Architecture currently implemented
+
+Read/decision path:
 
 ```text
 Devices / providers
@@ -39,14 +42,14 @@ constraint model
 Shadow policies
 ```
 
-The control branch additionally contains the still-fail-closed execution foundation:
+Fail-closed control foundation in PR #22:
 
 ```text
-policy/controller caller (not connected yet)
+policy/controller caller (automatic caller not connected)
     ↓
 readiness / authorization gate
     ↓
-depth-one semantic command mailbox
+depth-one semantic command slot
     ↓
 existing per-device worker
     ↓
@@ -59,7 +62,7 @@ bounded Modbus write + readback
 
 Rule: one actuator, one boss. Telemetry and commands use the same per-device worker and Modbus client. Existing DPL remains the fast physical regulation path and must not depend on slower HEMS network/policy work.
 
-## Integration baseline: implemented
+## Integration baseline capabilities
 
 ### HEMS core
 
@@ -78,16 +81,14 @@ Rule: one actuator, one boss. Telemetry and commands use the same per-device wor
 
 ### Modbus profile schemas
 
-Supported schemas:
-
 ```text
 opendtu-hems-modbus-profile/v1  read-only
-opendtu-hems-modbus-profile/v2  read telemetry + bounded declarative control metadata
+opendtu-hems-modbus-profile/v2  telemetry + bounded declarative control metadata
 ```
 
-Schema-v2 control metadata describes only allowed operations and holding-register writes. Merely importing such a profile never authorizes hardware writes.
+Schema-v2 metadata describes allowed semantic operations and bounded holding-register writes. Importing such a profile never authorizes hardware writes.
 
-Repository profile catalog:
+Repository catalog:
 
 ```text
 device-profiles/
@@ -97,20 +98,20 @@ device-profiles/
     └── Tinkerforge-WARP3-Smart.json
 ```
 
-Profiles are deliberately not installed automatically. They remain explicit imported configuration.
+Profiles are explicit imported configuration and are not automatically installed or activated.
 
-### Curated WARP3 Smart profile
+## Curated WARP3 Smart semantics
 
-Verified Tinkerforge semantics used by the profile:
+Verified register semantics currently represented by the profile:
 
 ```text
-input  1000/1001  IEC state             uint32
-input  1002/1003  charging state        uint32
-input  1010/1011  allowed current       uint32 mA
-holding 1002/1003 Modbus current limit  uint32 mA
+input   1000/1001  IEC state             uint32
+input   1002/1003  charging state        uint32
+input   1010/1011  allowed current       uint32 mA
+holding 1002/1003  Modbus current limit  uint32 mA
 ```
 
-Control semantics on the current development branch are:
+Control semantics in PR #22:
 
 ```text
 setCurrent(6..32 A)  -> 6000..32000 mA
@@ -118,18 +119,20 @@ stop                  -> 0 mA
 release               -> 32000 mA
 ```
 
-Tinkerforge initializes the active Modbus charging slot with a 32000 mA maximum. `release` therefore restores that neutral/default slot cap without changing the charger's separate Modbus-enable configuration. Other charger slots, cable limits and safety logic continue to constrain actual current.
+`release` restores the neutral/default Modbus charging-slot cap, not an unconditional request to charge at 32 A. Other WARP slots, cable limits and safety logic remain authoritative.
 
 WARP3 Smart has no integrated meter, so the profile does not invent power/session-energy telemetry.
 
-### Curated Marstek Venus E 3.0 profile
+## Curated Marstek Venus E 3.0 semantics
 
-The current reference profile targets the observed V148/Micro V119 family and is intentionally conservative. Important mapped values include:
+The current reference profile targets the observed V148/Micro V119 family and remains deliberately conservative.
+
+Important telemetry includes:
 
 ```text
 34002  SoC                    uint16  × 0.1
-30006  AC power               int16   × -1  (normalized HEMS sign)
-30001  DC/battery power       int16   × 1
+30006  AC power               int16   normalized HEMS sign
+30001  DC/battery power       int16
 30100  battery voltage        uint16  × 0.01
 30101  battery current        int16   × 0.1
 33000  charged energy total   uint32  × 0.01
@@ -140,63 +143,65 @@ The current reference profile targets the observed V148/Micro V119 family and is
 36100  fault code             uint32
 ```
 
-Current declarative control metadata includes acquire/release, charge power, discharge power, stop and target SoC. Public Venus mappings are not treated as universally interchangeable across firmware revisions, and real write behavior is still a hardware-validation gate.
+Declarative control metadata includes acquire/release, charge power, discharge power, stop and target SoC.
 
-### Normalized state / constraints
+Public Venus register maps are not assumed interchangeable across firmware revisions. Real write behavior remains a hardware-validation gate.
+
+## Normalized state / constraints
 
 - Grid, PV, Storage and EVSE have normalized state;
-- data quality distinguishes `unknown`, `fresh` and `stale`;
-- stale data remains diagnostic-only;
+- quality distinguishes `unknown`, `fresh` and `stale`;
+- stale data is diagnostic-only;
 - storage constraints support charge/discharge permission and optional power ceilings;
 - constraints compose deterministically;
-- current effective constraints remain neutral because no Active policy is installed.
+- current effective production constraints remain neutral because no Active policy is installed.
 
-### EV protection Shadow policy
+## EV protection Shadow policy
 
-The development branch corrects the original debounce direction. Intended/current branch behavior is now:
+PR #22 contains the corrected debounce behavior:
 
 ```text
-fresh EVSE charging=true
-    -> immediately propose BlockDischarge
+fresh charging=true
+    -> propose BlockDischarge immediately
 
-fresh EVSE charging=false
-    -> keep BlockDischarge proposed for 120 s
-    -> release only after a continuous fresh-false window
+fresh charging=false
+    -> retain proposal for 120 s continuous fresh-false
 
-stale/unknown EVSE state
-    -> never interpreted as "not charging"
-    -> cannot silently release an already active protection state
+charging resumes inside the window
+    -> protection remains/restores immediately
+
+stale/unknown
+    -> never interpreted as not charging
+    -> cannot silently release an existing protection state
 ```
 
-The policy remains Shadow-only and does not write storage or EVSE hardware.
+The policy remains Shadow-only.
 
-## Current control-stack development
+## PR #22: actuation foundation
 
-### PR #18: per-device permission
+### Per-device permission
 
-Adds explicit per-device:
+Each EVSE/storage consumer can persist:
 
 ```text
 Monitor only
 HEMS control
 ```
 
-Default and migration behavior are fail-closed at `Monitor only`. The permission alone cannot cause a write.
+Missing/legacy settings default fail-closed to Monitor.
 
-### PR #20: generic write executor
+### Generic write executor
 
-Adds bounded profile-driven holding-register execution:
+- semantic operation to bounded `ControlPlan`;
+- input min/max/step/scaling checks;
+- `uint16`, `int16`, `uint32`, `int32` writes;
+- FC06 for one-register writes;
+- FC16 for two-register scalar writes;
+- ordered execution;
+- optional read-after-write verification;
+- separate transport/readback/verification failures.
 
-- 16/32-bit control values;
-- FC06/FC16 as appropriate;
-- semantic-input range/step/scaling validation;
-- ordered write plans;
-- read-after-write verification;
-- transport/readback/verification errors kept distinct.
-
-### PR #21: semantic actuators and worker bridge
-
-Adds semantic operations:
+### Semantic actuators
 
 ```text
 Storage:
@@ -212,52 +217,108 @@ EVSE:
   releaseControl()
 ```
 
-The branch also contains:
+### Command bridge and safety
 
-- profile acquire/release sessions;
-- a depth-one command mailbox;
-- readiness diagnostics;
-- generation-based invalidation when device configuration changes;
-- last-moment authorization immediately before every bounded write;
-- shared provider worker/client ownership for telemetry and control;
-- fresh telemetry scheduling after a completed command.
+- depth-one semantic command slot;
+- pending/running work cannot be overwritten;
+- commands are pinned to the provider generation that accepted them;
+- authorization is checked again immediately before bounded writes;
+- telemetry and commands share the same worker/client;
+- completed commands schedule fresh telemetry;
+- there is no public normal-operation write endpoint;
+- there is no automatic policy caller;
+- global Active authorization remains absent/fail-closed.
 
-`Controller::submitActuation()` is wired to the providers but production authorization still fails closed because the global Active prerequisite is hard false. There is no HTTP control endpoint and no automatic policy caller.
+### Ownership cleanup
 
-Before Active mode is introduced, lifecycle behavior still needs an explicit rule for relinquishing persistent remote control when Active is revoked or an endpoint/profile is changed.
+A live endpoint/profile configuration change no longer silently forgets possible remote ownership.
 
-## Firmware update-channel development
+The provider retains the exact old endpoint/effective Modbus settings/profile and blocks normal actuation while cleanup is pending.
 
-PR #19 adds repository-backed update channels with direct raw OTA binaries instead of requiring ZIP download/extraction.
+Cleanup:
 
-Implemented concepts include:
+- runs through the same provider worker/client;
+- may bypass normal Active/device-permission only for the retained old profile's bounded release sequence;
+- never retargets release to the new endpoint/profile;
+- retries failures with bounded delay;
+- clears retained context only after successful release;
+- is exposed in diagnostics.
+
+Remaining lifecycle hole: retained cleanup is RAM-resident. A hard reboot/power loss can erase ownership knowledge. Boot/power-loss recovery is the next safety milestone before Active mode.
+
+## Firmware update channels
+
+PR #19 is merged into `integration/hems-next`.
+
+Persistent channels include:
 
 ```text
 hems-next
 hems
+```
+
+Same-repository pull requests can publish temporary:
+
+```text
 pr-<number>
 ```
 
-A firmware image embeds its update channel and build environment. The firmware page resolves a manifest, selects the matching PIO environment, validates the image metadata/hash and sends the normal OTA binary through the existing update endpoint. Manual upload remains available as the fallback path.
+Generated channel branches contain a manifest and raw normal OTA binaries per target. Factory images stay out of automatic-update channels. Manual OTA upload remains available as fallback.
 
-The `pr-19` path and update-page current-version detection were successfully exercised on the reference Fusion v2 hardware with `generic_esp32s3_usb`. This is branch validation, not a claim that PR #19 is already part of the integration baseline.
+The reference hardware currently uses:
 
-## Known deferred physical validation
+```text
+PIO environment: generic_esp32s3_usb
+```
 
-The following are deliberately not represented as completed hardware validation:
+## Physical validation still open
 
-- real WARP3 telemetry across unplugged/connected/charging states using the imported profile;
-- WARP current-limit/stop/release writes;
-- WARP communication loss/recovery and packet-capture validation;
-- W5500-to-real-WARP path where applicable;
-- full live Marstek Venus E 3.0 telemetry validation through the curated profile;
-- Marstek acquire/charge/discharge/stop/release behavior;
-- persistent-command behavior across communication loss/reboot;
-- any Active HEMS behavior.
+### WARP3
+
+- real profile telemetry for unplugged/connected/charging states;
+- allowed-current behavior;
+- `setCurrent()` writes;
+- stop/release writes;
+- communication loss/recovery;
+- reboot behavior while a limit may be active;
+- W5500 path where applicable.
+
+### Marstek Venus E 3.0
+
+- full curated telemetry plausibility;
+- acquire;
+- charge/discharge power;
+- stop;
+- target SoC;
+- release;
+- communication loss while owned;
+- reboot/power-loss recovery;
+- validation against actual device/firmware register behavior.
+
+No physical write behavior should be described as completed until exercised on the real device.
+
+## Immediate next order
+
+```text
+1. validate and merge PR #22
+2. implement boot/power-loss ownership recovery
+3. add deliberately gated semantic hardware-validation path
+4. validate WARP3 and Marstek on real hardware
+5. introduce global Active + arbitration
+6. make EV protection the first Active policy
+7. add dynamic tariff provider
+8. add economic optimizer in Shadow mode
+9. activate economic optimizer after validation
+10. add PV forecast / forecast-aware optimization
+```
+
+## Separate open investigation
+
+An intermittent issue has been observed where existing connections to the reference DTU may continue while new inbound TCP connections time out. It is not currently proven to originate in HEMS changes.
+
+Continue this separately with LAN/WAN path isolation and, if necessary, lwIP/AsyncTCP accept/PCB instrumentation. Do not silently convert correlation with HEMS development into causation.
 
 ## Reference hardware
-
-Current staging/reference target:
 
 ```text
 OpenDTU Fusion Board v2.1
@@ -268,24 +329,6 @@ PIO environment: generic_esp32s3_usb
 PSRAM not required for HEMS core functionality
 ```
 
-## Still not implemented / not enabled
+## Handoff rule
 
-- global HEMS Active mode;
-- automatic policy-to-actuator execution;
-- public/manual diagnostic hardware-control API/UI;
-- completed control-lifecycle cleanup on Active exit/config changes;
-- dynamic tariff provider;
-- economic optimizer Shadow mode;
-- economic optimizer Active mode;
-- PV forecast / forecast-aware policy.
-
-## Likely next implementation order
-
-1. finish control-lifecycle/deactivation semantics around the current command bridge;
-2. expose useful readiness/command diagnostics without enabling writes;
-3. prepare a deliberately gated manual-control validation path for real hardware;
-4. validate WARP and Marstek on the actual devices;
-5. only then introduce Active policy execution;
-6. continue with tariff/optimizer/forecast work.
-
-The project should continue to prefer explicit hardware-pending markers over pretending native tests validated a physical storage system. Electronics are sufficiently creative without documentation joining in.
+When the active milestone, branch topology, integration baseline, safety boundary, physical validation result or implementation order changes, update both this file and `HEMS_Roadmap.md` in the same work block.
