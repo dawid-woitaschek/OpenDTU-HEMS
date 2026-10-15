@@ -2,7 +2,7 @@
 
 Snapshot: 2026-10-15. Integration branch: `integration/hems-next`, live baseline `73a84b639436e712fe5380f071526c30f7c539db` (squash merge of #22).
 
-Current work: `feature/hems-real-control`, one Draft PR directly against integration. No stacked PRs; do not merge this work automatically. Software validation is in progress; physical validation remains open.
+Current work: `feature/hems-real-control`, [Draft PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) directly against integration. No stacked PRs; do not merge this work automatically. Focused software validation passes; final exact-head CI/channel evidence is maintained in #23. Physical validation remains open.
 
 ## Product model implemented in this package
 
@@ -36,6 +36,6 @@ Identity/recovery work is optional unless physical testing proves a concrete ope
 
 Focused native tests and frontend checks run locally. GitHub CI owns the complete firmware matrix and PR firmware-channel publication. Before recommending flashing, verify native tests, frontend build, all HEMS targets including `generic_esp32s3_usb`, exact source/merge-tree correspondence, manifest SHA256/size and normal OTA image. Keep the PR Draft and unmerged.
 
-Baseline #22 `generic_esp32s3_usb` normal OTA image: **2,735,632 bytes** (published artifact). Record this package's exact final artifact size/delta in Current Status after CI. No heavyweight dependencies, PSRAM requirement or TCP/IP/AsyncTCP task-stack changes.
+Baseline #22 `generic_esp32s3_usb` normal OTA image: **2,735,632 bytes** (published artifact). The exact tested-head final artifact size/delta is maintained in Draft PR #23, linked from Current Status. No heavyweight dependencies, PSRAM requirement or TCP/IP/AsyncTCP task-stack changes.
 
 The separate intermittent inbound-new-connection investigation remains unproven as a HEMS issue. It does not block this product model.

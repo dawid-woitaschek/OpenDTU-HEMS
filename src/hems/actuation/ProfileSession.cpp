@@ -116,6 +116,10 @@ CommandResult ProfileSession::release(RegisterIo const& io, Profiles::Profile co
     auto result = runPlan(io, plan, CommandStage::Release, verifyReadback);
     if (result) {
         _owned = false; _acquireUncertain = false;
+    } else if (result.execution.writeAttempted) {
+        // A lost release reply may mean the device is already back in local mode.
+        // Reacquire on the next command instead of assuming remote mode survived.
+        _acquireUncertain = true;
     }
     return result;
 }

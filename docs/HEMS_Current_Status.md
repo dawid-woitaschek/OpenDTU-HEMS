@@ -1,6 +1,6 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-15. Live integration baseline: `73a84b639436e712fe5380f071526c30f7c539db`; GitHub confirms #22 merged. Current branch: `feature/hems-real-control`, one Draft PR against `integration/hems-next`. The old #18/#20/#21 stack is closed and irrelevant.
+Snapshot: 2026-10-15. Live integration baseline: `73a84b639436e712fe5380f071526c30f7c539db`; GitHub confirms #22 merged. Current branch: `feature/hems-real-control`, [Draft PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) against `integration/hems-next`. The old #18/#20/#21 stack is closed and irrelevant.
 
 ## Usable control model
 
@@ -34,15 +34,15 @@ HEMS → Settings (`/hems/settings`) includes global modes, prominent independen
 
 ## Validation and firmware
 
-Focused native coverage exercises the actual controller/policy/providers/mailboxes/executor with deterministic wire/task seams: all four permission combinations, Monitor manual commands, Active-only automatic commands, EV protection and debounce, failure/recovery, release/configuration races and profile capability replacement. Existing parser/catalog/planner/readback tests remain. Frontend type check/build pass. GitHub matrix/channel verification is pending publication of this Draft PR.
+Focused native coverage exercises the actual controller/policy/providers/mailboxes/executor with deterministic wire/task seams: all four permission combinations, Monitor manual commands, Active-only automatic commands, EV protection and debounce, failure/recovery, release/configuration races and profile capability replacement. Existing parser/catalog/planner/readback tests remain. Frontend type check/build pass. GitHub CI owns the complete matrix and channel publication. Exact tested-head CI, manifest/image verification, firmware size and delta are recorded in [Draft PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23).
 
-Reference: Fusion Board v2.1 / Shield v1.1, ESP32-S3, 8 MB flash, `generic_esp32s3_usb`. Before: #22 normal OTA **2,735,632 bytes**. After/delta: pending exact CI artifact. No local full firmware matrix, heavyweight dependencies or TCP/IP/AsyncTCP stack changes.
+Reference: Fusion Board v2.1 / Shield v1.1, ESP32-S3, 8 MB flash, `generic_esp32s3_usb`. Before: #22 normal OTA **2,735,632 bytes**. After/delta: see the exact final artifact measurement in Draft PR #23. No local full firmware matrix, heavyweight dependencies or TCP/IP/AsyncTCP stack changes.
 
 No physical WARP/Marstek control or watchdog/reboot behavior is claimed as tested. Marstek identity absence and replay-safe=false no longer block manual or Active operation. Force-command watchdog reports remain unvalidated for V148.
 
 ## After flashing the PR firmware
 
-1. Select the verified `pr-<number>` firmware channel and `generic_esp32s3_usb`, or upload its normal OTA `.bin` (never the factory image).
+1. Select the verified `pr-23` firmware channel and `generic_esp32s3_usb`, or upload its normal OTA `.bin` (never the factory image).
 2. Log in. In HEMS → Devices / Profiles import the current repository WARP and Marstek JSON. Replace existing same-ID runtime profiles; bind the appropriate profile and configure endpoint/port/unit for each device.
 3. In HEMS → Settings choose Monitor. Set each desired device type to HEMS control; leave the other Monitor only if desired. Save each permission.
 4. Wait for reachable, fresh telemetry. Exercise WARP current/stop/release and storage bounded charge/discharge/stop/SoC/release. Inspect request, transport, verified readback and fresh observed telemetry separately.

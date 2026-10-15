@@ -287,11 +287,6 @@ snapshot in the storage provider and remains designed for the no-PSRAM reference
 target.
 
 
-## Schema-v2 recovery metadata
+## Schema-v2 optional metadata
 
-Schema v2 also accepts optional bounded read-only `identity` and `recovery` objects.
-See [HEMS_CONTROL.md](HEMS_CONTROL.md#bounded-device-instance-identity-and-replay-metadata)
-for the normative limits, exact-byte canonical identity and replay opt-in. V1 rejects
-these additions. Importing identity/replay metadata grants no device write permission.
-WARP now declares its upstream eFuse-backed box UID; Marstek identity is unsupported.
-Both reference profiles retain replay-safe=false and cannot automatically recover.
+Schema v2 accepts optional bounded read-only `identity` and `recovery` objects. V1 rejects these additions. Identity fields allow 1–4 FC03/FC04 reads of 1–8 registers each, at most 64 bytes. `release_replay_safe` is optional diagnostic metadata. WARP declares an upstream eFuse UID; Marstek has no stable identity declaration. Neither is a normal-control prerequisite. The current firmware never reconstructs durable ownership or automatically replays a boot release. See [HEMS_CONTROL.md](HEMS_CONTROL.md).

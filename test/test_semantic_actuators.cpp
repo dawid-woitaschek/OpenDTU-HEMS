@@ -242,7 +242,9 @@ int main()
         wire.failWrite = true;
         assert(!actuator.releaseControl(failedIo, storage));
         wire.failWrite = false;
+        auto writesBeforeRetry = wire.writes.size();
         assert(actuator.stop(failedIo, storage));
+        assert(wire.writes.size() > writesBeforeRetry && wire.writes[writesBeforeRetry].address == storage.controlWrites[storage.acquireFirstWrite].address);
         assert(actuator.releaseControl(failedIo, storage));
         actuator.reset();
         assert(actuator.stop(failedIo, storage));
