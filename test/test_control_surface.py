@@ -18,4 +18,17 @@ handler = api[api.index('void WebApiHemsClass::onCommand('):]
 assert handler.index('checkCredentials(request)') < handler.index('parseRequestData(')
 assert 'submitManual(command, id)' in handler
 assert not re.search(r'data\["(address|register|registers|payload)"\]', handler)
-print('Semantic-only admin API and removed authorization dependencies passed')
+
+# Disabled consumers must not retain hidden runtime-profile ownership. Storage
+# already had this behavior; keep EVSE symmetric and never expose the historical
+# hard-coded WARP telemetry fallback as a selectable product mode.
+evse_store = (root / 'src/hems/evse/SettingsStore.cpp').read_text()
+devices_ui = (root / 'webapp/src/views/HemsDevicesView.vue').read_text()
+assert 'return enabled ? _config : BindingConfig {};' in evse_store
+assert 'effectiveConfig(candidate)' in evse_store
+assert "this.evseBinding.profile = '';" in devices_ui
+assert "this.evseBinding.control_mode = 'monitor';" in devices_ui
+assert 'WARP (legacy)' not in devices_ui
+assert 'if (!this.evseBinding.profile)' in devices_ui
+
+print('Semantic-only admin API, removed authorization dependencies and symmetric EVSE binding passed')
