@@ -401,7 +401,7 @@
                     {{ $t('hems.ValidationWarning') }}
                     {{ hemsStatus.validation.state }} · {{ Math.ceil(hemsStatus.validation.remaining_ms / 1000) }} s
                 </div>
-                <div v-for="(target, name) in hemsStatus.actuation" :key="name" class="mb-3">
+                <div v-for="{ target, name } in actuationTargets" :key="name" class="mb-3">
                     <strong>{{ name }}</strong>
                     <div>{{ $t('hems.ReadinessBlockers') }}: {{ target.blockers.join(', ') || '—' }}</div>
                     <div v-if="target.validation">
@@ -442,7 +442,7 @@
 <script lang="ts">
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
-import type { HemsPowerLimit, HemsQuality, HemsSignal, HemsStatus } from '@/types/HemsStatus';
+import type { HemsActuationTarget, HemsPowerLimit, HemsQuality, HemsSignal, HemsStatus } from '@/types/HemsStatus';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
@@ -463,6 +463,17 @@ export default defineComponent({
     },
     beforeUnmount() {
         clearInterval(this.timer);
+    },
+    computed: {
+        actuationTargets(): { name: string; target: HemsActuationTarget }[] {
+            const actuation = this.hemsStatus.actuation;
+            return actuation
+                ? [
+                      { name: 'evse', target: actuation.evse },
+                      { name: 'storage', target: actuation.storage },
+                  ]
+                : [];
+        },
     },
     methods: {
         booleanText(value: boolean | null) {
