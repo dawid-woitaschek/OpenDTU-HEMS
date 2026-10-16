@@ -27,6 +27,7 @@ public:
     void close() { content.reset(); }
 };
 inline struct TestFS {
+    bool exists(char const* path) { return testFiles.count(path) != 0; }
     TestFile open(char const* path, char const* mode) {
         if (*mode == 'w') { testFiles[path] = std::make_shared<std::string>(); }
         auto found = testFiles.find(path);

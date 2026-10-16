@@ -3,6 +3,7 @@
 #include "Configuration.h"
 #include "WebApi.h"
 #include <hems/ConfigUpdate.h>
+#include <hems/evse/SettingsStore.h>
 #include <hems/Controller.h>
 #include <hems/profiles/FlashStore.h>
 #include <hems/storage/SettingsStore.h>
@@ -440,6 +441,14 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
         return;
     }
     if (profileLock.owns_lock()) { profileLock.unlock(); }
+
+    // Persist the unbinding before changing telemetry enablement. Otherwise an old
+    // hems-evse.json could silently restore write permission after an API re-enable/reboot.
+    if (warpPresent && warpConfig.Enabled != Configuration.get().Hems.Warp.Enabled
+            && !Hems::Evse::BindingSettings.clear()) {
+        sendValueError("evse_unbind_persist_failed", "warp.enabled", "Failed to persist EVSE profile unbinding.");
+        return;
+    }
 
     bool mainConfigChanged = modePresent || enabledPresent || warpPresent;
     if (mainConfigChanged) {

@@ -66,8 +66,13 @@ bool SettingsStore::set(BindingConfig const& config)
     // installations, but new/updated enabled EVSE configuration must be explicit
     // and profile-driven. It is not a selectable product mode anymore.
     if (enabled && !config.Profile[0]) { return false; }
-    auto effective = enabled ? config : BindingConfig {};
+    return persist(enabled ? config : BindingConfig {});
+}
 
+bool SettingsStore::clear() { return persist(BindingConfig {}); }
+
+bool SettingsStore::persist(BindingConfig const& effective)
+{
     JsonDocument doc;
     doc["version"] = Version;
     serializeBindingConfig(effective, doc["evse"].to<JsonObject>());

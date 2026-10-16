@@ -32,4 +32,9 @@ assert "this.evseBinding.control_mode = 'monitor';" in devices_ui
 assert 'WARP (legacy)' not in devices_ui
 assert 'if (!this.evseBinding.profile)' in devices_ui
 
+# Enable/disable must durably discard the old EVSE permission before changing the endpoint state.
+config_handler = api[api.index('void WebApiHemsClass::onConfigPost('):api.index('void WebApiHemsClass::onCommand(')]
+assert 'warpConfig.Enabled != Configuration.get().Hems.Warp.Enabled' in config_handler
+assert config_handler.index('BindingSettings.clear()') < config_handler.index('config.Hems.Warp = warpConfig')
+
 print('Semantic-only admin API, removed authorization dependencies and symmetric EVSE binding passed')

@@ -83,3 +83,7 @@ from the repository root. This executes the real Admin setup script and shared
 response handler with fake fetches: successful old/new EVSE responses, release
 warning, saved-but-reload-failed, POST/persistence failure and login expiry.
 The reference HEMS CI build runs it as well. See [energy data](../docs/HEMS_Energy_Data.md).
+
+`test_settings_stores` runs the production EVSE and storage settings stores with
+the in-memory LittleFS seam, including failed persistence, durable unbinding,
+disable/re-enable, explicit profile requirements and permission reload.

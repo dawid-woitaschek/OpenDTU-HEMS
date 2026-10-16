@@ -11,8 +11,11 @@ public:
     void init();
     BindingConfig get() const;
     bool set(BindingConfig const& config);
+    // Telemetry enable/disable transitions must not resurrect an old binding or permission.
+    bool clear();
 
 private:
+    bool persist(BindingConfig const& config);
     mutable std::mutex _mutex;
     BindingConfig _config {};
 };
