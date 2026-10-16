@@ -24,10 +24,10 @@ See [current status](HEMS_Current_Status.md) and [control model](HEMS_CONTROL.md
 
 1. **Flash/reference-hardware validation:** Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, `generic_esp32s3_usb`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback.
 2. **Correct actual WARP/Marstek mapping issues** found on hardware. Verify Marstek V148 power/SoC scaling and uncertain command lifecycle/watchdog. No speculative lifecycle architecture prerequisite.
-3. **Dynamic tariff provider:** observe current/future effective prices, validity, timezone/DST and outages.
+3. **Dynamic tariff provider:** normalized domain, JSON push/local HTTP adapters, status/API/UI and deterministic tests implemented; commercial adapter selection and field validation remain. See [Energy data](HEMS_Energy_Data.md).
 4. **Economic optimizer Shadow:** observable schedule respecting capacity, power, efficiency, reserve and EV protection, without economic writes.
 5. **Optimizer Active:** route validated semantic actions through the same permissions, constraints, worker and planner.
-6. **PV forecast / forecast-aware optimization:** optional forecast inputs, validity, explainable influence and useful behavior without forecasts.
+6. **PV forecast / forecast-aware optimization:** optional normalized forecast domain, JSON push/local HTTP, W/Wh aggregation and API/UI implemented alongside tariff. Provider-specific adapters and optimizer use remain. HEMS works without forecasts.
 7. **Polish, documentation and release.**
 
 Identity/recovery work is optional unless physical testing proves a concrete operational need. There is no architectural mega-milestone before useful operation.

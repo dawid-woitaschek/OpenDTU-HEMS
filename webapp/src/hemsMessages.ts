@@ -9,7 +9,8 @@ export const hemsSupplementMessages = {
             EvseSelectProfile: 'Select an EVSE profile…',
             EvseNoProfiles: 'No compatible EVSE profile imported',
             EvseNoProfilesHint: 'No EVSE profile is available. Import a compatible Modbus profile below first.',
-            EvseProfileRequired: 'EV charger telemetry cannot be enabled without an EVSE profile. Select a profile first.',
+            EvseProfileRequired:
+                'EV charger telemetry cannot be enabled without an EVSE profile. Select a profile first.',
             EvseProfileUnavailable: 'The selected EVSE profile is not available. Select an existing EVSE profile.',
             ConfigLoadFailed: 'HEMS configuration could not be loaded.',
             ConfigSaveFailed: 'HEMS configuration could not be saved.',
@@ -83,8 +84,7 @@ export const hemsSupplementMessages = {
             ModbusEndpoint: 'Modbus TCP endpoint',
         },
         profiles: {
-            Hint:
-                'Importing a profile does not enable a device or grant write permission. Write access is enabled separately per device type.',
+            Hint: 'Importing a profile does not enable a device or grant write permission. Write access is enabled separately per device type.',
             Capabilities: 'Suitable for',
             UsedBy: 'Used by',
             NoCapabilities: 'No supported HEMS consumer',
@@ -188,8 +188,7 @@ export const hemsSupplementMessages = {
             ModbusEndpoint: 'Modbus-TCP-Endpunkt',
         },
         profiles: {
-            Hint:
-                'Ein Profilimport aktiviert kein Gerät und erteilt keine Schreibfreigabe. Schreibzugriffe werden separat je Geräteart über den Steuermodus freigegeben.',
+            Hint: 'Ein Profilimport aktiviert kein Gerät und erteilt keine Schreibfreigabe. Schreibzugriffe werden separat je Geräteart über den Steuermodus freigegeben.',
             Capabilities: 'Geeignet für',
             UsedBy: 'Verwendet von',
             NoCapabilities: 'Kein unterstützter HEMS-Verbraucher',
@@ -293,8 +292,7 @@ export const hemsSupplementMessages = {
             ModbusEndpoint: 'Point de terminaison Modbus TCP',
         },
         profiles: {
-            Hint:
-                'Importer un profil n’active aucun appareil et n’accorde aucune autorisation d’écriture. Les écritures sont activées séparément pour chaque type d’appareil.',
+            Hint: 'Importer un profil n’active aucun appareil et n’accorde aucune autorisation d’écriture. Les écritures sont activées séparément pour chaque type d’appareil.',
             Capabilities: 'Compatible avec',
             UsedBy: 'Utilisé par',
             NoCapabilities: 'Aucun consommateur HEMS pris en charge',

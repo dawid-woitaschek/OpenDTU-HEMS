@@ -23,3 +23,5 @@ If no compatible storage profile is available, the selector states that conditio
 ## Normal control UI
 
 HEMS Settings provides Disabled / Monitor / Active, visible Storage control and EVSE control permissions, and manual controls from bound profile metadata. No temporary-session panel remains. Commands use authenticated semantic APIs and show transport/readback separately from fresh observed telemetry. Monitor supports manual commands; Active may override them with policies. Device/profile replacement requires no reboot. See [HEMS_CONTROL.md](HEMS_CONTROL.md).
+
+Optional tariff and PV forecast cards in HEMS Settings show normalized prices or W/Wh, source, update timestamps, freshness, coverage, next intervals and errors. Expand provider settings for JSON upload/local HTTP configuration. See [energy data API and units](HEMS_Energy_Data.md). Successful Admin saves remain successful when a later reload or best-effort release fails.

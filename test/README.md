@@ -67,3 +67,19 @@ python3 test/test_hems_config.py work/ArduinoJson/src
 ```
 
 `test_provider_cleanup` compiles the production controller, policy, both provider workers, mailbox, planner and executor. Only external grid/PV inputs, tasks, configuration persistence, profile loading and wire I/O are deterministic seams. It covers all four permission combinations, Monitor manual commands, Active automatic gating/EV protection, debounce, transient failures, one-shot failed release, configuration generation races and same-ID capability reload. Identity/replay metadata is deliberately absent or ineligible and does not prevent control. Parser/catalog and separate semantic/readback tests validate bounded operations. Physical register/charging behavior remains a hardware test.
+
+## Tariff / forecast and Admin regression coverage
+
+`make test ARDUINOJSON=../work/ArduinoJson/src` includes `test_energy` and
+`test_energy_service`: production bounded parser/provider/runtime, deterministic
+UTC and monotonic clocks, local task/network/file seams, gaps, stale/error and
+recovery, atomic settings persistence/reload and configuration generations.
+`test_semantic_actuators` now loads the actual catalog profiles; `test_storage`
+decodes Marstek profile fixtures with the declared positive-charge/negative-
+discharge convention. These fixtures do not physically validate V148 mappings.
+
+After webapp dependencies are installed, run `node test/test_hems_admin.mjs`
+from the repository root. This executes the real Admin setup script and shared
+response handler with fake fetches: successful old/new EVSE responses, release
+warning, saved-but-reload-failed, POST/persistence failure and login expiry.
+The reference HEMS CI build runs it as well. See [energy data](../docs/HEMS_Energy_Data.md).

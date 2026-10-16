@@ -54,14 +54,14 @@
                                         {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
                                     </option>
                                 </select>
+                                <div v-if="evseProfileUnavailable" class="alert alert-warning mt-2 mb-0" role="alert">
+                                    {{ $t('hems.EvseProfileUnavailable') }}
+                                </div>
                                 <div
-                                    v-if="evseProfileUnavailable"
+                                    v-else-if="!evseProfiles.length"
                                     class="alert alert-warning mt-2 mb-0"
                                     role="alert"
                                 >
-                                    {{ $t('hems.EvseProfileUnavailable') }}
-                                </div>
-                                <div v-else-if="!evseProfiles.length" class="alert alert-warning mt-2 mb-0" role="alert">
                                     {{ $t('hems.EvseNoProfilesHint') }}
                                 </div>
                             </div>

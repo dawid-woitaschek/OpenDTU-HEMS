@@ -49,4 +49,8 @@ No physical WARP/Marstek control or watchdog/reboot behavior is claimed as teste
 5. For EV protection choose Storage HEMS control, optionally EVSE Monitor only, then Active. Confirm fresh EV charging blocks new discharge requests, stops fresh observed storage discharge, and leaves charging/idle storage alone; fresh-false for 120 seconds permits release only after protection actually intervened. Returning to Monitor stops the automatic producer and attempts release.
 6. If a command fails, inspect exact error and telemetry. Once communication/freshness return, controls re-enable automatically. Device-side reset/disconnection remains available independently.
 
-Next work is reference-hardware validation and actual mapping corrections, then tariff provider → optimizer Shadow → optimizer Active → PV forecast → polish/release. See [Roadmap](HEMS_Roadmap.md).
+Dynamic tariff and optional PV forecast now have bounded normalized models, authenticated JSON upload, local HTTP polling with one optional shared worker, persisted configuration, freshness/gap/error diagnostics and compact Settings cards. No commercial service was selected. See [Energy data contracts and API](HEMS_Energy_Data.md). No economic writes are generated.
+
+The Admin EVSE false-save error is fixed: the endpoint returns success consistently, the shared HTTP handler is used, and a failed post-save reload produces a warning alongside saved status. Additional native coverage exercises Disabled/Monitor/Active across every device permission combination, stale/unreachable recovery, actual catalog actuator bounds and Marstek byte fixtures, and exact EV Protection debounce boundaries.
+
+Next work: real WARP/Marstek/EV Protection validation, provider-specific adapters when selected, explicit economic strategy decisions and Shadow optimization, then Active optimization and release polish. See [Roadmap](HEMS_Roadmap.md).
