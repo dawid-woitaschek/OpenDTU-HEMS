@@ -93,6 +93,7 @@ void WebApiProfilesClass::bindingPost(AsyncWebServerRequest* request)
 
     HemsController.updateSettings();
     auto& result = response->getRoot();
+    result["type"] = "success";
     result["ok"] = true;
     result["profile"] = static_cast<char const*>(candidate.Profile);
     result["legacy"] = candidate.Profile[0] == '\0';

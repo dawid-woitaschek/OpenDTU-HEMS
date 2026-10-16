@@ -2,6 +2,7 @@
     <BasePage :title="$t('hems.Settings')" :isLoading="loading">
         <p v-if="error" class="alert alert-danger" role="alert">{{ error }}</p>
         <p v-if="notice" class="alert alert-success" role="status">{{ notice }}</p>
+        <p v-if="warning" class="alert alert-warning" role="status">{{ warning }}</p>
         <template v-if="config">
             <CardElement text="HEMS mode" textVariant="text-bg-primary">
                 <form @submit.prevent="saveMode">
@@ -47,27 +48,28 @@
     </BasePage>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { getCurrentInstance, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
 import HemsControlPanel from '@/components/HemsControlPanel.vue';
 import type { HemsConfig, HemsDeviceControlMode } from '@/types/HemsConfig';
-import { authHeader } from '@/utils/authentication';
+import { authHeader, handleResponse } from '@/utils/authentication';
+const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
+const router = useRouter();
 const config = ref<HemsConfig>();
 const binding = ref<{ profile: string; control_mode: HemsDeviceControlMode }>();
 const loading = ref(true),
     busy = ref(false),
     error = ref(''),
     notice = ref(''),
+    warning = ref(''),
     revision = ref(0);
 async function api(path: string, data?: unknown) {
     const body = new FormData();
     if (data) body.append('data', JSON.stringify(data));
     const response = await fetch(path, { headers: authHeader(), ...(data ? { method: 'POST', body } : {}) });
-    const result = await response.json();
-    if (!response.ok || result.type === 'warning' || result.type === 'danger' || result.error || result.ok === false)
-        throw new Error(result.message || 'HEMS request failed');
-    return result;
+    return handleResponse(response, emitter, router, true);
 }
 async function load() {
     [config.value, binding.value] = await Promise.all([
@@ -79,16 +81,33 @@ async function save(path: string, data: unknown) {
     busy.value = true;
     error.value = '';
     notice.value = '';
+    warning.value = '';
     try {
-        await api(path, data);
-        await load();
-        revision.value++;
+        const result = await api(path, data);
+        // Config endpoints also report validation/persistence failures in HTTP 200 alerts.
+        // An explicit persisted result takes precedence over a best-effort release warning.
+        if (result.ok !== true && result.type !== 'success') {
+            throw new Error(result.message || 'Settings could not be saved.');
+        }
         notice.value = 'Settings saved.';
+        if (result.type === 'warning' || result.warning) warning.value = result.warning || result.message;
     } catch (e) {
-        error.value = String(e);
-    } finally {
+        error.value = message(e);
         busy.value = false;
+        return;
     }
+    revision.value++;
+    try {
+        await load();
+    } catch (e) {
+        warning.value = [warning.value, 'Settings were saved, but reloading failed: ' + message(e)]
+            .filter(Boolean)
+            .join(' ');
+    }
+    busy.value = false;
+}
+function message(e: unknown): string {
+    return e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e || 'Request failed.');
 }
 function saveMode() {
     if (config.value) return save('/api/hems/config', { version: config.value.version, mode: config.value.mode });
