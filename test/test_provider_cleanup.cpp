@@ -303,6 +303,45 @@ int main()
         if (storageControl) { assert(controller.getActuationCommandSnapshot(ControlTarget::Storage).command.action == Actuation::Action::Release); }
     }
 
+    // Full mode x permission x target eligibility, including Disabled polling semantics.
+    for (auto mode : { Mode::Disabled, Mode::Monitor, Mode::Active })
+    for (bool storageControl : { false, true }) for (bool evseControl : { false, true }) {
+        tasks.clear(); writes.clear(); registers.clear(); inputRegisters.clear(); testNow = 1000;
+        writeFails = readFails = false; freshRegisters(); inputRegisters[1003] = 2;
+        storage.Control = storageControl ? ControlMode::HemsControl : ControlMode::MonitorOnly;
+        evse.Control = evseControl ? ControlMode::HemsControl : ControlMode::MonitorOnly;
+        Storage::StorageSettings.set(storage); Evse::BindingSettings.set(evse); config.Mode = mode;
+        Controller matrix; Scheduler schedule; matrix.init(schedule);
+        auto advance = [&] { ++testNow; schedule.execute(); runWorker(); };
+        advance(); advance();
+        auto state = matrix.getNormalizedState();
+        assert(state.evse.charging.known() == (mode != Mode::Disabled));
+        assert(state.storage.socPct.known() == (mode != Mode::Disabled));
+        assert(writes.empty());
+        for (auto target : { ControlTarget::Storage, ControlTarget::Evse }) {
+            bool permission = target == ControlTarget::Storage ? storageControl : evseControl;
+            Actuation::Command command { target, Actuation::Action::Stop }; uint32_t id;
+            assert(matrix.submitManual(command, id) == (permission && mode != Mode::Disabled));
+            runWorker(); advance(); advance();
+            assert(matrix.submitActuation(command, id) == (permission && mode == Mode::Active));
+            runWorker(); advance(); advance();
+            if (permission && mode != Mode::Disabled) {
+                testNow += 100000; // No refresh: freshness alone revokes eligibility.
+                assert(!matrix.submitManual(command, id));
+                advance(); advance();
+                assert(matrix.submitManual(command, id)); runWorker(); advance(); advance();
+                readFails = true; testNow += 5000; advance(); advance();
+                assert(!matrix.submitManual(command, id));
+                readFails = false; testNow += 5000; advance(); advance();
+                assert(matrix.submitManual(command, id)); runWorker(); advance(); advance();
+            }
+        }
+        for (auto const& write : writes) {
+            assert(mode != Mode::Disabled);
+            assert(write.host == "storage.invalid" ? storageControl : evseControl);
+        }
+    }
+
     // Both production providers: failure is transient, permission change releases once,
     // failed old-endpoint release never locks the replacement, generation pins writes.
     tasks.clear(); writes.clear(); registers.clear(); testNow = 1000; freshRegisters();

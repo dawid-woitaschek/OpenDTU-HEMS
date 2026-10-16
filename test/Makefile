@@ -63,7 +63,7 @@ $(TEST_MODBUS_PROFILES): test_modbus_profiles.cpp ../src/hems/modbus/Protocol.cp
 $(TEST_CONTROL_EXECUTION): test_control_execution.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
-$(TEST_SEMANTIC_ACTUATORS): test_semantic_actuators.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp
+$(TEST_SEMANTIC_ACTUATORS): ../src/hems/profiles/Profile.cpp test_semantic_actuators.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
 $(TEST_PROVIDER_CLEANUP): ../src/hems/Controller.cpp ../src/hems/actuation/Readiness.cpp ../src/hems/policies/EvProtection.cpp ../src/hems/model/Normalize.cpp test_provider_cleanup.cpp ../src/hems/storage/Provider.cpp ../src/hems/warp/Provider.cpp ../src/hems/storage/State.cpp ../src/hems/warp/State.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/evse/Telemetry.cpp ../src/hems/warp/ProfileAdapter.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/actuation/Mailbox.cpp ../src/hems/actuation/Capabilities.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp ../src/hems/modbus/Protocol.cpp

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <cassert>
 #include <cstdint>
+#include <initializer_list>
 #include <hems/policies/EvProtection.h>
 
 using Hems::Model::EvseState;
@@ -108,5 +109,22 @@ int main()
     assert(snapshot.state == EvProtectionState::Inactive);
     assert(snapshot.proposedConstraints.storage.dischargeAllowed);
 
+    for (uint32_t elapsed : { EvProtectionStopDebounceMs - 1, EvProtectionStopDebounceMs, EvProtectionStopDebounceMs + 1 }) {
+        policy.reset();
+        policy.update(evseWithCharging(Signal<bool>::fresh(true)), 1000);
+        policy.update(evseWithCharging(Signal<bool>::fresh(false)), 2000);
+        policy.update(evseWithCharging(Signal<bool>::fresh(false)), 2000 + elapsed);
+        assert(policy.snapshot(2000 + elapsed).proposedConstraints.storage.dischargeAllowed
+            == (elapsed >= EvProtectionStopDebounceMs));
+    }
+    // A telemetry outage at the boundary restarts the entire fresh-false window.
+    policy.reset();
+    policy.update(evseWithCharging(Signal<bool>::fresh(true)), 1000);
+    policy.update(evseWithCharging(Signal<bool>::fresh(false)), 2000);
+    policy.update(evseWithCharging(Signal<bool>{}), 2000 + EvProtectionStopDebounceMs);
+    policy.update(evseWithCharging(Signal<bool>::fresh(false)), 3000 + EvProtectionStopDebounceMs);
+    assert(!policy.snapshot(3000 + EvProtectionStopDebounceMs).proposedConstraints.storage.dischargeAllowed);
+    policy.update(evseWithCharging(Signal<bool>::fresh(true)), 3001 + EvProtectionStopDebounceMs);
+    assert(policy.snapshot(3001 + EvProtectionStopDebounceMs).charging);
     return 0;
 }
