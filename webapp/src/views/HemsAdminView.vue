@@ -44,6 +44,7 @@
                 <RouterLink to="/hems/devices">Configure endpoints and import or replace device profiles</RouterLink>
             </CardElement>
             <HemsControlPanel :key="revision" />
+            <HemsEnergyPanel />
         </template>
     </BasePage>
 </template>
@@ -53,6 +54,7 @@ import { useRouter } from 'vue-router';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
 import HemsControlPanel from '@/components/HemsControlPanel.vue';
+import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
 import type { HemsConfig, HemsDeviceControlMode } from '@/types/HemsConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
 const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;

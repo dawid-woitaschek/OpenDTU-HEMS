@@ -84,6 +84,10 @@ jobs:
         working-directory: webapp
         run: yarn build
 
+      - name: Test HEMS Admin save behavior
+        if: matrix.environment == 'generic_esp32s3_usb'
+        run: node test/test_hems_admin.mjs
+
       - name: Build firmware
         run: pio run -e ${{ matrix.environment }}
 
