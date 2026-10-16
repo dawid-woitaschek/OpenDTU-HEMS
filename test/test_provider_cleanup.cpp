@@ -165,6 +165,19 @@ int main()
     StorageConfig storage; storage.Enabled = true; strcpy(storage.Host, "storage.invalid"); strcpy(storage.Profile, storageProfile.id);
     Evse::BindingConfig evse; strcpy(evse.Profile, evseProfile.id);
 
+    // No implicit WARP binding, including restored no-profile legacy configurations.
+    {
+        StorageConfig none; Storage::StorageSettings.set(none);
+        Evse::BindingConfig unbound; unbound.Control = ControlMode::HemsControl;
+        Evse::BindingSettings.set(unbound); config.Mode = Mode::Monitor;
+        Controller unconfigured; Scheduler schedule; unconfigured.init(schedule);
+        schedule.execute(); runWorker(); schedule.execute(); runWorker();
+        assert(!unconfigured.getWarpSnapshot().enabled && !unconfigured.getWarpSnapshot().valid);
+        assert(unconfigured.getWarpSnapshot().successfulPolls == 0 && writes.empty());
+        uint32_t id; Actuation::Command stop { ControlTarget::Evse, Actuation::Action::Stop };
+        assert(!unconfigured.submitManual(stop, id));
+    }
+
     auto storageWrites = [](uint16_t address, uint16_t value) {
         size_t count = 0;
         for (auto const& write : writes) {

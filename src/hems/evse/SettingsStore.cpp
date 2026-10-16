@@ -21,7 +21,7 @@ BindingConfig effectiveConfig(BindingConfig const& config)
     // "in use". Re-enabling requires an explicit profile selection again.
     return Configuration.get().Hems.Warp.Enabled ? config : BindingConfig {};
 }
-}
+} // namespace
 
 SettingsStore BindingSettings;
 
@@ -62,9 +62,7 @@ BindingConfig SettingsStore::get() const
 bool SettingsStore::set(BindingConfig const& config)
 {
     bool enabled = Configuration.get().Hems.Warp.Enabled;
-    // The historical no-profile WARP fallback remains readable for old persisted
-    // installations, but new/updated enabled EVSE configuration must be explicit
-    // and profile-driven. It is not a selectable product mode anymore.
+    // Enabled EVSE telemetry/control always requires an explicit imported profile.
     if (enabled && !config.Profile[0]) { return false; }
     return persist(enabled ? config : BindingConfig {});
 }

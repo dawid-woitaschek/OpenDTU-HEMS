@@ -30,6 +30,7 @@ assert 'if (enabled && !config.Profile[0]) { return false; }' in evse_store
 assert "this.evseBinding.profile = '';" in devices_ui
 assert "this.evseBinding.control_mode = 'monitor';" in devices_ui
 assert 'WARP (legacy)' not in devices_ui
+assert 'legacy WARP mapping' not in (root / 'src/hems/warp/Provider.cpp').read_text()
 assert 'if (!this.evseBinding.profile)' in devices_ui
 
 # Enable/disable must durably discard the old EVSE permission before changing the endpoint state.

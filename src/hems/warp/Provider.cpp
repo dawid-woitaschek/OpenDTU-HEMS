@@ -2,7 +2,6 @@
 #include <hems/warp/Provider.h>
 #include <hems/evse/Poller.h>
 #include <hems/profiles/FlashStore.h>
-#include <hems/warp/Poller.h>
 #include <hems/warp/ProfileAdapter.h>
 #include <NetworkSettings.h>
 #include <esp_log.h>
@@ -63,7 +62,7 @@ void Provider::configure(WarpConfig const& config, Evse::BindingConfig const& bi
     }
 
     uint8_t unit = profile ? profile->unit : 1;
-    bool profileReady = !requested || static_cast<bool>(profile);
+    bool profileReady = static_cast<bool>(profile);
 
     auto fingerprint = profile ? Actuation::profileFingerprint(*profile) : 0;
     {
@@ -528,15 +527,13 @@ void Provider::worker()
                     std::lock_guard<std::mutex> lock(_mutex);
                     current = _enabled && generation == _generation;
                 }
-                if (current) {
-                    if (profile) {
+                if (current && profile) {
+                    {
                         Evse::Sample profileSample;
                         result = Evse::poll(_client, *profile, profileSample);
                         if (result && !fromProfileSample(profileSample, sample)) {
                             result = { Modbus::Error::InvalidData, 0, true };
                         }
-                    } else {
-                        result = poll(_client, sample);
                     }
                 }
             }
@@ -555,8 +552,7 @@ void Provider::worker()
             changedError = !result && (previous.error != result.error || previous.exception != result.exception);
         }
         if (available) {
-            ESP_LOGI(TAG, "Read-only telemetry available/recovered (%s)",
-                    profile ? "imported profile" : "legacy WARP mapping");
+            ESP_LOGI(TAG, "Read-only telemetry available/recovered (imported profile)");
         } else if (changedError) {
             ESP_LOGW(TAG, "Read-only poll failed: %s (Modbus exception %u)",
                     Modbus::errorName(result.error), result.exception);

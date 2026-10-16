@@ -30,7 +30,6 @@ void WebApiProfilesClass::bindingGet(AsyncWebServerRequest* request)
     auto* response = new AsyncJsonResponse();
     auto& root = response->getRoot();
     root["profile"] = static_cast<char const*>(config.Profile);
-    root["legacy"] = config.Profile[0] == '\0';
     root["control_mode"] = Hems::controlModeName(config.Control);
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
@@ -47,7 +46,7 @@ void WebApiProfilesClass::bindingPost(AsyncWebServerRequest* request)
     if (!Hems::Evse::deserializeBindingConfig(root.as<JsonVariantConst>(), candidate)) {
         response->getRoot()["ok"] = false;
         response->getRoot()["message"] =
-            "A valid EVSE profile id, legacy binding and control mode are required";
+            "A valid EVSE profile id and control mode are required";
         response->setCode(400);
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
         return;
@@ -96,7 +95,6 @@ void WebApiProfilesClass::bindingPost(AsyncWebServerRequest* request)
     result["type"] = "success";
     result["ok"] = true;
     result["profile"] = static_cast<char const*>(candidate.Profile);
-    result["legacy"] = candidate.Profile[0] == '\0';
     result["control_mode"] = Hems::controlModeName(candidate.Control);
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }

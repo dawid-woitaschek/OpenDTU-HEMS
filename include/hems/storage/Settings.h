@@ -64,6 +64,7 @@ inline bool deserializeStorageConfig(JsonVariantConst source, StorageConfig& tar
     if (enabled && (!Hems::Modbus::validHost(host) || !validStorageProfileId(profile))) { return false; }
 
     target.Enabled = enabled;
+    if (!enabled) { target.Control = Hems::ControlMode::MonitorOnly; }
     std::memcpy(target.Host, host, hostLength + 1);
     // A disabled consumer must not keep a hidden profile reference. This makes
     // disabling the consumer an explicit way to release a profile for deletion.
