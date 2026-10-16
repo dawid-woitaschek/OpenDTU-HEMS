@@ -200,7 +200,7 @@ struct alignas(std::max_align_t) Allocation { size_t size; };
 } // namespace
 
 void* BoundedAllocator::allocate(size_t size) {
-    if (size > MaxJsonMemory - used) { return nullptr; }
+    if (size > _maximum - used) { return nullptr; }
     auto p = static_cast<Allocation*>(malloc(sizeof(Allocation) + size));
     if (!p) { return nullptr; }
     p->size = size; used += size; if (used > peak) { peak = used; } return p + 1;
@@ -212,7 +212,7 @@ void BoundedAllocator::deallocate(void* pointer) {
 void* BoundedAllocator::reallocate(void* pointer, size_t size) {
     if (!pointer) { return allocate(size); }
     auto p = static_cast<Allocation*>(pointer) - 1; size_t old = p->size;
-    if (size > MaxJsonMemory - (used - old)) { return nullptr; }
+    if (size > _maximum - (used - old)) { return nullptr; }
     auto replacement = static_cast<Allocation*>(realloc(p, sizeof(Allocation) + size));
     if (!replacement) { return nullptr; }
     replacement->size = size; used = used - old + size; if (used > peak) { peak = used; } return replacement + 1;

@@ -177,6 +177,7 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
 
 void WebApiHemsClass::init(AsyncWebServer& server)
 {
+    initEnergy(server);
     using std::placeholders::_1;
     server.on("/api/hems/command", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onCommand, this, _1)));
     server.on("/api/hems/status", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onStatus, this, _1)));

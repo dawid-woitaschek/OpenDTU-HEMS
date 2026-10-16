@@ -14,6 +14,7 @@
 #include <battery/Controller.h>
 #include <gridcharger/Controller.h>
 #include <hems/Controller.h>
+#include <hems/energy/Service.h>
 #include "MqttHandleDtu.h"
 #include "MqttHandleHass.h"
 #include "MqttHandleInverter.h"
@@ -129,6 +130,7 @@ void setup()
     MqttHandlePowerLimiterHass.init(scheduler);
 
     HemsController.init(scheduler);
+    Hems::Energy::EnergyData.init(scheduler);
 
     // Initialize WebApi
     ESP_LOGI(TAG, "Initializing WebApi...");
