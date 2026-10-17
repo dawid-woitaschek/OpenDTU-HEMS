@@ -15,7 +15,6 @@ public:
 private:
     struct Result {
         Config config;
-        Energy::Series tariff, forecast;
         Inputs inputs;
         Plan plan;
         uint32_t energyRevision = 0;

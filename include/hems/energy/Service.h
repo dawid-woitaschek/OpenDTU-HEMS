@@ -26,6 +26,7 @@ private:
     JsonProvider const& provider(Domain domain) const { return domain == Domain::Tariff ? _tariff : _forecast; }
     void loop();
     static void workerEntry(void* context);
+    void runPending(Domain domain);
     void fetch(Domain domain, Settings const& settings, uint32_t generation);
     bool (*_backgroundDue)(void*) = nullptr;
     void (*_backgroundRun)(void*) = nullptr;

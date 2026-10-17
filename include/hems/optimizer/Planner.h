@@ -30,6 +30,8 @@ struct Step {
 };
 struct Plan {
     Step steps[MaxSteps] {};
+    // Only provenance survives calculation; normalized interval snapshots are scratch.
+    char tariffSource[49] {}, forecastSource[49] {}, currency[4] {};
     uint16_t count = 0, states = 0;
     bool pvIncluded = false, partial = false;
     uint32_t generatedAt = 0, initialWh = 0, finalWh = 0, runtimeUs = 0;

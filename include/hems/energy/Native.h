@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include <hems/energy/Provider.h>
+#include <hems/energy/Diagnostics.h>
 namespace Hems::Energy {
 struct NativeInfo {
     int16_t httpStatus = 0;
     int32_t rateLimit = -1, rateRemaining = -1;
     uint32_t retrySeconds = 0;
+    int32_t tlsError = 0; // WiFiClientSecure connect result, when negative; -1 is ambiguous.
+    int8_t dns = -1; // -1: not attempted, 0: resolution failed, 1: resolved.
+    char httpError[40] {}, tlsErrorText[96] {};
+    uint32_t durationMs = 0, payloadBytes = 0, jsonPeak = 0;
+    MemorySample before, connected, decoded, released;
 };
 bool parseUtc(char const* text, uint32_t& utc, bool bareUtc = false);
 bool parseEnergyCharts(JsonVariantConst json, uint32_t fetchedAt, Series& output, char const*& error);

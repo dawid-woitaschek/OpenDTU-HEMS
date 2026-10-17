@@ -103,7 +103,7 @@ $(TEST_FIRMWARE_UPDATE): test_firmware_update.cpp
 $(TEST_OPTIMIZER_SERVICE): test_optimizer_service.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -Ioptimizer_stubs -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $^
 
-$(TEST_TRANSPORT): test_energy_transport.cpp ../src/hems/energy/Transport.cpp
+$(TEST_TRANSPORT): test_energy_transport.cpp ../src/hems/energy/Transport.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -Itransport_stubs -I../include -I$(ARDUINOJSON) -o $@ $^
 
 $(TEST_NATIVE_ENERGY): test_native_energy.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp

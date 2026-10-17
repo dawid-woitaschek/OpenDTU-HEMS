@@ -80,23 +80,29 @@ bool parseEnergyCharts(JsonVariantConst j, uint32_t now, Series& out, char const
         }
     }
     if (resolution != 900 && resolution != 3600) { return false; }
-    auto candidate = std::unique_ptr<Series>(new (std::nothrow) Series());
-    if (!candidate) { error = "insufficient_memory"; return false; }
-    candidate->generatedAt = now; candidate->sourceTimestampKnown = false;
-    snprintf(candidate->source, sizeof(candidate->source), "%s", "Energy-Charts.info / SMARD"); snprintf(candidate->currency, sizeof(candidate->currency), "%s", "EUR");
+    // Validate all values before touching the destination. The worker already owns
+    // an unpublished Series; another full-Series allocation here is redundant.
+    size_t published = 0;
     for (size_t i = 0; i < times.size(); ++i) {
-        uint32_t t = times[i];
-        if (t > UINT32_MAX - resolution) { return false; }
-        if (values[i].isNull()) { continue; } // Not published: leave a gap.
+        if (times[i].as<uint32_t>() > UINT32_MAX - resolution) { return false; }
+        if (values[i].isNull()) { continue; }
         if (!values[i].is<double>() || values[i].is<bool>()) { return false; }
-        double micros = values[i].as<double>() * 1000.0; // EUR/MWh -> micro EUR/kWh.
+        double micros = values[i].as<double>() * 1000.0;
         if (!std::isfinite(micros) || micros < INT32_MIN || micros > INT32_MAX) { return false; }
-        auto& interval = candidate->intervals[candidate->count++];
-        interval.start = t; interval.end = t + resolution; interval.value = std::llround(micros);
+        ++published;
     }
-    if (!candidate->count) { error = "prices_not_published"; return false; }
-    out = *candidate; error = nullptr; return true;
+    if (!published) { error = "prices_not_published"; return false; }
+    out.count = 0; out.generatedAt = now; out.sourceTimestampKnown = false;
+    snprintf(out.source, sizeof(out.source), "%s", "Energy-Charts.info / SMARD"); snprintf(out.currency, sizeof(out.currency), "%s", "EUR");
+    for (size_t i = 0; i < times.size(); ++i) {
+        if (values[i].isNull()) { continue; }
+        auto& interval = out.intervals[out.count++]; interval = {};
+        interval.start = times[i]; interval.end = interval.start + resolution;
+        interval.value = std::llround(values[i].as<double>() * 1000.0);
+    }
+    error = nullptr; return true;
 }
+
 bool parseForecastSolar(JsonVariantConst j, Series& out, NativeInfo& info, char const*& error)
 {
     error = "invalid_forecast_solar_payload";
@@ -109,27 +115,38 @@ bool parseForecastSolar(JsonVariantConst j, Series& out, NativeInfo& info, char 
     if (message["ratelimit"]["limit"].is<int32_t>()) { info.rateLimit = message["ratelimit"]["limit"]; }
     if (message["ratelimit"]["remaining"].is<int32_t>()) { info.rateRemaining = message["ratelimit"]["remaining"]; }
     if (info.rateRemaining == 0) { info.retrySeconds = std::max(static_cast<uint32_t>(7200), message["ratelimit"]["period"] | static_cast<uint32_t>(0)); }
-    auto candidate = std::unique_ptr<Series>(new (std::nothrow) Series());
-    if (!candidate) { error = "insufficient_memory"; return false; }
-    if (!parseUtc(message["info"]["time_utc"], candidate->generatedAt)) { return false; }
-    snprintf(candidate->source, sizeof(candidate->source), "%s", "Forecast.Solar");
+    uint32_t generatedAt;
+    if (!parseUtc(message["info"]["time_utc"], generatedAt)) { return false; }
     auto periods = j["result"]["watt_hours_period"].as<JsonObjectConst>();
     if (periods.size() < 2 || periods.size() > MaxIntervals + 1) { error = "invalid_interval_count"; return false; }
+    // Two bounded passes preserve the parser's failure atomicity without allocating
+    // a second Series. Re-reading <=257 UTC keys is cheap compared with HTTPS.
     uint32_t previous = 0;
     for (auto entry : periods) {
         uint32_t end;
         if (!parseUtc(entry.key().c_str(), end, true) || !entry.value().is<uint32_t>()) { return false; }
         uint32_t wh = entry.value();
         if (!previous) { if (wh != 0) { return false; } previous = end; continue; }
-        // full=1 supplies the complete UTC series, including zero production at night.
         if (end <= previous || end - previous > 3600) { error = "forecast_interval_gap"; return false; }
         uint64_t watts = (static_cast<uint64_t>(wh) * 3600 + (end - previous) / 2) / (end - previous);
         if (watts > INT32_MAX) { return false; }
-        auto& interval = candidate->intervals[candidate->count++];
-        interval.start = previous; interval.end = end; interval.value = watts; previous = end;
+        previous = end;
     }
-    out = *candidate; error = nullptr; return true;
+    out.count = 0; out.generatedAt = generatedAt; out.sourceTimestampKnown = true; out.currency[0] = 0;
+    snprintf(out.source, sizeof(out.source), "%s", "Forecast.Solar");
+    previous = 0;
+    for (auto entry : periods) {
+        uint32_t end = 0; parseUtc(entry.key().c_str(), end, true);
+        if (previous) {
+            auto& interval = out.intervals[out.count++]; interval = {};
+            interval.start = previous; interval.end = end;
+            interval.value = (static_cast<uint64_t>(entry.value().as<uint32_t>()) * 3600 + (end - previous) / 2) / (end - previous);
+        }
+        previous = end;
+    }
+    error = nullptr; return true;
 }
+
 bool aggregate(Series const& a, Series const& b, Series& out, char const*& error)
 {
     error = "plane_horizon_mismatch";

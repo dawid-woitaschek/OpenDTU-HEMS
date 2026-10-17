@@ -38,11 +38,20 @@ void runWorkers()
         try { task->entry(task->context); } catch (Idle const&) {}
     }
 }
+static unsigned solarRequests = 0, failSolarRequest = 0;
+static int solarRemaining = -1;
+static std::function<void(unsigned)> duringSolar;
 namespace Hems::Energy {
-bool providerGet(char const*, Source, JsonDocument& doc, NativeInfo&, char const*& error) {
+bool providerGet(char const*, Source source, JsonDocument& doc, NativeInfo& info, char const*& error) {
+    if (source == Source::ForecastSolar) {
+        ++solarRequests; info.rateRemaining = solarRemaining;
+        if (duringSolar) { duringSolar(solarRequests); }
+        if (solarRequests == failSolarRequest) { info.httpStatus = -1; error = "provider_connect_failed"; return false; }
+    }
     ++httpRequests;
     if (duringHttp) { auto callback = std::move(duringHttp); duringHttp = {}; callback(); }
     if (!httpAvailable) { error = "verified_https_failed"; return false; }
+    info.httpStatus = 200;
     bool ok = !deserializeJson(doc, httpBody); error = ok ? nullptr : "malformed_or_oversized_json"; return ok;
 }
 }
@@ -106,7 +115,14 @@ int main()
     service.snapshot(Domain::Forecast, data, status); assert(!status.error && status.fresh);
     // Actual native adapter path, with only the network boundary replaced.
     settings = {}; settings.enabled = true; settings.source = Source::EnergyCharts;
+    settings.pricing = { true, 1900, 123400, 1234, 9990000 };
     assert(service.configure(Domain::Tariff, settings));
+    Service priceReboot; Scheduler priceScheduler; priceReboot.init(priceScheduler);
+    api.clear(); priceReboot.serialize(Domain::Tariff, api.to<JsonObject>());
+    assert(api["config"]["pricing"]["vat_basis_points"] == 1900);
+    assert(api["config"]["pricing"]["grid_micros_per_kwh"] == 123400);
+    assert(api["config"]["pricing"]["markup_micros_per_kwh"] == 1234);
+    assert(api["config"]["pricing"]["monthly_micros"] == 9990000);
     doc.clear(); doc["unit"] = "EUR / MWh";
     for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
     httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
@@ -124,11 +140,43 @@ int main()
     time_t now = time(nullptr); struct tm utc {}; gmtime_r(&now, &utc); char key[32]; strftime(key, sizeof(key), "%Y-%m-%dT%H:%M:%S+00:00", &utc);
     doc["message"]["info"]["time_utc"] = key;
     for (unsigned i = 0; i < 5; ++i) { time_t t = now + i * 3600; gmtime_r(&t, &utc); strftime(key, sizeof(key), "%Y-%m-%d %H:%M:%S", &utc); doc["result"]["watt_hours_period"][key] = i ? 1000 : 0; }
-    httpBody.clear(); serializeJson(doc, httpBody); auto before = httpRequests; scheduler.execute(); runWorkers();
-    service.snapshot(Domain::Forecast, data, status); assert(data.count == 4 && data.intervals[0].value == 2000 && status.planningUsable);
-    assert(httpRequests == before + 2 && tasks.size() == 1);
-    testNow += 7200000; duringHttp = [&] { auto replacement = settings; replacement.enabled = false; assert(service.configure(Domain::Forecast, replacement)); };
-    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status); assert(!status.enabled && !status.hasData);
+    httpBody.clear(); serializeJson(doc, httpBody);
+    // One, two and six configured planes all use the same serial worker.
+    for (unsigned count : {1U, 2U, 6U}) {
+        settings.planeCount = count;
+        for (auto& plane : settings.planes) { plane.enabled = true; strcpy(plane.name, "PV"); plane.peakW = 1000; }
+        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0;
+        scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+        assert(data.count == 4 && data.intervals[0].value == int(count * 1000) && status.planningUsable);
+        assert(solarRequests == count && tasks.size() == 1);
+    }
+    settings.planeCount = 2; assert(service.configure(Domain::Forecast, settings));
+    solarRequests = 0; scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Forecast, data, status); assert(data.intervals[0].value == 2000);
+    auto accepted = data; auto fetchedAt = status.fetchedAt;
+    testNow += 7200000; solarRequests = 0; failSolarRequest = 2;
+    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    assert(solarRequests == 2 && status.hasData && !strcmp(status.error, "provider_connect_failed"));
+    assert(data.count == accepted.count && data.generatedAt == accepted.generatedAt && status.fetchedAt == fetchedAt);
+    for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    assert(api["plane_status"][0]["http_status"] == 200 && api["plane_status"][1]["http_status"] == -1);
+    failSolarRequest = 0;
+    testNow += 7200000; solarRequests = 0; solarRemaining = 0;
+    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    assert(solarRequests == 1 && status.hasData && !strcmp(status.error, "provider_rate_limited"));
+    assert(data.intervals[0].value == 2000); solarRemaining = -1;
+    // A config generation change in the second request cannot publish the old run.
+    testNow += 7200000; solarRequests = 0;
+    duringSolar = [&](unsigned n) { if (n == 2) { auto replacement = settings; replacement.enabled = false; assert(service.configure(Domain::Forecast, replacement)); } };
+    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    assert(solarRequests == 2 && !status.enabled && !status.hasData);
+    duringSolar = {};
+    // A generation change between requests stops the obsolete run before another HTTPS request.
+    assert(service.configure(Domain::Forecast, settings)); solarRequests = 0;
+    duringDelay = [&] { auto replacement = settings; replacement.planes[1].peakW = 2000; assert(service.configure(Domain::Forecast, replacement)); };
+    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    assert(solarRequests == 1 && status.enabled && !status.hasData);
     for (auto task : tasks) { delete task; }
     std::cout << "Energy settings persistence/reload, push, HTTP failure/recovery, shared scheduling and generation tests passed\n";
 }

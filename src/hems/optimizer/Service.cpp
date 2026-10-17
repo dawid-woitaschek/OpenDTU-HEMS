@@ -89,10 +89,20 @@ void Service::run()
         return;
     }
     result->config = c; result->inputs = liveInputs(); result->energyRevision = Energy::EnergyData.revision();
-    Energy::EnergyData.snapshot(Energy::Domain::Tariff, result->tariff, result->inputs.tariffStatus);
-    Energy::EnergyData.snapshot(Energy::Domain::Forecast, result->forecast, result->inputs.forecastStatus);
-    result->inputs.tariff = &result->tariff; result->inputs.forecast = &result->forecast;
-    uint32_t start = micros(); calculate(c, result->inputs, result->plan); result->plan.runtimeUs = micros() - start;
+    {
+        auto tariff = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
+        auto forecast = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
+        if (!tariff || !forecast) {
+            std::lock_guard<std::mutex> lock(_mutex);
+            if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); }
+            return;
+        }
+        Energy::EnergyData.snapshot(Energy::Domain::Tariff, *tariff, result->inputs.tariffStatus);
+        Energy::EnergyData.snapshot(Energy::Domain::Forecast, *forecast, result->inputs.forecastStatus);
+        result->inputs.tariff = tariff.get(); result->inputs.forecast = forecast.get();
+        uint32_t start = micros(); calculate(c, result->inputs, result->plan); result->plan.runtimeUs = micros() - start;
+        result->inputs.tariff = result->inputs.forecast = nullptr;
+    }
     auto latestRevision = Energy::EnergyData.revision(); auto latestInputs = liveInputs();
     std::lock_guard<std::mutex> lock(_mutex);
     if (generation != _generation || latestRevision != result->energyRevision || !sameStorage(result->inputs, latestInputs)

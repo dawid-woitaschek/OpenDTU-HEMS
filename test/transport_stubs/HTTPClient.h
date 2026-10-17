@@ -6,6 +6,9 @@ struct FakeString { long toInt() const { return retryAfter; } };
 class HTTPClient {
     WiFiClient* client = nullptr;
 public:
+    HTTPClient() { ++activeHttp; }
+    ~HTTPClient() { --activeHttp; }
+    static std::string errorToString(int code) { return code == -1 ? "connection refused" : code == -11 ? "read Timeout" : "test HTTP error"; }
     bool begin(WiFiClient& c, char const* url) { client=&c; transportUrl=url; return true; }
     void useHTTP10(bool) {}
     void setReuse(bool) {}
@@ -14,7 +17,11 @@ public:
     void setTimeout(unsigned) {}
     void setUserAgent(char const*) {}
     void collectHeaders(char const**, size_t) {}
-    int GET() { return transportCode; }
+    int GET() {
+        auto host = transportUrl.find("forecast.solar") != std::string::npos ? "api.forecast.solar" : "api.energy-charts.info";
+        if (!client->connect(host, 443, 5000)) { return -1; }
+        return transportCode;
+    }
     FakeString header(char const*) { return {}; }
     int getSize() { return contentLength; }
     WiFiClient* getStreamPtr() { return client; }

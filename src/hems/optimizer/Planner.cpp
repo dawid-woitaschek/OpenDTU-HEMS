@@ -2,6 +2,7 @@
 #include <hems/optimizer/Planner.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <memory>
 #include <new>
@@ -77,6 +78,9 @@ void serializeConfig(Config const& c, JsonObject j)
 }
 bool calculate(Config const& c, Inputs const& in, Plan& out)
 {
+    snprintf(out.tariffSource, sizeof(out.tariffSource), "%s", in.tariff ? in.tariff->source : "");
+    snprintf(out.forecastSource, sizeof(out.forecastSource), "%s", in.forecast ? in.forecast->source : "");
+    snprintf(out.currency, sizeof(out.currency), "%s", in.tariff ? in.tariff->currency : "");
     out.count = 0; out.pvIncluded = false; out.partial = false; out.states = 0;
     out.initialWh = out.finalWh = 0; out.runtimeUs = 0;
     out.baselineNano = out.optimizedNano = 0; out.generatedAt = in.now; out.state = "not_ready"; out.blocker = nullptr; out.partialReason = nullptr;
@@ -181,9 +185,9 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     }
     out["soc_states"] = p.states; out["calculation_us"] = p.runtimeUs;
     out["price_basis"] = c.effectivePrice ? "effective_variable_import" : "source_market";
-    out["tariff_source"] = in.tariff ? static_cast<char const*>(in.tariff->source) : "";
-    out["forecast_source"] = p.pvIncluded && in.forecast ? static_cast<char const*>(in.forecast->source) : "excluded";
-    out["currency"] = in.tariff ? static_cast<char const*>(in.tariff->currency) : "";
+    out["tariff_source"] = static_cast<char const*>(p.tariffSource);
+    out["forecast_source"] = p.pvIncluded ? static_cast<char const*>(p.forecastSource) : "excluded";
+    out["currency"] = static_cast<char const*>(p.currency);
     out["tariff_fetched_at"] = in.tariffStatus.fetchedAt; out["forecast_fetched_at"] = in.forecastStatus.fetchedAt;
     out["tariff_generated_at"] = in.tariffStatus.sourceAt; out["forecast_generated_at"] = in.forecastStatus.sourceAt;
     out["storage_age_ms"] = in.storage.device.ageMs;

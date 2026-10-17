@@ -36,6 +36,7 @@ int main()
     JsonDocument result; Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="ready" && result["shadow_only"]==true && result["device_writes"]==false);
     assert(result["modeled_savings_nano"].as<int64_t>()>0 && result["schedule"].size()==16);
+    assert(result["tariff_source"] == "service fixture" && result["currency"] == "EUR");
     storage.socPct=Model::Signal<double>::stale(50); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="stale_inputs" && result["schedule"].size()==0);
     assert(Optimizer::ShadowOptimizer.requestRecalculate()); scheduler.execute(); workers();

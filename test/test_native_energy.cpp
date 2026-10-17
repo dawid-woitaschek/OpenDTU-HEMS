@@ -37,7 +37,9 @@ int main()
     assert(parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error)); assert(!output.current(Now + 3 * 900));
     d = prices(4, Now, 3600); assert(parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error)); assert(output.intervals[3].end == Now + 14400);
     d["unit"] = "EUR/kWh"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
-    d = prices(4); d["price"][1] = "1.2"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
+    auto saved = output;
+    d = prices(4); d["price"][3] = "1.2"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
+    assert(!memcmp(&saved, &output, sizeof(output)));
     d = prices(4); d["price"][1] = 1e30; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
     d = prices(4); d["unix_seconds"][1] = Now; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
     uint32_t x, y, begin, end;
@@ -52,7 +54,9 @@ int main()
     b = a; for (size_t i = 0; i < b.count; ++i) { b.intervals[i].value *= 2; }
     assert(aggregate(a, b, output, error)); assert(output.intervals[1].value == 3000);
     b.intervals[0].end -= 100; assert(!aggregate(a, b, output, error));
+    saved = a;
     d["result"]["watt_hours_period"].remove("2026-10-17 01:00:00"); assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error));
+    assert(!memcmp(&saved, &a, sizeof(a)));
     d = solar(); d["message"]["code"] = 429; assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error)); assert(info.retrySeconds >= 7200);
     d = solar(); d["message"]["code"] = 500; assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error));
     d = solar(); d["message"]["ratelimit"]["remaining"] = 0; info = {};
