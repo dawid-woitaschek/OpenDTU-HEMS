@@ -39,3 +39,15 @@ assert 'warpConfig.Enabled != Configuration.get().Hems.Warp.Enabled' in config_h
 assert config_handler.index('BindingSettings.clear()') < config_handler.index('config.Hems.Warp = warpConfig')
 
 print('Semantic-only admin API, removed authorization dependencies and symmetric EVSE binding passed')
+
+# Shadow planning cannot acquire ownership or enter any semantic actuator path.
+for path in list((root / 'src/hems/optimizer').glob('*.cpp')) + list((root / 'include/hems/optimizer').glob('*.h')):
+    source = path.read_text()
+    for forbidden in ('submitManual(', 'submitActuation(', 'submitCommand(', 'cancelPendingActuation(', 'ProfileSession', '#include <hems/actuation/', '#include <hems/modbus/'):
+        assert forbidden not in source, (path, forbidden)
+for path in (root / 'src/hems/energy').glob('*.cpp'):
+    assert 'setInsecure(' not in path.read_text(), path
+energy_api = (root / 'src/WebApi_hems_energy.cpp').read_text()
+optimizer_api = energy_api[energy_api.index('void WebApiHemsClass::onOptimizer('):]
+assert optimizer_api.index('checkCredentials(request)') < optimizer_api.index('ShadowOptimizer.serialize(')
+print('Shadow no-write architecture, authenticated optimizer API and verified provider TLS surface passed')

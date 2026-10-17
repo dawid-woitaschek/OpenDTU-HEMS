@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <WebApi_hems.h>
 #include <WebApi.h>
+#include <algorithm>
 #include <hems/energy/Service.h>
+#include <hems/optimizer/Service.h>
 #include <hems/profiles/Profile.h>
 
 namespace {
@@ -12,6 +14,10 @@ Hems::Energy::Domain domain(AsyncWebServerRequest* request)
 }
 void WebApiHemsClass::initEnergy(AsyncWebServer& server)
 {
+    server.on("/api/hems/optimizer", HTTP_GET, [this](AsyncWebServerRequest* r) { onOptimizer(r); });
+    for (auto path : { "/api/hems/optimizer/config", "/api/hems/optimizer/recalculate" }) {
+        server.on(path, HTTP_POST, [this](AsyncWebServerRequest* r) { onOptimizer(r); });
+    }
     for (auto path : { "/api/hems/energy/tariff", "/api/hems/energy/forecast" }) {
         server.on(path, HTTP_GET, [this](AsyncWebServerRequest* request) { onEnergyGet(request); });
         server.on(path, HTTP_POST, [this](AsyncWebServerRequest* request) { onEnergyPost(request); });
@@ -44,10 +50,10 @@ void WebApiHemsClass::onEnergyPost(AsyncWebServerRequest* request)
     int code = 400;
     if (request->url().endsWith("/refresh")) {
         ok = EnergyData.requestRefresh(domain(request));
-        message = ok ? "Refresh queued." : "Refresh requires an enabled HTTP provider.";
+        message = ok ? "Refresh queued." : "Refresh requires an enabled polling provider with no active retry delay.";
         code = ok ? 202 : 409;
     } else {
-        auto limit = request->url().endsWith("/config") ? 1536 : MaxPayload;
+        auto limit = request->url().endsWith("/config") ? 8192 : MaxPayload;
         if (!request->hasParam("data", true) || request->getParam("data", true)->value().length() > limit) {
             output["ok"] = false; output["message"] = "Missing or oversized data.";
             response->setCode(413); WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__); return;
@@ -67,5 +73,29 @@ void WebApiHemsClass::onEnergyPost(AsyncWebServerRequest* request)
     }
     output["ok"] = ok; output["type"] = ok ? "success" : "warning"; output["message"] = message;
     response->setCode(code);
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiHemsClass::onOptimizer(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    using Hems::Optimizer::ShadowOptimizer;
+    auto* response = new AsyncJsonResponse(); auto output = response->getRoot().to<JsonObject>();
+    if (request->method() == HTTP_GET) { ShadowOptimizer.serialize(output, request->hasParam("all"), request->hasParam("offset") ? std::min(256, std::max(0, static_cast<int>(request->getParam("offset")->value().toInt()))) : 0); }
+    else {
+        bool ok = false; int code = 400;
+        if (request->url().endsWith("/recalculate")) { ok = ShadowOptimizer.requestRecalculate(); code = ok ? 202 : 409; }
+        else if (request->hasParam("data", true) && request->getParam("data", true)->value().length() <= 2048) {
+            Hems::Profiles::BoundedAllocator allocator(4096); JsonDocument doc(&allocator);
+            Hems::Optimizer::Config config;
+            if (!deserializeJson(doc, request->getParam("data", true)->value(), DeserializationOption::NestingLimit(3))
+                    && Hems::Optimizer::parseConfig(doc.as<JsonVariantConst>(), config)) {
+                ok = ShadowOptimizer.configure(config); code = ok ? 200 : 500;
+            }
+        }
+        output["ok"] = ok; output["type"] = ok ? "success" : "warning";
+        output["message"] = ok ? "Shadow calculation configured or queued. No device writes." : "Invalid settings, disabled optimizer, or persistence failure.";
+        response->setCode(code);
+    }
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }

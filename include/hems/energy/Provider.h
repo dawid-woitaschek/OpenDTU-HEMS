@@ -7,9 +7,9 @@
 
 namespace Hems::Energy {
 
-constexpr size_t MaxIntervals = 128; // 32 hours at 15 minutes; also covers 25-hour DST days.
-constexpr size_t MaxPayload = 20000;
-constexpr size_t MaxJsonMemory = 24576;
+constexpr size_t MaxIntervals = 256; // 64 hours at 15 minutes, including DST.
+constexpr size_t MaxPayload = 40000;
+constexpr size_t MaxJsonMemory = 49152;
 constexpr uint32_t MinUtc = 1577836800; // Reject an unsynchronized clock (before 2020).
 enum class Domain : uint8_t { Tariff, Forecast };
 
@@ -23,6 +23,7 @@ struct Interval {
 struct Series {
     Interval intervals[MaxIntervals] {};
     uint32_t generatedAt = 0;
+    bool sourceTimestampKnown = true;
     uint16_t count = 0;
     char source[49] {}, currency[4] {};
     Interval const* current(uint32_t utc) const;
@@ -30,19 +31,44 @@ struct Series {
     // Exact integer watt-seconds; returns false across any missing interval.
     bool energyWattSeconds(uint32_t start, uint32_t end, int64_t& result) const;
 };
+enum class Source : uint8_t { Normalized, EnergyCharts, ForecastSolar };
+constexpr size_t MaxPlanes = 6;
+struct Plane {
+    bool enabled = false;
+    char name[33] {};
+    int32_t latitudeE6 = 0, longitudeE6 = 0;
+    uint16_t tilt = 0;
+    int16_t azimuth = 0; // 0 south, -90 east, +90 west.
+    uint32_t peakW = 0;
+};
+struct Pricing {
+    bool enabled = false; // Explicit acknowledgement that all variable components are configured.
+    uint16_t vatBasisPoints = 0;
+    int32_t gridMicros = 0, markupMicros = 0;
+    uint32_t monthlyMicros = 0; // Reporting only, excluded from marginal cost.
+};
 struct Settings {
+    Source source = Source::Normalized;
+    Pricing pricing;
+    Plane planes[MaxPlanes] {};
+    uint8_t planeCount = 0;
     bool enabled = false;
     char url[193] {}; // Empty: authenticated normalized JSON push; otherwise HTTP polling.
     uint32_t refreshSeconds = 900, maxAgeSeconds = 3600, horizonSeconds = 86400;
 };
 struct Status {
     bool enabled = false, hasData = false, fresh = false, complete = false;
+    bool currentCovered = false, planningUsable = false, partial = false;
+    uint32_t transportAgeSeconds = 0, sourceAgeSeconds = 0, nextRefresh = 0;
     uint32_t fetchedAt = 0, sourceAt = 0, horizonEnd = 0, ageSeconds = 0;
     uint16_t futureCount = 0;
     char const* state = "disabled";
     char const* error = nullptr;
 };
 
+char const* sourceName(Settings const& settings);
+bool pollable(Settings const& settings);
+bool effectivePrice(int32_t market, Pricing const& pricing, int32_t& result);
 bool parseSettings(JsonVariantConst json, Settings& output);
 void serializeSettings(Settings const& settings, JsonObject output);
 bool parseSeries(JsonVariantConst json, Domain domain, Series& output, char const*& error);
@@ -67,6 +93,8 @@ public:
     bool refreshDue(uint32_t nowMs) const override;
     void attempted(uint32_t nowMs);
     void failed(char const* error, uint32_t nowMs);
+    void defer(uint32_t nowMs, uint32_t seconds);
+    bool retryAllowed(uint32_t nowMs) const;
     bool accept(Series const& series, uint32_t utc, uint32_t nowMs);
     Domain domain() const { return _domain; }
 private:
@@ -75,6 +103,7 @@ private:
     Series _data;
     uint32_t _fetchedAt = 0, _fetchedMs = 0, _attemptMs = 0;
     bool _attempted = false;
+    uint32_t _retryMs = 0, _delaySeconds = 0;
     char const* _error = nullptr; // Stable diagnostic codes, never remote response bodies.
 };
 

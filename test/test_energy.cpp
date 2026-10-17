@@ -66,8 +66,8 @@ int main()
         assert(provider.data().count == 4);
         assert(provider.accept(series, Now, 20));
         assert(!contract.status(Now, 20).error);
-        assert(contract.status(Now, 3601021).fresh == false); // fake monotonic clock, wall clock frozen
-        assert(!contract.status(Now + 3601, 21).fresh);
+        assert(contract.status(Now, 3601021).fresh == (domain == Domain::Tariff)); // fake monotonic clock, wall clock frozen
+        assert(!contract.status(Now + 3601, 21).planningUsable);
         assert(!contract.status(Now - 1, 21).fresh); // wall clock stepped backwards
         assert(!contract.status(0, 21).fresh);
         auto older = series; --older.generatedAt;
@@ -82,7 +82,7 @@ int main()
         series.generatedAt = Now - 5000;
         JsonProvider stale(domain); stale.configure(settings);
         assert(stale.accept(series, Now, 100)); // diagnostics remain visible, never freshened by fetching old source data
-        assert(!stale.status(Now, 100).fresh);
+        assert(stale.status(Now, 100).fresh == (domain == Domain::Tariff));
         settings.enabled = false; provider.configure(settings);
         assert(!contract.status(Now, 30).hasData && !contract.status(Now, 30).fresh);
         settings.enabled = true;

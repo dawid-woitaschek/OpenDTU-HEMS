@@ -38,6 +38,14 @@ void runWorkers()
         try { task->entry(task->context); } catch (Idle const&) {}
     }
 }
+namespace Hems::Energy {
+bool providerGet(char const*, Source, JsonDocument& doc, NativeInfo&, char const*& error) {
+    ++httpRequests;
+    if (duringHttp) { auto callback = std::move(duringHttp); duringHttp = {}; callback(); }
+    if (!httpAvailable) { error = "verified_https_failed"; return false; }
+    bool ok = !deserializeJson(doc, httpBody); error = ok ? nullptr : "malformed_or_oversized_json"; return ok;
+}
+}
 using namespace Hems::Energy;
 std::string payload(Domain domain)
 {
@@ -96,6 +104,31 @@ int main()
     service.snapshot(Domain::Forecast, data, status); assert(!strcmp(status.error, "network_unavailable"));
     NetworkSettings.connected = true; assert(service.requestRefresh(Domain::Forecast)); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(!status.error && status.fresh);
+    // Actual native adapter path, with only the network boundary replaced.
+    settings = {}; settings.enabled = true; settings.source = Source::EnergyCharts;
+    assert(service.configure(Domain::Tariff, settings));
+    doc.clear(); doc["unit"] = "EUR / MWh";
+    for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
+    httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && data.intervals[0].value == -50000);
+    assert(!service.requestRefresh(Domain::Tariff)); // Manual clicks cannot bypass native rate spacing.
+    testNow += 3600000; httpAvailable = false; scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !strcmp(status.error, "verified_https_failed"));
+    assert(!service.requestRefresh(Domain::Tariff)); // Retry floor also applies to Refresh now.
+    testNow += 3600000; httpAvailable = true; scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !status.error);
+    settings = {}; settings.enabled = true; settings.source = Source::ForecastSolar; settings.planeCount = 2;
+    for (size_t i = 0; i < 2; ++i) { settings.planes[i].enabled = true; strcpy(settings.planes[i].name, "configured plane"); settings.planes[i].peakW = 1000; }
+    assert(service.configure(Domain::Forecast, settings));
+    doc.clear(); doc["message"]["code"] = 0; doc["message"]["type"] = "success";
+    time_t now = time(nullptr); struct tm utc {}; gmtime_r(&now, &utc); char key[32]; strftime(key, sizeof(key), "%Y-%m-%dT%H:%M:%S+00:00", &utc);
+    doc["message"]["info"]["time_utc"] = key;
+    for (unsigned i = 0; i < 5; ++i) { time_t t = now + i * 3600; gmtime_r(&t, &utc); strftime(key, sizeof(key), "%Y-%m-%d %H:%M:%S", &utc); doc["result"]["watt_hours_period"][key] = i ? 1000 : 0; }
+    httpBody.clear(); serializeJson(doc, httpBody); auto before = httpRequests; scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Forecast, data, status); assert(data.count == 4 && data.intervals[0].value == 2000 && status.planningUsable);
+    assert(httpRequests == before + 2 && tasks.size() == 1);
+    testNow += 7200000; duringHttp = [&] { auto replacement = settings; replacement.enabled = false; assert(service.configure(Domain::Forecast, replacement)); };
+    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status); assert(!status.enabled && !status.hasData);
     for (auto task : tasks) { delete task; }
     std::cout << "Energy settings persistence/reload, push, HTTP failure/recovery, shared scheduling and generation tests passed\n";
 }

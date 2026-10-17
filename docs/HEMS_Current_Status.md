@@ -1,6 +1,6 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-15. Live integration baseline: `73a84b639436e712fe5380f071526c30f7c539db`; GitHub confirms #22 merged. Current branch: `feature/hems-real-control`, [Draft PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) against `integration/hems-next`. The old #18/#20/#21 stack is closed and irrelevant.
+Snapshot: 2026-10-17. Live integration baseline: `73a84b639436e712fe5380f071526c30f7c539db`; GitHub confirms #22 merged. Current branch: `feature/hems-real-control`, [Draft PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) against `integration/hems-next`. The old #18/#20/#21 stack is closed and irrelevant.
 
 ## Usable control model
 
@@ -49,8 +49,8 @@ No physical WARP/Marstek control or watchdog/reboot behavior is claimed as teste
 5. For EV protection choose Storage HEMS control, optionally EVSE Monitor only, then Active. Confirm fresh EV charging blocks new discharge requests, stops fresh observed storage discharge, and leaves charging/idle storage alone; fresh-false for 120 seconds permits release only after protection actually intervened. Returning to Monitor stops the automatic producer and attempts release.
 6. If a command fails, inspect exact error and telemetry. Once communication/freshness return, controls re-enable automatically. Device-side reset/disconnection remains available independently.
 
-Dynamic tariff and optional PV forecast now have bounded normalized models, authenticated JSON upload, local HTTP polling with one optional shared worker, persisted configuration, freshness/gap/error diagnostics and compact Settings cards. No commercial service was selected. See [Energy data contracts and API](HEMS_Energy_Data.md). No economic writes are generated.
+Dynamic tariff and optional PV forecast now have bounded normalized models, authenticated JSON upload, local HTTP polling with one optional shared worker, persisted configuration, freshness/gap/error diagnostics and compact Settings cards. Native Energy-Charts (DE-LU) and Forecast.Solar adapters and pure economic shadow planning are now included; see [native energy and optimizer](HEMS_Native_Energy.md). See [Energy data contracts and API](HEMS_Energy_Data.md). No economic writes are generated.
 
 The Admin EVSE false-save error is fixed: the endpoint returns success consistently, the shared HTTP handler is used, and a failed post-save reload produces a warning alongside saved status. Additional native coverage exercises Disabled/Monitor/Active across every device permission combination, stale/unreachable recovery, actual catalog actuator bounds and Marstek byte fixtures, and exact EV Protection debounce boundaries. EVSE telemetry enable/disable transitions now durably clear the old binding and permission before changing enablement, so an API re-enable/reboot cannot revive hidden HEMS control. The runtime no longer polls an implicit WARP mapping when no profile is bound. Disabled storage also resets its persisted control mode to Monitor only, including API payloads that still contain a hidden HEMS permission. Production EVSE/storage settings stores have native persistence/reload coverage.
 
-Next work: real WARP/Marstek/EV Protection validation, provider-specific adapters when selected, explicit economic strategy decisions and Shadow optimization, then Active optimization and release polish. See [Roadmap](HEMS_Roadmap.md).
+Next work: real WARP/Marstek/EV Protection validation, native-provider/on-device TLS and optimizer resource validation, then Active economic optimization and release polish. See [Roadmap](HEMS_Roadmap.md).

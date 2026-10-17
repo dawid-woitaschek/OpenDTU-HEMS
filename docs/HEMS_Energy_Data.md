@@ -1,5 +1,10 @@
 # Dynamic tariff and optional PV forecast
 
+Native Forecast.Solar, Energy-Charts pricing, verified HTTPS and the economic
+Shadow Optimizer are documented in [Native energy and Shadow planning](HEMS_Native_Energy.md).
+The normalized push/local HTTP contract below remains available.
+
+
 HEMS Settings now contains compact tariff and forecast cards: provider settings,
 current normalized data, future intervals, freshness, horizon coverage and update
 errors. Both feeds are disabled by default and independent of HEMS device-control
@@ -7,11 +12,11 @@ permissions. Neither feed creates economic device commands. Disabled, missing or
 stale forecast/tariff data never prevents the existing core or EV Protection from
 operating.
 
-No commercial provider was selected in the repository. The first adapters are
+In addition to the native providers, alternative adapters are
 **normalized JSON push** and **normalized HTTP polling** from a local bridge.
 A Home Assistant integration, gateway or other external process can convert its
-chosen vendor's payload into this versioned contract. Vendor credentials, taxes,
-fees and timezone conversion belong at that boundary; a wholesale source price
+chosen vendor's payload into this versioned contract. Vendor credentials and timezone conversion belong at that boundary. Explicit
+variable fees/VAT can now be configured locally; a wholesale source price
 is never silently treated as the end customer's import price.
 
 ## Canonical contract
@@ -81,7 +86,7 @@ Authenticated routes use the existing Web API credentials and `data` form field:
 | --- | --- | --- |
 | `/api/hems/energy/tariff` | GET | Status, settings, current interval and next 8 intervals |
 | `/api/hems/energy/forecast` | GET | Same contract for PV forecast |
-| Either route with `?all=1` | GET | Include all retained intervals (at most 128) |
+| Either route with `?all=1` | GET | Include all retained intervals (at most 256) |
 | Either route | POST | Ingest normalized JSON in push mode |
 | Either route + `/config` | POST | Persist provider settings |
 | Either route + `/refresh` | POST | Queue a refresh for an enabled HTTP provider (202); otherwise 409 |
@@ -125,20 +130,21 @@ configuration generation is discarded. Settings never grant device writes.
 
 ## Freshness, validity and failure
 
-`valid` means a structurally validated series is retained, even when stale.
-Use `fresh` separately before consuming it. Source `generated_at` and the local
-successful `fetched_at` are both visible. Freshness uses source age and monotonic
-time since receipt, so fetching an old cached response does not make it fresh.
-An unsynchronized/backward clock or source timestamp more than 5 minutes in the
-future is not usable. Older source revisions cannot replace a newer series.
+`valid` means structurally validated retained data. `fetched_at` is the last
+successful receipt; `transport_age_seconds` and `source_age_seconds` are separate.
+Tariff usability follows authoritative current/future interval coverage, regardless
+of source age. Forecast freshness requires source/transport age within max_age_seconds.
+Unknown native tariff generation time is exposed explicitly rather than invented.
+An unsynchronized/backward clock or source timestamp more than five minutes ahead
+is unusable. Failed refreshes retain data; see the native energy document for details.
 
 `horizon_complete` means continuous coverage from now through the configured
 requested horizon, independently of freshness. `future_count` includes the current
 interval when it has not ended. `current` is null in a gap. `state` distinguishes
 Disabled, waiting for time/data, Ready, Partial, Stale and update failure.
 `last_error` is a stable diagnostic code; it clears on a successful update.
-A failed HTTP/network/parse update retains previous data; it may still be fresh
-until its maximum age expires. Consumers must inspect errors and freshness,
+A failed HTTP/network/parse update retains previous data; it may remain usable for covered tariff intervals or, for PV,
+until its maximum source/transport age expires. Consumers must inspect errors and freshness,
 not just whether a series exists. The UI explicitly shows both.
 
 Polling retries at the configured interval; Refresh now can request an earlier
@@ -149,14 +155,15 @@ it remains idle when no HTTP feeds are enabled.
 
 ## Limits and optimizer use
 
-Each domain holds at most 128 intervals, each at most 24 hours long. This is
-32 hours at 15-minute resolution (including a 25-hour DST day), or about five
+Each domain holds at most 256 intervals, each at most 24 hours long. This is
+64 hours at 15-minute resolution (including a 25-hour DST day), or about ten
 days hourly. Longer requested horizons simply remain Partial; extra intervals
-are rejected, never silently truncated. Payload maximum is 20,000 bytes and the
-JSON allocator is capped at 24,576 bytes. A series is 2620 bytes on the native
-host; two fixed buffers plus settings add roughly 6 kB of static state. The
-optional worker uses a 4096-byte stack. Parsing candidates are heap allocated;
-existing task stacks are unchanged. No PSRAM dependency or new HTTP library.
+are rejected, never silently truncated. Payload maximum is 40,000 bytes and the
+JSON allocator is capped at 49,152 bytes. A series is 5184 bytes on the native
+host; two fixed buffers plus settings add roughly 12 kB of static state. The
+optional shared provider/optimizer worker uses an 8192-byte stack (measured compiler
+frames justified additional TLS headroom; other task stacks are unchanged). Parsing candidates are heap allocated;
+non-energy task stacks are unchanged. No PSRAM dependency or new HTTP library.
 Measure final ESP32 RAM/flash in the authoritative CI build; native allocation
 figures are not on-device heap measurements.
 
@@ -166,9 +173,9 @@ under its mutex; callers should allocate the series away from small task stacks.
 `Series::current`, `covers` and (for forecasts) `energyWattSeconds` need no vendor
 payloads. Existing normalized grid/PV/storage/EVSE state, profile capabilities,
 permissions and EV Protection constraints remain available through the controller.
-A later optimizer must check all input freshness and know storage capacity,
-reserves and efficiencies explicitly before planning. There is no invented
-strategy, inferred efficiency, threshold or second actuation pipeline here.
+The implemented Shadow Optimizer checks freshness, contiguous coverage, capacity,
+explicit reserves and efficiencies before planning. It shares this normalized
+contract and has no actuation pipeline. See [native energy and planning](HEMS_Native_Energy.md).
 
 ## Validation level
 
@@ -182,9 +189,9 @@ LittleFS, clock and task boundaries; production service/provider code executes.
 UI tests/type/build checks cover save response semantics and rendering.
 
 Hardware validation pending: real ESP32 network timing, worker-stack/heap high
-water and LittleFS power-loss behavior. Commercial vendor adapters and upstream
-DST conversion need provider-specific fixtures when a service is selected.
+water and LittleFS power-loss behavior. Native-provider/DST fixtures are now included; real provider TLS and response-shape
+smoke tests remain pending.
 Actual WARP Modbus/IEC states, Marstek V148 sign/scales/watchdog/release and
 physical EV Protection remain hardware-unverified; these feeds do not change
-those mappings or gates. Economic strategy, TLS/cloud adapters, translations and
-release polish remain deliberate later work.
+those mappings or gates. Economic shadow calculation and verified native transport are implemented; Active
+economic dispatch, translations and release polish remain later work.

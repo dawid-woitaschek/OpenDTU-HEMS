@@ -31,7 +31,7 @@ void intervalJson(Domain domain, Interval const& interval, JsonObject output)
 // Bounds both response bytes and stream timeout; JSON allocation is independently capped.
 struct LimitedReader {
     Stream& stream;
-    size_t remaining = MaxPayload;
+    size_t remaining = MaxPayload + 1;
     int read() {
         if (!remaining) { return -1; }
         char value;
@@ -47,7 +47,7 @@ Service EnergyData;
 void Service::init(Scheduler& scheduler)
 {
     auto file = LittleFS.open(Path, "r");
-    if (file && file.size() <= 1536) {
+    if (file && file.size() <= 8192) {
         JsonDocument doc;
         Settings tariff, forecast;
         if (!deserializeJson(doc, file) && doc["version"].is<unsigned>() && doc["version"].as<unsigned>() == 1
@@ -60,6 +60,9 @@ void Service::init(Scheduler& scheduler)
 }
 bool Service::configure(Domain domain, Settings const& settings)
 {
+    if (settings.planeCount > MaxPlanes) { return false; }
+    if ((domain == Domain::Tariff && settings.source == Source::ForecastSolar)
+            || (domain == Domain::Forecast && settings.source == Source::EnergyCharts)) { return false; }
     std::lock_guard<std::mutex> lock(_mutex);
     JsonDocument doc;
     doc["version"] = 1;
@@ -69,7 +72,7 @@ bool Service::configure(Domain domain, Settings const& settings)
     LittleFS.remove(Temp);
     auto file = LittleFS.open(Temp, "w");
     auto length = measureJson(doc);
-    bool ok = !doc.overflowed() && length <= 1536 && file && serializeJson(doc, file) == length;
+    bool ok = !doc.overflowed() && length <= 8192 && file && serializeJson(doc, file) == length;
     if (file) { file.flush(); file.close(); }
     auto verify = LittleFS.open(Temp, "r");
     JsonDocument checked;
@@ -78,9 +81,16 @@ bool Service::configure(Domain domain, Settings const& settings)
         && checked["version"].as<unsigned>() == 1 && parseSettings(checked["tariff"], tariff) && parseSettings(checked["forecast"], forecast);
     verify.close();
     if (!ok || !LittleFS.rename(Temp, Path)) { LittleFS.remove(Temp); return false; }
-    provider(domain).configure(settings); ++_generation[static_cast<unsigned>(domain)];
+    provider(domain).configure(settings); ++_revision; _failures[static_cast<unsigned>(domain)] = 0;
+    if (domain == Domain::Forecast) { for (auto& plane : _planes) { plane = {}; } }
+    ++_generation[static_cast<unsigned>(domain)];
     _pending[static_cast<unsigned>(domain)] = false;
     return true;
+}
+uint32_t Service::revision() const { std::lock_guard<std::mutex> lock(_mutex); return _revision; }
+void Service::background(bool (*due)(void*), void (*run)(void*), void* context)
+{
+    _backgroundDue = due; _backgroundRun = run; _backgroundContext = context;
 }
 void Service::snapshot(Domain domain, Series& series, Status& status) const
 {
@@ -93,7 +103,27 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
     auto const& source = provider(domain); auto const& data = source.data(); auto now = utcNow();
     auto status = source.status(now, millis());
     serializeSettings(source.settings(), output["config"].to<JsonObject>());
-    output["provider"] = source.settings().url[0] ? "normalized_http" : "normalized_push";
+    output["provider"] = sourceName(source.settings());
+    output["current_covered"] = status.currentCovered; output["planning_usable"] = status.planningUsable;
+    output["partial_horizon"] = status.partial; output["transport_age_seconds"] = status.transportAgeSeconds;
+    output["source_age_seconds"] = nullptr;
+    if (data.sourceTimestampKnown && status.hasData) { output["source_age_seconds"] = status.sourceAgeSeconds; }
+    output["source_timestamp_known"] = data.sourceTimestampKnown;
+    output["next_refresh"] = status.nextRefresh;
+    auto const& native = _native[static_cast<unsigned>(domain)];
+    output["worker_stack_bytes"] = 8192; output["worker_stack_free_bytes"] = _workerStackFree;
+    output["revision"] = _revision; output["http_status"] = native.httpStatus; output["rate_limit"] = native.rateLimit; output["rate_remaining"] = native.rateRemaining;
+    if (source.settings().source == Source::EnergyCharts) {
+        output["attribution"] = "Energy-Charts.info; Bundesnetzagentur / SMARD.de; CC BY 4.0";
+        output["region"] = "DE-LU";
+    }
+    if (source.settings().source == Source::ForecastSolar) {
+        auto planes = output["plane_status"].to<JsonArray>();
+        for (size_t i = 0; i < source.settings().planeCount; ++i) {
+            auto p = planes.add<JsonObject>(); p["index"] = i; p["fetched_at"] = _planes[i].fetchedAt;
+            p["http_status"] = _planes[i].info.httpStatus; p["last_error"] = _planes[i].error; p["rate_remaining"] = _planes[i].info.rateRemaining;
+        }
+    }
     output["schema"] = schema(domain); output["state"] = status.state; output["enabled"] = status.enabled;
     output["source"] = static_cast<char const*>(data.source); output["fresh"] = status.fresh;
     output["valid"] = status.hasData; output["horizon_complete"] = status.complete;
@@ -124,21 +154,22 @@ bool Service::ingest(Domain domain, JsonVariantConst payload)
     std::lock_guard<std::mutex> lock(_mutex);
     auto& source = provider(domain);
     if (!parsed) { source.failed(error ? error : "insufficient_memory", millis()); return false; }
-    if (source.settings().url[0]) { source.failed("http_provider_rejects_push", millis()); return false; }
-    return source.accept(*series, utcNow(), millis());
+    if (pollable(source.settings())) { source.failed("http_provider_rejects_push", millis()); return false; }
+    bool ok = source.accept(*series, utcNow(), millis()); if (ok) { ++_revision; } return ok;
 }
 bool Service::requestRefresh(Domain domain)
 {
     std::lock_guard<std::mutex> lock(_mutex);
     auto const& settings = provider(domain).settings();
-    if (!settings.enabled || !settings.url[0]) { return false; }
+    if (utcNow() < MinUtc || !settings.enabled || !pollable(settings) || !provider(domain).retryAllowed(millis())) { return false; }
+    if (settings.source != Source::Normalized && !provider(domain).refreshDue(millis())) { return false; }
     _pending[static_cast<unsigned>(domain)] = true;
     return true;
 }
 void Service::loop()
 {
+    bool needed = _backgroundDue && _backgroundDue(_backgroundContext);
     std::lock_guard<std::mutex> lock(_mutex);
-    bool needed = false;
     for (auto domain : { Domain::Tariff, Domain::Forecast }) {
         auto i = static_cast<unsigned>(domain);
         auto& source = provider(domain);
@@ -146,7 +177,9 @@ void Service::loop()
         needed = needed || _pending[i];
     }
     if (!needed) { return; }
-    if (!_worker && xTaskCreate(workerEntry, "hems-energy", 4096, this, 1, &_worker) != pdPASS) {
+    // ESP32 compiler frames: worker 608 + fetch 2128 + transport 352 bytes,
+    // before HTTP/TLS call depth. Reserve 8 KiB for this optional shared worker only.
+    if (!_worker && xTaskCreate(workerEntry, "hems-energy", 8192, this, 1, &_worker) != pdPASS) {
         _worker = nullptr;
         for (auto domain : { Domain::Tariff, Domain::Forecast }) { provider(domain).failed("worker_unavailable", millis()); }
         return;
@@ -158,6 +191,7 @@ void Service::workerEntry(void* context)
     auto& service = *static_cast<Service*>(context);
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        if (service._backgroundRun) { service._backgroundRun(service._backgroundContext); }
         for (auto domain : { Domain::Tariff, Domain::Forecast }) {
             Settings settings; uint32_t generation;
             {
@@ -169,6 +203,8 @@ void Service::workerEntry(void* context)
             }
             service.fetch(domain, settings, generation);
         }
+        auto freeStack = uxTaskGetStackHighWaterMark(nullptr); // ESP-IDF reports bytes.
+        { std::lock_guard<std::mutex> lock(service._mutex); service._workerStackFree = freeStack; }
     }
 }
 void Service::fetch(Domain domain, Settings const& settings, uint32_t generation)
@@ -178,7 +214,46 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
     bool parsed = false;
     if (!series) { error = "insufficient_memory"; }
     else if (!NetworkSettings.isConnected()) { error = "network_unavailable"; }
-    else {
+    else if (settings.source != Source::Normalized) {
+        NativeInfo info;
+        auto single = std::unique_ptr<Series>(settings.source == Source::ForecastSolar ? new (std::nothrow) Series() : nullptr);
+        if (settings.source == Source::ForecastSolar && !single) { error = "insufficient_memory"; }
+        else {
+            unsigned requests = settings.source == Source::ForecastSolar ? settings.planeCount : 1;
+            parsed = true;
+            for (unsigned i = 0; i < requests; ++i) {
+                if (settings.source == Source::ForecastSolar && !settings.planes[i].enabled) { continue; }
+                char url[256];
+                if (settings.source == Source::ForecastSolar) { forecastUrl(settings.planes[i], url, sizeof(url)); }
+                else { tariffUrl(utcNow(), url, sizeof(url)); }
+                Profiles::BoundedAllocator allocator(MaxJsonMemory); JsonDocument doc(&allocator);
+                info = {};
+                bool ok = providerGet(url, settings.source, doc, info, error);
+                if (ok) {
+                    ok = settings.source == Source::ForecastSolar ? parseForecastSolar(doc.as<JsonVariantConst>(), *single, info, error)
+                        : parseEnergyCharts(doc.as<JsonVariantConst>(), utcNow(), *series, error);
+                }
+                {
+                    std::lock_guard<std::mutex> lock(_mutex);
+                    if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
+                    _native[static_cast<unsigned>(domain)] = info;
+                    if (settings.source == Source::ForecastSolar) { _planes[i] = { ok ? utcNow() : _planes[i].fetchedAt, error, info }; }
+                    if (info.retrySeconds) { provider(domain).defer(millis(), info.retrySeconds); }
+                }
+                if (!ok) { parsed = false; break; }
+                if (settings.source == Source::ForecastSolar) {
+                    if (!series->count) { *series = *single; }
+                    else if (!aggregate(*series, *single, *series, error)) { parsed = false; break; }
+                }
+                if (settings.source == Source::ForecastSolar && i + 1 < requests) {
+                    bool more = false;
+                    for (unsigned j = i + 1; j < requests; ++j) { more = more || settings.planes[j].enabled; }
+                    if (more && info.rateRemaining == 0) { parsed = false; error = "provider_rate_limited"; break; }
+                    if (more) { vTaskDelay(pdMS_TO_TICKS(5000)); }
+                }
+            }
+        }
+    } else {
         HttpRequestConfig config {}; strncpy(config.Url, settings.url, sizeof(config.Url) - 1); config.Timeout = 3000;
         HttpGetter getter(config);
         if (!getter.init()) { error = "invalid_url"; }
@@ -189,14 +264,22 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 LimitedReader reader { *request.getStream() };
                 Profiles::BoundedAllocator allocator(MaxJsonMemory); JsonDocument doc(&allocator);
                 auto decoded = deserializeJson(doc, reader, DeserializationOption::NestingLimit(6));
-                if (decoded) { error = "malformed_or_oversized_json"; }
+                int c; bool trailing = false;
+                while (!decoded && (c = reader.read()) >= 0) { if (c > 32) { trailing = true; break; } }
+                if (decoded || !reader.remaining || trailing) { error = "malformed_or_oversized_json"; }
                 else { parsed = parseSeries(doc.as<JsonVariantConst>(), domain, *series, error); }
             }
         }
     }
     std::lock_guard<std::mutex> lock(_mutex);
     if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
-    if (!parsed) { provider(domain).failed(error ? error : "invalid_payload", millis()); }
-    else { provider(domain).accept(*series, utcNow(), millis()); }
+    auto index = static_cast<unsigned>(domain);
+    if (!parsed) {
+        provider(domain).failed(error ? error : "invalid_payload", millis());
+        if (settings.source != Source::Normalized) {
+            _failures[index] = std::min(unsigned(_failures[index]) + 1, 6U);
+            provider(domain).defer(millis(), std::max(_native[index].retrySeconds, static_cast<uint32_t>(300U << _failures[index])));
+        }
+    } else if (provider(domain).accept(*series, utcNow(), millis())) { ++_revision; _failures[index] = 0; }
 }
 } // namespace Hems::Energy
