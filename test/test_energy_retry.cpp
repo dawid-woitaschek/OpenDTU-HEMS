@@ -18,9 +18,18 @@ int main()
     Settings settings; settings.enabled = true; settings.source = Source::EnergyCharts;
     assert(service.configure(Domain::Tariff, settings));
     currentUtc = 0; rejected(service, Domain::Tariff, "clock_invalid"); currentUtc = 1792180800;
-    NetworkSettings.connected = false; rejected(service, Domain::Tariff, "network_unavailable");
+
+    // A formally plausible wall clock is not sufficient for native HTTPS. Wait
+    // for MycilaNTP's durable first-sync latch, then retry locally after 5 s.
+    NtpSettings.synced = false;
+    rejected(service, Domain::Tariff, "clock_invalid");
     scheduler.execute(); runWorkers(); assert(tasks.empty() && httpRequests == 0);
     Series data; Status status; service.snapshot(Domain::Tariff, data, status);
+    assert(!strcmp(status.error, "clock_invalid") && status.nextRefresh == currentUtc + 5);
+
+    NtpSettings.synced = true; NetworkSettings.connected = false; testNow += 5000;
+    scheduler.execute(); runWorkers(); assert(tasks.empty() && httpRequests == 0);
+    service.snapshot(Domain::Tariff, data, status);
     assert(!strcmp(status.error, "network_unavailable") && status.nextRefresh == currentUtc + 5);
     JsonDocument api; service.serialize(Domain::Tariff, api.to<JsonObject>());
     assert(api["request"]["http_status"] == 0 && api["request"]["dns"] == "not_attempted");
@@ -92,5 +101,5 @@ int main()
     settings = {}; settings.enabled = true; assert(service.configure(Domain::Forecast, settings));
     rejected(service, Domain::Forecast, "invalid_config");
     for (auto task : tasks) { delete task; }
-    std::cout << "Production local retry, busy/manual reasons, auto cadence, transport backoff and server/quota holds passed\n";
+    std::cout << "Production NTP/network preflight, busy/manual reasons, auto cadence, transport backoff and server/quota holds passed\n";
 }
