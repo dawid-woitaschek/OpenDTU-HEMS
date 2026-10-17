@@ -5,6 +5,7 @@
 #include <HttpGetter.h>
 #include <LittleFS.h>
 #include <NetworkSettings.h>
+#include <NtpSettings.h>
 #include <Arduino.h>
 #include <algorithm>
 #include <cstring>
@@ -17,6 +18,11 @@ namespace {
 constexpr char Path[] = "/hems-energy.json", Temp[] = "/hems-energy.tmp";
 char const* name(Domain domain) { return domain == Domain::Tariff ? "tariff" : "forecast"; }
 uint32_t utcNow() { auto now = time(nullptr); return now > 0 && static_cast<uint64_t>(now) <= UINT32_MAX ? now : 0; }
+bool nativeCloud(Source source) { return source == Source::EnergyCharts || source == Source::ForecastSolar; }
+bool clockReady(Settings const& settings)
+{
+    return utcNow() >= MinUtc && (!nativeCloud(settings.source) || NtpSettings.isTimeSynced());
+}
 void intervalJson(Domain domain, Interval const& interval, JsonObject output)
 {
     output["start"] = interval.start; output["end"] = interval.end;
@@ -228,7 +234,7 @@ char const* Service::prerequisite(Domain domain) const
         bool enabled = false; for (unsigned i = 0; i < s.planeCount; ++i) { enabled = enabled || s.planes[i].enabled; }
         if (!enabled) { return "invalid_config"; }
     }
-    if (utcNow() < MinUtc) { return "clock_invalid"; }
+    if (!clockReady(s)) { return "clock_invalid"; }
     if (!NetworkSettings.isConnected()) { return "network_unavailable"; }
     return nullptr;
 }
@@ -303,7 +309,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
     auto series = std::unique_ptr<Series>(new (std::nothrow) Series());
     bool parsed = false;
     bool outbound = false, response = false;
-    if (utcNow() < MinUtc) { error = "clock_invalid"; }
+    if (!clockReady(settings)) { error = "clock_invalid"; }
     else if (!series) { error = "insufficient_memory"; }
     else if (!NetworkSettings.isConnected()) { error = "network_unavailable"; }
     else if (settings.source != Source::Normalized) {
