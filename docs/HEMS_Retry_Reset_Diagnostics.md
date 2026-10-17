@@ -53,8 +53,9 @@ queued, or 409 with stable `reason` and `retry_after_seconds`. Rejection reasons
 Busy covers either provider queued/running on the shared worker. Clock/network
 prerequisites remain mandatory for manual refresh. The GET response includes
 `manual_refresh.allowed/reason/retry_after_seconds/next_allowed`, `next_refresh`
-for automatic scheduling and `request_stage` (local prerequisite, DNS, transport,
-HTTP response, success). A zero/unavailable deadline does not predict when network,
+for automatic scheduling and `request_stage` for the last returned outcome (local
+prerequisite, DNS, transport, HTTP response, success); live phases are in the current
+boot breadcrumb. A zero/unavailable deadline does not predict when network,
 clock or an already-running operation will become ready. UI errors show the
 specific reason and retry delay; manual refresh cannot bypass any server hold.
 
@@ -83,11 +84,25 @@ headers, vendored/dependency libraries, framework sources and the linked ELF.
 
 Framework-only restart paths include `EspClass::restart()` -> `esp_restart()`,
 USB OTG `usb_persist_restart()` (CDC bootloader/1200-baud/line-state handling),
-FirmwareMSC and ArduinoOTA auto-reboot. The latter three are not linked into the
-reference firmware; `generic_esp32s3_usb` uses `ARDUINO_USB_MODE=1` HWCDC, not
-TinyUSB CDC. Host USB/JTAG reset or reset-pin/power events remain possible external
-reset paths. On targets enabling other framework reboot paths, the shutdown hook
-can show `esp_restart_called` without an application intentional source.
+FirmwareMSC, ArduinoOTA, HTTPUpdate and HTTPUpdateServer auto-reboot. These optional
+USB/update modules are not linked into the reference firmware; `generic_esp32s3_usb`
+uses `ARDUINO_USB_MODE=1` HWCDC, not TinyUSB CDC. IDF's separate ROM USB-CDC console
+also has line-state/DFU restarts, but that console mode is not selected here.
+Host USB/JTAG reset or reset-pin/power events remain possible external reset paths.
+On targets enabling other framework reboot paths, the shutdown hook can show
+`esp_restart_called` without an application intentional source.
+
+Two earlier startup paths merit separate qualification. IDF `cpu_start.c` calls
+`esp_restart()` if its eFuse error check fails, before application initialization.
+SDK OTA rollback is enabled (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=1`); Arduino's
+`initArduino()` can invoke `esp_ota_mark_app_invalid_rollback_and_reboot()` if
+`verifyOta()` rejects a pending image. This project uses Arduino's unmodified weak
+defaults (`verifyOta=true`, `verifyRollbackLater=false`), so normally marks the image
+valid before `setup()` rather than requesting rollback. `Update.rollBack()` itself
+only changes boot selection and is not called here. These are startup paths, not
+an observed two-hour runtime policy. A reset before `Diagnostics::init()` cannot
+receive this boot's shutdown hook, generation or intentional source. Do not patch
+framework startup just to manufacture an attribution for it.
 
 Implicit crash paths include SDK/library assertions and `abort()`, CPU exceptions,
 stack canary/watchpoint/compiler protector failures, heap-corruption checks and
@@ -172,8 +187,8 @@ These are the installed prebuilt SDK settings, not assumed IDF defaults:
 | `CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_ENABLE`, assertion level | 1 / 2 |
 | `CONFIG_HEAP_POISONING_LIGHT` | 1; allocation failure abort option not selected |
 | `CONFIG_BOOTLOADER_WDT_ENABLE`, `TIME_MS` | 1 / 9000; disabled before application start (`DISABLE_IN_USER_CODE` not selected) |
-| `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH` | 1, ELF/CRC32, boot check, max64 tasks, 1024-byte dump stack in SDK; **no core-dump partition in project layout**, so no usable persistent dump. SDK checks missing/invalid partition and returns before erase/write |
-| Console | UART0 at115200 + secondary USB Serial/JTAG; panic printer writes both |
+| `CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH` | 1, ELF/CRC32, boot check, max 64 tasks, 1024-byte dump stack in SDK; **no core-dump partition in project layout**, so no usable persistent dump. SDK checks missing/invalid partition and returns before erase/write |
+| Console | UART0 at 115200 + secondary USB Serial/JTAG; panic printer writes both |
 
 Arduino loopTask's optional task-WDT subscription is false; application does not
 enable it. AsyncTCP explicitly undefines/disables its subscription in the installed
@@ -206,16 +221,20 @@ restart source encoding and IDF enum serialization. A production RestartHelper t
 checks both existing scheduler ticks, LED/display handling and recovery of
 `inverter_unresponsive` after a simulated reboot. CI requires no live providers.
 
-Local checks include all31 host executables and no-write surface guard, production
+Local checks include all 31 host executables and no-write surface guard, production
 configuration compatibility/round-trip, firmware-channel checks, Admin/auth and
 tariff/refresh UI tests, frontend type/build/lint/format, cpplint and the reference
-firmware. GitHub CI is authoritative for the eight-target HEMS matrix.
+firmware plus `generic_esp32_8mb`. GitHub CI is authoritative for the eight-target
+HEMS matrix. Its `debug-symbols-generic_esp32s3_usb` artifact retains the matching
+reference ELF for 14 days, separately from OTA images and without affecting firmware
+memory or persistent flash. Decode panic addresses with the matching Xtensa
+`addr2line -pfiaC -e firmware.elf`.
 
 Comparable reference builds (`PLATFORMIO_BUILD_FLAGS=-fstack-usage`, frontend built):
 
 | Resource / compiler frame | Previous head | This pass |
 | --- | ---: | ---: |
-| Flash sketch | 2798193 | 2807125 (+8932 bytes) |
+| Flash sketch | 2798193 | 2807157 (+8964 bytes) |
 | Static RAM reported by PIO | 115896 | 116240 (+344 bytes) |
 | Additional RTC no-init record | 0 | 264 bytes (not counted in PIO ordinary RAM total) |
 | Energy worker allocation | 10240 | 10240 |
@@ -226,8 +245,8 @@ Comparable reference builds (`PLATFORMIO_BUILD_FLAGS=-fstack-usage`, frontend bu
 | Normalized HTTP helper | 2080 | 2080 |
 | Optimizer `run` | 624 | 640 |
 
-The extra16-byte frames carry small scope/control state; native TLS lifetimes and
-Series/optimizer allocation reductions remain intact. Journal functions use32–48
+The extra 16-byte frames carry small scope/control state; native TLS lifetimes and
+Series/optimizer allocation reductions remain intact. Journal functions use 32–48
 byte compiler frames; no heap allocation or logging in checkpoint commits.
 System-status JSON is allocated only during an API read, outside the RTC lock.
 These frame sizes do not prove runtime stack margin or minimum heap.
@@ -235,13 +254,14 @@ These frame sizes do not prove runtime stack margin or minimum heap.
 ## Next hardware run: minutes
 
 1. Flash the PR's non-PSRAM `generic_esp32s3_usb` OTA image; record its tested merge
-   SHA. Start a continuous115200 Serial capture, keep matching ELF. Leave Shadow
+   SHA. Start a continuous 115200 Serial capture; download the matching reference
+   ELF artifact from the same CI run. Leave Shadow
    Optimizer disabled until native provider stability is established.
 2. Boot and wait for clock/network. If `network_unavailable` occurs, confirm zero
    outbound metrics and a five-second local retry, then see a request within roughly
    six seconds of readiness. No hour/two-hour wait or manual reboot is needed.
 3. Fetch Energy-Charts manually (or inspect the initial automatic success); after
-   the15-second spacing, Refresh now should work despite the one-hour automatic
+   the 15-second spacing, Refresh now should work despite the one-hour automatic
    deadline. A blocked request must show its specific reason/delay.
 4. Manually fetch configured two-plane Forecast.Solar when status says allowed.
    Expect sequential planes with the existing five-second pause, complete aggregate

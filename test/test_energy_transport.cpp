@@ -14,6 +14,7 @@ int main()
     auto get=[&] { return providerGet("https://api.energy-charts.info/price",Source::EnergyCharts,doc,info,error); };
     transportBody=R"({"unix_seconds":[1792180800,1792181700],"price":[-10,20],"unit":"EUR / MWh"})";
     assert(get() && caInstalled && redirectPolicy==0 && transportUrl=="https://api.energy-charts.info/price");
+    retryAfter = 120; assert(get() && info.retrySeconds == 120); retryAfter = 0; // A 200 response can also impose a server hold.
     assert(!providerGet("http://api.energy-charts.info/price",Source::EnergyCharts,doc,info,error));
     assert(!providerGet("https://api.energy-charts.info.attacker.test/",Source::EnergyCharts,doc,info,error));
     assert(!providerGet("https://api.forecast.solar/",Source::EnergyCharts,doc,info,error));

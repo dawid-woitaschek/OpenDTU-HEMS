@@ -41,7 +41,7 @@ void serialize(JsonObject out)
     recordJson(current, true, out["current_boot"].to<JsonObject>());
     out["esp_reset_reason"] = resetName(esp_reset_reason());
     out["esp_reset_reason_code"] = static_cast<int>(esp_reset_reason());
-    out["rtc_retention"] = esp_reset_reason() == ESP_RST_WDT ? "best_effort" : mayRetain(esp_reset_reason()) ? "expected" : "discarded";
+    out["rtc_retention"] = esp_reset_reason() == ESP_RST_WDT ? "best_effort" : esp_reset_reason() == ESP_RST_DEEPSLEEP ? "conditional" : mayRetain(esp_reset_reason()) ? "expected" : "discarded";
     out["shutdown_hook_registered"] = shutdownRegistered;
 }
 } // namespace Diagnostics

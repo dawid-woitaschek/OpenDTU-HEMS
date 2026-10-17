@@ -117,6 +117,15 @@ jobs:
           path: .pio/build/${{ matrix.environment }}/opendtu-hems-*.bin
           if-no-files-found: error
 
+      - name: Keep matching ESP32-S3 symbols for panic backtrace decoding
+        if: matrix.environment == 'generic_esp32s3_usb'
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-symbols-generic_esp32s3_usb
+          path: .pio/build/generic_esp32s3_usb/firmware.elf
+          if-no-files-found: error
+          retention-days: 14
+
   publish_firmware_channel:
     name: Publish firmware update channel
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)

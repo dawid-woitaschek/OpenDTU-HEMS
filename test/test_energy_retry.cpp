@@ -32,8 +32,8 @@ int main()
     service.snapshot(Domain::Tariff, data, status); assert(status.hasData && !status.error && status.nextRefresh == currentUtc + 3600);
     rejected(service, Domain::Tariff, "transport_backoff", 15);
     testNow += 15000; assert(service.requestRefresh(Domain::Tariff)); // Bypasses the 1-hour auto interval.
-    rejected(service, Domain::Tariff, "busy", 1);
-    duringHttp = [&] { rejected(service, Domain::Tariff, "busy", 1); scheduler.execute(); }; // Cannot enqueue a duplicate while running.
+    rejected(service, Domain::Tariff, "busy");
+    duringHttp = [&] { rejected(service, Domain::Tariff, "busy"); scheduler.execute(); }; // Cannot enqueue a duplicate while running.
     scheduler.execute(); runWorkers(); assert(httpRequests == 2);
     scheduler.execute(); runWorkers(); assert(httpRequests == 2);
     // DNS/transport failure uses bounded exponential retry, not ordinary cadence.

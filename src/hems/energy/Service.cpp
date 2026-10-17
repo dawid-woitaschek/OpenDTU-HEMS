@@ -234,7 +234,7 @@ char const* Service::prerequisite(Domain domain) const
 }
 RefreshDecision Service::refreshDecision(Domain domain) const
 {
-    if (_pending[0] || _pending[1] || _running[0] || _running[1]) { return { "busy", 1 }; }
+    if (_pending[0] || _pending[1] || _running[0] || _running[1]) { return { "busy", 0 }; } // Completion time is unknown.
     if (auto reason = prerequisite(domain)) { return { reason, 0 }; }
     return provider(domain).retryDecision(millis());
 }
