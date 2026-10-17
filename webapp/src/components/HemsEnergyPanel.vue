@@ -138,8 +138,8 @@
                     <template v-if="drafts[kind]!.provider === 'forecast_solar'">
                         <p>
                             Up to six independent planes. Coordinates are required. Azimuth: south 0°, east −90°, west
-                            +90°. Public forecast: today and tomorrow, hourly. Automatic refreshes are at least two hours
-                            apart. Manual refresh respects request spacing, provider backoff and quota.
+                            +90°. Public forecast: today and tomorrow, hourly. Automatic refreshes are at least two
+                            hours apart. Manual refresh respects request spacing, provider backoff and quota.
                         </p>
                         <div class="table-responsive">
                             <table class="table table-sm">

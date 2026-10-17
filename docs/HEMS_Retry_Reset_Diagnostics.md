@@ -237,7 +237,7 @@ Comparable reference builds (`PLATFORMIO_BUILD_FLAGS=-fstack-usage`, frontend bu
 
 | Resource / compiler frame | Previous head | This pass |
 | --- | ---: | ---: |
-| Flash sketch | 2798193 | 2807177 (+8984 bytes) |
+| Flash sketch | 2798193 | 2807193 (+9000 bytes) |
 | Static RAM reported by PIO | 115896 | 116240 (+344 bytes) |
 | Additional RTC no-init record | 0 | 264 bytes (not counted in PIO ordinary RAM total) |
 | Energy worker allocation | 10240 | 10240 |
