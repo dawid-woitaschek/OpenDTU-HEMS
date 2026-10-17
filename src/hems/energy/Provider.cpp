@@ -246,7 +246,12 @@ bool JsonProvider::refreshDue(uint32_t nowMs) const
 bool JsonProvider::accept(Series const& series, uint32_t utc, uint32_t nowMs)
 {
     if (!_settings.enabled) { failed("provider_disabled", nowMs); return false; }
-    if (utc < MinUtc || (_fetchedAt && utc < _fetchedAt) || series.generatedAt > static_cast<uint64_t>(utc) + 300) { failed("clock_or_source_time_invalid", nowMs); return false; }
+    // _fetchedAt is local transport metadata, not source chronology. SNTP may
+    // legitimately correct a bad boot clock backwards; a successful sane
+    // refresh must be able to replace data stamped with that old wall clock.
+    if (utc < MinUtc || series.generatedAt > static_cast<uint64_t>(utc) + 300) {
+        failed("clock_or_source_time_invalid", nowMs); return false;
+    }
     if (series.count == 0 || series.count > MaxIntervals) { failed("invalid_interval_count", nowMs); return false; }
     if (_data.count && series.generatedAt < _data.generatedAt) { failed("older_source_timestamp", nowMs); return false; }
     if (_domain == Domain::Tariff && _settings.pricing.enabled) {
