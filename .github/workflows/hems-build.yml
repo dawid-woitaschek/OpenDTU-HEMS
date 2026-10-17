@@ -86,7 +86,9 @@ jobs:
 
       - name: Test HEMS Admin save behavior
         if: matrix.environment == 'generic_esp32s3_usb'
-        run: node test/test_hems_admin.mjs
+        run: |
+          node test/test_hems_admin.mjs
+          node test/test_tariff_units.mjs
 
       - name: Build firmware
         run: pio run -e ${{ matrix.environment }}

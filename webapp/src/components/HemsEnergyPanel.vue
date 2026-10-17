@@ -280,7 +280,7 @@
                         <label for="tariff-vat" class="form-label">VAT %</label
                         ><input
                             id="tariff-vat"
-                            :value="drafts[kind]!.pricing.vat_basis_points / 100"
+                            :value="toDisplay(drafts[kind]!.pricing.vat_basis_points, 100)"
                             type="number"
                             class="form-control mb-2"
                             min="0"
@@ -288,28 +288,28 @@
                             step="0.01"
                             required
                             @input="
-                                drafts[kind]!.pricing.vat_basis_points = Math.round(
-                                    Number(($event.target as HTMLInputElement).value) * 100
+                                drafts[kind]!.pricing.vat_basis_points = toCanonical(
+                                    ($event.target as HTMLInputElement).value,
+                                    100
                                 )
                             "
                         />
                         <div v-for="field in priceFields" :key="field.key">
                             <label :for="`tariff-${field.key}`" class="form-label"
-                                >{{ field.label }} (currency{{
-                                    field.key === 'monthly_micros' ? '/month' : '/kWh'
-                                }})</label
+                                >{{ field.label }} ({{ field.unit }})</label
                             ><input
                                 :id="`tariff-${field.key}`"
-                                :value="drafts[kind]!.pricing[field.key] / 1e6"
+                                :value="toDisplay(drafts[kind]!.pricing[field.key], field.scale)"
                                 type="number"
                                 class="form-control mb-2"
-                                :min="field.key === 'monthly_micros' ? 0 : -2147"
-                                :max="field.key === 'monthly_micros' ? 4294 : 2147"
-                                step="0.000001"
+                                :min="field.min"
+                                :max="field.max"
+                                :step="field.step"
                                 required
                                 @input="
-                                    drafts[kind]!.pricing[field.key] = Math.round(
-                                        Number(($event.target as HTMLInputElement).value) * 1e6
+                                    drafts[kind]!.pricing[field.key] = toCanonical(
+                                        ($event.target as HTMLInputElement).value,
+                                        field.scale
                                     )
                                 "
                             />
@@ -382,6 +382,7 @@ import { getCurrentInstance, onMounted, onUnmounted, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import CardElement from '@/components/CardElement.vue';
 import { authHeader, handleResponse } from '@/utils/authentication';
+import { priceFields, toDisplay, toCanonical } from '@/utils/tariffUnits';
 type Kind = 'tariff' | 'forecast';
 type Plane = {
     enabled: boolean;
@@ -441,11 +442,6 @@ type Feed = {
     current: Interval | null;
     intervals: Interval[];
 };
-const priceFields = [
-    { key: 'grid_micros_per_kwh', label: 'Variable grid fees and taxes' },
-    { key: 'markup_micros_per_kwh', label: 'Supplier markup' },
-    { key: 'monthly_micros', label: 'Fixed monthly base fee' },
-] as const;
 function selectProvider(kind: Kind) {
     const draft = drafts[kind];
     if (!draft) return;
