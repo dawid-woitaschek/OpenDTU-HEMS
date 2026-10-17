@@ -75,6 +75,19 @@ int main()
         assert(provider.data().generatedAt == Now);
         auto future = series; future.generatedAt = Now + 301;
         assert(!provider.accept(future, Now, 23));
+
+        // A bad but formally valid boot clock may stamp local fetched_at years in
+        // the future before SNTP corrects it. The old snapshot stays stale, but a
+        // subsequent sane source response must be able to replace it immediately.
+        JsonProvider corrected(domain); corrected.configure(settings);
+        constexpr uint32_t BadBootClock = Now + 10U * 365U * 24U * 3600U;
+        assert(corrected.accept(series, BadBootClock, 100));
+        assert(!corrected.status(Now + 2, 101).fresh);
+        auto correctedSeries = series; correctedSeries.generatedAt = Now + 1;
+        assert(corrected.accept(correctedSeries, Now + 2, 200));
+        assert(corrected.status(Now + 2, 200).fetchedAt == Now + 2);
+        assert(corrected.status(Now + 2, 200).fresh);
+
         series.intervals[1].start++;
         assert(provider.accept(series, Now, 24));
         assert(contract.status(Now, 24).fresh && !contract.status(Now, 24).complete);
