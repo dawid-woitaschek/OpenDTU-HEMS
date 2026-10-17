@@ -95,6 +95,16 @@ int main()
     api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
     assert(api["plane_status"][0]["http_status"] == 200 && api["plane_status"][1]["http_status"] == -1);
     failSolarRequest = 0;
+    // A server hold on HTTP 200 also stops the remaining planes and retains the
+    // complete previously accepted site. It cannot be bypassed manually.
+    testNow += 7200000; solarRequests = 0; nativeRetrySeconds = 900;
+    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    assert(solarRequests == 1 && status.hasData && !strcmp(status.error, "provider_backoff"));
+    assert(data.count == accepted.count && status.fetchedAt == fetchedAt);
+    for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
+    auto held = service.requestRefresh(Domain::Forecast);
+    assert(!held && !strcmp(held.reason, "provider_backoff") && held.retryAfterSeconds == 900);
+    nativeRetrySeconds = 0;
     testNow += 7200000; solarRequests = 0; solarRemaining = 0;
     testNow += 15000; scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
     assert(solarRequests == 1 && status.hasData && !strcmp(status.error, "provider_rate_limited"));

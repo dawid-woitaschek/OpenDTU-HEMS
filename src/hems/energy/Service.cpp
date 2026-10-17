@@ -356,6 +356,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 bool more = false;
                 for (unsigned j = i + 1; j < requests; ++j) { more = more || settings.planes[j].enabled; }
                 if (more && info.rateRemaining == 0) { parsed = false; error = "provider_rate_limited"; break; }
+                if (more && info.retrySeconds) { parsed = false; error = "provider_backoff"; break; }
                 if (more) { vTaskDelay(pdMS_TO_TICKS(5000)); }
             }
         }

@@ -41,7 +41,10 @@ normally within that delay plus the existing one-second scheduler tick. The work
 is not allocated just to report an unavailable network. Transport delays limit
 repeated connection attempts while permitting diagnosis within minutes. Provider
 response failures get a longer five-minute delay because a server was reached.
-The existing five-second pause between solar planes remains. Quota/server holds
+The existing five-second pause between solar planes remains. An explicit server
+hold, even on a successful plane response, stops remaining planes and retains the
+previous complete site. Incomplete refreshes after a response also have the
+300-second fallback floor. Quota/server holds
 are never shortened by the fallback delays or local failures. Extremely long
 server holds remain conservative across the 32-bit millis wrap; they may last
 longer, never intentionally shorter. Scheduling is RAM-only, as before.
@@ -234,7 +237,7 @@ Comparable reference builds (`PLATFORMIO_BUILD_FLAGS=-fstack-usage`, frontend bu
 
 | Resource / compiler frame | Previous head | This pass |
 | --- | ---: | ---: |
-| Flash sketch | 2798193 | 2807157 (+8964 bytes) |
+| Flash sketch | 2798193 | 2807177 (+8984 bytes) |
 | Static RAM reported by PIO | 115896 | 116240 (+344 bytes) |
 | Additional RTC no-init record | 0 | 264 bytes (not counted in PIO ordinary RAM total) |
 | Energy worker allocation | 10240 | 10240 |
