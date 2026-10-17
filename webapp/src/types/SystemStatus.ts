@@ -1,3 +1,25 @@
+export interface BootBreadcrumb {
+    valid: boolean;
+    active?: boolean;
+    component?: string;
+    operation?: string;
+    phase?: string;
+    sub_index?: number;
+    uptime_ms?: number;
+    generation?: number;
+    intentional_restart?: boolean;
+    restart_requested?: boolean;
+    restart_source?: string;
+    esp_restart_called?: boolean;
+}
+export interface ResetDiagnostics {
+    esp_reset_reason: string;
+    esp_reset_reason_code: number;
+    previous_boot: BootBreadcrumb;
+    current_boot: BootBreadcrumb;
+    rtc_retention: string;
+    shutdown_hook_registered: boolean;
+}
 export interface TaskDetail {
     name: string;
     stack_watermark: number;
@@ -28,6 +50,9 @@ export interface SystemStatus {
     git_is_hash: boolean;
     git_branch: string;
     pioenv: string;
+    reset_diagnostics?: ResetDiagnostics;
+    resetreason_0_raw?: number;
+    resetreason_1_raw?: number | null;
     resetreason_0: string;
     resetreason_1: string;
     cfgsavecount: number;

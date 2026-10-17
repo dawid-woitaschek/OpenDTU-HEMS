@@ -34,7 +34,7 @@ const original = { enabled: true, provider: 'energy_charts', url: '', planes: []
     enabled: true, vat_basis_points: 1900, grid_micros_per_kwh: 123400,
     markup_micros_per_kwh: 1234, monthly_micros: 9990000,
 }, refresh_seconds: 3600, max_age_seconds: 3600, horizon_seconds: 86400 };
-const state = compile(component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1] + '\nexport { drafts, save, load };', {
+const state = compile(component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1] + '\nexport { drafts, save, load, refresh, errors };', {
     vue: { reactive: value => value, onMounted() {}, onUnmounted() {}, getCurrentInstance: () => ({ appContext: { config: { globalProperties: {} } } }) },
     'vue-router': { useRouter: () => ({}) }, '@/utils/tariffUnits': units,
     '@/utils/authentication': { authHeader: () => ({}), handleResponse: x => x },
@@ -56,3 +56,11 @@ assert.deepEqual(state.drafts.tariff, original);
 await state.save('tariff'); // Saving reloaded canonical values must not convert them twice.
 assert.deepEqual(persisted, original);
 console.log('Tariff percent, ct/kWh and EUR/month conversions and API save/reload preserve canonical integer values');
+
+for (const [reason, expected] of [['busy', 'queued or running'], ['network_unavailable', 'Network unavailable'], ['clock_invalid', 'clock synchronization'], ['transport_backoff', 'transport retry'], ['provider_backoff', 'Provider retry delay'], ['rate_limited', 'quota'], ['not_enabled', 'disabled'], ['invalid_config', 'configuration']]) {
+    fetcher = async () => new Response(JSON.stringify({ ok: false, reason, retry_after_seconds: 15 }), { status: 409 });
+    await state.refresh('tariff');
+    assert.ok(state.errors.tariff.includes(expected));
+    assert.ok(state.errors.tariff.includes('retry in 15 seconds'));
+}
+console.log('Manual refresh UI presents backend rejection reasons and retry delay');

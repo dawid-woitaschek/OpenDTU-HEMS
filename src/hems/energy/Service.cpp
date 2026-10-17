@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Service.h>
+#include <RuntimeDiagnostics.h>
 #include <hems/profiles/Profile.h>
 #include <HttpGetter.h>
 #include <LittleFS.h>
@@ -109,6 +110,7 @@ void Service::init(Scheduler& scheduler)
 }
 bool Service::configure(Domain domain, Settings const& settings)
 {
+    Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Write);
     if (settings.planeCount > MaxPlanes) { return false; }
     if ((domain == Domain::Tariff && settings.source == Source::ForecastSolar)
             || (domain == Domain::Forecast && settings.source == Source::EnergyCharts)) { return false; }
@@ -159,6 +161,13 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
     if (data.sourceTimestampKnown && status.hasData) { output["source_age_seconds"] = status.sourceAgeSeconds; }
     output["source_timestamp_known"] = data.sourceTimestampKnown;
     output["next_refresh"] = status.nextRefresh;
+    auto decision = refreshDecision(domain);
+    auto manual = output["manual_refresh"].to<JsonObject>();
+    manual["allowed"] = static_cast<bool>(decision); manual["reason"] = decision.reason;
+    manual["retry_after_seconds"] = decision.retryAfterSeconds;
+    manual["next_allowed"] = nullptr;
+    if (now >= MinUtc && (decision || decision.retryAfterSeconds)) { manual["next_allowed"] = now + decision.retryAfterSeconds; }
+    output["request_stage"] = _stage[static_cast<unsigned>(domain)];
     auto const& native = _native[static_cast<unsigned>(domain)];
     output["worker_stack_bytes"] = WorkerStackBytes; output["worker_stack_free_bytes"] = _workerStackFree;
     nativeJson(native, output["request"].to<JsonObject>());
@@ -210,14 +219,31 @@ bool Service::ingest(Domain domain, JsonVariantConst payload)
     if (pollable(source.settings())) { source.failed("http_provider_rejects_push", millis()); return false; }
     bool ok = source.accept(*series, utcNow(), millis()); if (ok) { ++_revision; } return ok;
 }
-bool Service::requestRefresh(Domain domain)
+char const* Service::prerequisite(Domain domain) const
+{
+    auto const& s = provider(domain).settings();
+    if (!s.enabled) { return "not_enabled"; }
+    if (!pollable(s) || (s.source == Source::ForecastSolar && (!s.planeCount || s.planeCount > MaxPlanes))) { return "invalid_config"; }
+    if (s.source == Source::ForecastSolar) {
+        bool enabled = false; for (unsigned i = 0; i < s.planeCount; ++i) { enabled = enabled || s.planes[i].enabled; }
+        if (!enabled) { return "invalid_config"; }
+    }
+    if (utcNow() < MinUtc) { return "clock_invalid"; }
+    if (!NetworkSettings.isConnected()) { return "network_unavailable"; }
+    return nullptr;
+}
+RefreshDecision Service::refreshDecision(Domain domain) const
+{
+    if (_pending[0] || _pending[1] || _running[0] || _running[1]) { return { "busy", 1 }; }
+    if (auto reason = prerequisite(domain)) { return { reason, 0 }; }
+    return provider(domain).retryDecision(millis());
+}
+RefreshDecision Service::requestRefresh(Domain domain)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    auto const& settings = provider(domain).settings();
-    if (utcNow() < MinUtc || !settings.enabled || !pollable(settings) || !provider(domain).retryAllowed(millis())) { return false; }
-    if (settings.source != Source::Normalized && !provider(domain).refreshDue(millis())) { return false; }
-    _pending[static_cast<unsigned>(domain)] = true;
-    return true;
+    auto result = refreshDecision(domain);
+    if (result) { _pending[static_cast<unsigned>(domain)] = true; }
+    return result;
 }
 void Service::loop()
 {
@@ -226,17 +252,22 @@ void Service::loop()
     for (auto domain : { Domain::Tariff, Domain::Forecast }) {
         auto i = static_cast<unsigned>(domain);
         auto& source = provider(domain);
-        if (source.refreshDue(millis()) && utcNow() >= MinUtc) { _pending[i] = true; }
+        if (!_running[i] && !_pending[i] && source.refreshDue(millis())) {
+            if (auto reason = prerequisite(domain)) {
+                source.failed(reason, millis()); _native[i] = {}; _stage[i] = "local_prerequisite";
+            } else { _pending[i] = true; }
+        }
         needed = needed || _pending[i];
     }
-    if (!needed) { return; }
+    if (!needed || (!_worker && _workerUnavailable && millis() - _workerFailureMs < 5000)) { return; }
     // Sized from measured ESP32-S3 frames and the 108-byte hardware watermark.
     // See docs/HEMS_Runtime_Hardening.md; hardware must confirm >=2 KiB free.
     if (!_worker && xTaskCreate(workerEntry, "hems-energy", WorkerStackBytes, this, 1, &_worker) != pdPASS) {
-        _worker = nullptr;
+        _worker = nullptr; _workerUnavailable = true; _workerFailureMs = millis(); _pending[0] = _pending[1] = false;
         for (auto domain : { Domain::Tariff, Domain::Forecast }) { provider(domain).failed("worker_unavailable", millis()); }
         return;
     }
+    _workerUnavailable = false;
     xTaskNotifyGive(_worker);
 }
 void Service::workerEntry(void* context)
@@ -259,16 +290,21 @@ __attribute__((noinline)) void Service::runPending(Domain domain)
         auto i = static_cast<unsigned>(domain);
         if (!_pending[i]) { return; }
         _pending[i] = false; generation = _generation[i];
-        settings = provider(domain).settings(); provider(domain).attempted(millis());
+        settings = provider(domain).settings(); _running[i] = true;
+        _native[i] = {}; _stage[i] = "local_prerequisite";
     }
+    Diagnostics::Scope activity(Diagnostics::Component::Energy, domain == Domain::Tariff ? Diagnostics::Operation::Tariff : Diagnostics::Operation::Forecast);
     fetch(domain, settings, generation);
+    std::lock_guard<std::mutex> lock(_mutex); _running[static_cast<unsigned>(domain)] = false;
 }
 void Service::fetch(Domain domain, Settings const& settings, uint32_t generation)
 {
     char const* error = nullptr;
     auto series = std::unique_ptr<Series>(new (std::nothrow) Series());
     bool parsed = false;
-    if (!series) { error = "insufficient_memory"; }
+    bool outbound = false, response = false;
+    if (utcNow() < MinUtc) { error = "clock_invalid"; }
+    else if (!series) { error = "insufficient_memory"; }
     else if (!NetworkSettings.isConnected()) { error = "network_unavailable"; }
     else if (settings.source != Source::Normalized) {
         NativeInfo info;
@@ -281,6 +317,8 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 std::lock_guard<std::mutex> lock(_mutex);
                 if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
             }
+            response = false;
+            Diagnostics::workerPhase(Diagnostics::Phase::ProviderStart, settings.source == Source::ForecastSolar ? i : -1);
             bool merge = settings.source == Source::ForecastSolar && series->count;
             // First/only plane fills the unpublished aggregate directly. Allocate a
             // plane scratch only when there is already an aggregate to preserve.
@@ -292,17 +330,28 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             bool ok = nativeRequest(settings, i, merge ? *single : *series, info, error);
             {
                 std::lock_guard<std::mutex> lock(_mutex);
+                outbound = outbound || info.dns >= 0 || info.httpStatus != 0;
+                response = info.httpStatus > 0;
+                // An obsolete result cannot publish data, but requests already made
+                // still count for request spacing and server/quota holds.
+                if (provider(domain).settings().source == settings.source) {
+                    if (info.dns >= 0 || info.httpStatus != 0) { provider(domain).cooldown(millis(), 15, RetryKind::Transport); }
+                    if (info.retrySeconds) { provider(domain).defer(millis(), info.retrySeconds, info.httpStatus == 429 || info.rateRemaining == 0 || (error && !strcmp(error, "provider_rate_limited")) ? RetryKind::RateLimited : RetryKind::Provider); }
+                }
                 if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
+                _stage[static_cast<unsigned>(domain)] = info.httpStatus > 0 ? "http_response" : info.dns == 0 ? "dns" : outbound ? "transport" : "local_prerequisite";
                 _native[static_cast<unsigned>(domain)] = info;
                 if (settings.source == Source::ForecastSolar) {
                     auto& plane = _planes[i];
                     if (ok) { plane.fetchedAt = utcNow(); }
                     plane.error = error; plane.info = info;
                 }
-                if (info.retrySeconds) { provider(domain).defer(millis(), info.retrySeconds); }
             }
             if (!ok) { parsed = false; break; }
-            if (merge && !aggregate(*series, *single, *series, error)) { parsed = false; break; }
+            if (merge) {
+                Diagnostics::workerPhase(Diagnostics::Phase::Aggregate, i);
+                if (!aggregate(*series, *single, *series, error)) { parsed = false; break; }
+            }
             if (settings.source == Source::ForecastSolar && i + 1 < requests) {
                 bool more = false;
                 for (unsigned j = i + 1; j < requests; ++j) { more = more || settings.planes[j].enabled; }
@@ -310,16 +359,21 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 if (more) { vTaskDelay(pdMS_TO_TICKS(5000)); }
             }
         }
-    } else { parsed = normalizedGet(settings, domain, *series, error); }
+    } else { outbound = true; parsed = normalizedGet(settings, domain, *series, error); }
     std::lock_guard<std::mutex> lock(_mutex);
     if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
     auto index = static_cast<unsigned>(domain);
-    if (!parsed) {
+    if (parsed && provider(domain).accept(*series, utcNow(), millis())) {
+        ++_revision; _failures[index] = 0; _stage[index] = "success";
+        provider(domain).cooldown(millis(), 15, RetryKind::Transport); // Native/manual anti-hammer spacing.
+    } else {
+        if (parsed) { error = provider(domain).lastError(); }
         provider(domain).failed(error ? error : "invalid_payload", millis());
-        if (settings.source != Source::Normalized) {
+        if (response) { provider(domain).defer(millis(), 300); }
+        else if (outbound) {
             _failures[index] = std::min(unsigned(_failures[index]) + 1, 6U);
-            provider(domain).defer(millis(), std::max(_native[index].retrySeconds, static_cast<uint32_t>(300U << _failures[index])));
+            provider(domain).cooldown(millis(), std::min(15U << (_failures[index] - 1), 300U), RetryKind::Transport);
         }
-    } else if (provider(domain).accept(*series, utcNow(), millis())) { ++_revision; _failures[index] = 0; }
+    }
 }
 } // namespace Hems::Energy

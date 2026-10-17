@@ -147,8 +147,12 @@ A failed HTTP/network/parse update retains previous data; it may remain usable f
 until its maximum source/transport age expires. Consumers must inspect errors and freshness,
 not just whether a series exists. The UI explicitly shows both.
 
-Polling retries at the configured interval; Refresh now can request an earlier
-retry. Requests are coalesced, with at most one worker shared by both feeds. Slow
+Successful polling uses the configured provider cadence; local prerequisites retry
+in five seconds and actual failures use bounded transport/provider backoff. Refresh
+now bypasses ordinary cadence while respecting short spacing and server/quota holds.
+The API exposes stable rejection reasons and retry delays; see
+[exact rules and reset diagnostics](HEMS_Retry_Reset_Diagnostics.md).
+Requests are coalesced, with at most one worker shared by both feeds. Slow
 network calls never execute in the policy/DPL scheduler or Modbus workers. No
 HTTP worker is allocated for disabled or push-only configurations; once created,
 it remains idle when no HTTP feeds are enabled.

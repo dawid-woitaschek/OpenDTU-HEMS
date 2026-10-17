@@ -115,21 +115,21 @@ reaches the optimizer. Per-plane fetch/error/rate information is visible.
 know the underlying weather-model generation time. The tariff v1 API exposes no
 source-generation timestamp: `source_timestamp_known=false`, `generated_at=null`.
 
-Forecast native requests are at least two hours apart per full refresh, with
-five seconds between enabled planes. Six planes therefore use at most six requests
-per normal two-hour cycle. Rate exhaustion stops remaining requests and retains
-the old aggregate. Native errors set a 10-minute through 5h20 backoff, respecting a
-larger Retry-After; normal native polling floors also still apply. Native Refresh now cannot bypass polling/backoff floors.
-Energy-Charts polls at least hourly. One optional low-priority worker services
-both feeds and optimization; HTTP and DP do not run in the scheduler/Modbus workers.
-Configuration generations discard late responses. No PSRAM is needed.
-The optional energy worker grows from 4096 to **8192 bytes**: ESP32 compiler
-measurements showed 608 bytes in workerEntry + 2128 in fetch + 352 in the verified
-transport before HTTP/TLS call depth, leaving insufficient headroom at 4096.
+Successful automatic Forecast.Solar refreshes are at least two hours apart, with
+five seconds between enabled planes; Energy-Charts automatic refreshes are at least
+hourly. Manual Refresh now bypasses ordinary cadence after 15-second request
+spacing, but cannot bypass server/quota holds or transport backoff. Local network,
+clock or allocation failures retry after five seconds. DNS/transport failures use
+15–300-second exponential backoff; HTTP/decode failures wait at least five minutes.
+Rate exhaustion stops remaining planes and retains the old aggregate. See the
+[exact retry rules and reset-diagnostic procedure](HEMS_Retry_Reset_Diagnostics.md).
+One optional low-priority **10240-byte** worker services both feeds and optimization;
+HTTP and DP do not run in scheduler/Modbus workers. Configuration generations discard
+late data without discarding consumed request/quota accounting. No PSRAM is needed.
 No TCP/IP, AsyncTCP, Modbus or main-loop stack is changed. Energy status exposes
 worker_stack_bytes and worker_stack_free_bytes (ESP-IDF high-water bytes). This
 reports real on-device headroom after a request/calculation; native stub values
-are not hardware measurements.
+are not hardware measurements. See [measured stack/lifetime hardening](HEMS_Runtime_Hardening.md).
 
 ## Normalized data and freshness
 

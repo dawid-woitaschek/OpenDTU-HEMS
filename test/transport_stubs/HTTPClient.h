@@ -2,7 +2,11 @@
 #pragma once
 #include <WiFiClientSecure.h>
 constexpr int HTTPC_DISABLE_FOLLOW_REDIRECTS = 0;
-struct FakeString { long toInt() const { return retryAfter; } };
+inline std::string retryHeader;
+struct FakeString {
+    std::string text = retryHeader.empty() ? std::to_string(retryAfter) : retryHeader;
+    char const* c_str() const { return text.c_str(); }
+};
 class HTTPClient {
     WiFiClient* client = nullptr;
 public:

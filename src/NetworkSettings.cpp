@@ -3,6 +3,7 @@
  * Copyright (C) 2022-2026 Thomas Basler and others
  */
 #include "NetworkSettings.h"
+#include <RuntimeDiagnostics.h>
 #include "Configuration.h"
 #include "SyslogLogger.h"
 #include "PinMapping.h"
@@ -282,6 +283,7 @@ void NetworkSettingsClass::loop()
             }
         }
         if (_performConnection && !isConnected() && wifiConfigured() && millis() - _lastReconnectAttempt > 60000) {
+            Diagnostics::Scope activity(Diagnostics::Component::Network, Diagnostics::Operation::Reconnect);
             ESP_LOGW(TAG, "Wifi reconnect watchdog triggered... Resetting Wifi hardware");
             WiFi.disconnect(true, false);
             WiFi.mode(WIFI_MODE_NULL);
@@ -338,6 +340,7 @@ void NetworkSettingsClass::loop()
 
 void NetworkSettingsClass::applyConfig()
 {
+    Diagnostics::Scope activity(Diagnostics::Component::Network, Diagnostics::Operation::Apply);
     setHostname();
 
     const auto& config = Configuration.get().WiFi;

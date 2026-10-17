@@ -21,6 +21,17 @@
                 <dd class="col-sm-8">{{ feeds[kind]!.fresh ? 'Fresh' : 'Unavailable or stale' }}</dd>
                 <dt class="col-sm-4">Last successful update</dt>
                 <dd class="col-sm-8">{{ date(feeds[kind]!.fetched_at) }}</dd>
+                <dt class="col-sm-4">Manual refresh</dt>
+                <dd class="col-sm-8">
+                    {{
+                        feeds[kind]!.manual_refresh?.allowed
+                            ? 'Available'
+                            : stateText(feeds[kind]!.manual_refresh?.reason || 'unavailable')
+                    }}
+                    <span v-if="feeds[kind]!.manual_refresh?.retry_after_seconds">
+                        · Retry in {{ feeds[kind]!.manual_refresh!.retry_after_seconds }} seconds</span
+                    >
+                </dd>
                 <dt class="col-sm-4">Next refresh</dt>
                 <dd class="col-sm-8">{{ date(feeds[kind]!.next_refresh) }}</dd>
                 <dt class="col-sm-4">Source age / transport age</dt>
@@ -419,6 +430,7 @@ type Interval = {
     energy_wh?: number;
 };
 type Feed = {
+    manual_refresh?: { allowed: boolean; reason: string | null; retry_after_seconds: number };
     revision: number;
     config: Settings;
     next_refresh: number;
@@ -554,6 +566,14 @@ function value(kind: Kind, interval?: Interval | null) {
 }
 function stateText(state: string) {
     const labels: Record<string, string> = {
+        busy: 'A provider request is queued or running',
+        local_retry: 'Waiting for a short local retry',
+        clock_invalid: 'Waiting for clock synchronization',
+        transport_backoff: 'Waiting for request spacing or transport retry',
+        provider_backoff: 'Provider retry delay is active',
+        rate_limited: 'Provider quota or rate limit is active',
+        not_enabled: 'Provider is disabled',
+        invalid_config: 'Provider configuration does not permit polling',
         disabled: 'Disabled',
         waiting_for_time: 'Waiting for clock synchronization',
         unavailable: 'Waiting for data',
@@ -580,7 +600,15 @@ async function api(kind: Kind, suffix = '', data?: unknown) {
     return fetch(`/api/hems/energy/${kind}${suffix}`, {
         headers: authHeader(),
         ...(data !== undefined ? { method: 'POST', body } : {}),
-    }).then((response) => handleResponse(response, emitter, router, true));
+    }).then(async (response) => {
+        if (suffix === '/refresh' && response.status === 409) {
+            const result = await response.json();
+            throw new Error(
+                `${stateText(result.reason || result.message || 'unavailable')}${result.retry_after_seconds ? `; retry in ${result.retry_after_seconds} seconds` : ''}.`
+            );
+        }
+        return handleResponse(response, emitter, router, true);
+    });
 }
 async function load(kind: Kind, reset = false) {
     try {
@@ -601,7 +629,8 @@ async function perform(kind: Kind, suffix: string, data: unknown, success: strin
     errors[kind] = '';
     notices[kind] = '';
     try {
-        await api(kind, suffix, data);
+        const result = await api(kind, suffix, data);
+        if (result?.ok === false) throw new Error(result.message || result.reason || 'Request failed');
         notices[kind] = success;
         await load(kind, reset);
     } catch (error) {

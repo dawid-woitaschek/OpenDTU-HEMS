@@ -186,19 +186,63 @@ void JsonProvider::configure(Settings const& settings)
     bool priceChanged = _settings.pricing.enabled != settings.pricing.enabled || _settings.pricing.vatBasisPoints != settings.pricing.vatBasisPoints
         || _settings.pricing.gridMicros != settings.pricing.gridMicros || _settings.pricing.markupMicros != settings.pricing.markupMicros;
     changed = changed || priceChanged;
+    if (_settings.source != settings.source) { _delaySeconds = _providerSeconds = 0; }
     _settings = settings;
-    if (changed) { _data.count = 0; _data.generatedAt = 0; _data.source[0] = 0; _data.currency[0] = 0; _fetchedAt = 0; _attempted = false; _delaySeconds = 0; _error = nullptr; }
+    if (changed) { _data.count = 0; _data.generatedAt = 0; _data.source[0] = 0; _data.currency[0] = 0; _fetchedAt = 0; _attempted = false; _error = nullptr; }
 }
 void JsonProvider::attempted(uint32_t nowMs) { _attempted = true; _attemptMs = nowMs; }
-void JsonProvider::failed(char const* error, uint32_t nowMs) { attempted(nowMs); _error = error; }
-bool JsonProvider::refreshDue(uint32_t nowMs) const
+namespace {
+uint32_t remaining(uint32_t start, uint32_t seconds, uint32_t now)
+{
+    auto elapsed = (now - start) / 1000;
+    return seconds - std::min(seconds, elapsed);
+}
+char const* retryName(RetryKind kind)
+{
+    switch (kind) {
+    case RetryKind::Local: return "local_retry";
+    case RetryKind::Transport: return "transport_backoff";
+    case RetryKind::RateLimited: return "rate_limited";
+    default: return "provider_backoff";
+    }
+}
+} // namespace
+void JsonProvider::failed(char const* error, uint32_t nowMs)
+{
+    _error = error; _attempted = false; cooldown(nowMs, 5, RetryKind::Local);
+}
+void JsonProvider::cooldown(uint32_t nowMs, uint32_t seconds, RetryKind kind)
+{
+    if (seconds >= remaining(_retryMs, _delaySeconds, nowMs)) {
+        _retryMs = nowMs; _delaySeconds = seconds; _retryKind = kind;
+    }
+}
+void JsonProvider::defer(uint32_t nowMs, uint32_t seconds, RetryKind kind)
+{
+    // An error or config save must never shorten a server/quota hold.
+    if (seconds >= remaining(_providerMs, _providerSeconds, nowMs)) {
+        _providerMs = nowMs; _providerSeconds = seconds; _providerKind = kind;
+    }
+}
+RefreshDecision JsonProvider::retryDecision(uint32_t nowMs) const
+{
+    auto server = remaining(_providerMs, _providerSeconds, nowMs);
+    auto retry = remaining(_retryMs, _delaySeconds, nowMs);
+    if (server) { return { retryName(_providerKind), std::max(server, retry) }; }
+    if (retry) { return { retryName(_retryKind), retry }; }
+    return {};
+}
+bool JsonProvider::retryAllowed(uint32_t nowMs) const { return static_cast<bool>(retryDecision(nowMs)); }
+uint32_t JsonProvider::automaticWait(uint32_t nowMs) const
 {
     uint32_t minimum = _settings.source == Source::ForecastSolar ? 7200 : _settings.source == Source::EnergyCharts ? 3600 : 60;
-    return _settings.enabled && pollable(_settings) && retryAllowed(nowMs)
-        && (!_attempted || nowMs - _attemptMs >= std::max(minimum, _settings.refreshSeconds) * 1000);
+    auto ordinary = _attempted ? remaining(_attemptMs, std::max(minimum, _settings.refreshSeconds), nowMs) : 0;
+    return std::max(ordinary, retryDecision(nowMs).retryAfterSeconds);
 }
-void JsonProvider::defer(uint32_t nowMs, uint32_t seconds) { _retryMs = nowMs; _delaySeconds = std::min(seconds, static_cast<uint32_t>(604800)); }
-bool JsonProvider::retryAllowed(uint32_t nowMs) const { return !_delaySeconds || nowMs - _retryMs >= _delaySeconds * 1000; }
+bool JsonProvider::refreshDue(uint32_t nowMs) const
+{
+    return _settings.enabled && pollable(_settings) && !automaticWait(nowMs);
+}
 bool JsonProvider::accept(Series const& series, uint32_t utc, uint32_t nowMs)
 {
     if (!_settings.enabled) { failed("provider_disabled", nowMs); return false; }
@@ -236,10 +280,7 @@ Status JsonProvider::status(uint32_t utc, uint32_t nowMs) const
         if (utc >= _data.generatedAt) { result.ageSeconds = std::max(result.ageSeconds, utc - _data.generatedAt); }
     }
     result.sourceAgeSeconds = utc >= _data.generatedAt ? utc - _data.generatedAt : 0;
-    uint32_t minimum = _settings.source == Source::ForecastSolar ? 7200 : _settings.source == Source::EnergyCharts ? 3600 : 60;
-    uint32_t until = _attempted ? std::max(minimum, _settings.refreshSeconds) - std::min(std::max(minimum, _settings.refreshSeconds), (nowMs - _attemptMs) / 1000) : 0;
-    uint32_t retry = _delaySeconds - std::min(_delaySeconds, (nowMs - _retryMs) / 1000);
-    if (_settings.enabled && pollable(_settings)) { result.nextRefresh = utc + std::max(until, retry); }
+    if (_settings.enabled && pollable(_settings) && utc >= MinUtc) { result.nextRefresh = utc + automaticWait(nowMs); }
     bool clock = utc >= MinUtc && utc >= _fetchedAt && _data.generatedAt <= static_cast<uint64_t>(utc) + 300;
     result.fresh = result.enabled && result.hasData && clock && (_domain == Domain::Tariff || result.ageSeconds <= _settings.maxAgeSeconds);
     uint64_t end = static_cast<uint64_t>(utc) + _settings.horizonSeconds;

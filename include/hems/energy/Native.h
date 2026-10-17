@@ -13,6 +13,7 @@ struct NativeInfo {
     uint32_t durationMs = 0, payloadBytes = 0, jsonPeak = 0;
     MemorySample before, connected, decoded, released;
 };
+uint32_t retryAfterSeconds(char const* text, uint32_t now);
 bool parseUtc(char const* text, uint32_t& utc, bool bareUtc = false);
 bool parseEnergyCharts(JsonVariantConst json, uint32_t fetchedAt, Series& output, char const*& error);
 bool parseForecastSolar(JsonVariantConst json, Series& output, NativeInfo& info, char const*& error);

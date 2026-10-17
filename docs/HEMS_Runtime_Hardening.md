@@ -1,5 +1,8 @@
 # Native energy runtime hardening
 
+For the subsequent retry/reset pass and the current provider-first hardware procedure,
+see [retry and previous-boot diagnostics](HEMS_Retry_Reset_Diagnostics.md).
+
 This pass starts at PR #23 head `d87a3a2e6022d0b9e02de155d31a8bc33aa0c687`.
 It keeps one serial optional Energy worker, verified HTTPS, retained provider data,
 all configured enabled PV planes, conservative request spacing, and read-only

@@ -27,6 +27,7 @@
 #include "NtpSettings.h"
 #include "PinMapping.h"
 #include "RestartHelper.h"
+#include <RuntimeDiagnostics.h>
 #include "Scheduler.h"
 #include "SunPosition.h"
 #include "Utils.h"
@@ -46,6 +47,8 @@ static const char* TAG = "main";
 
 void setup()
 {
+    Diagnostics::init();
+    Diagnostics::Scope boot(Diagnostics::Component::Runtime, Diagnostics::Operation::Boot);
     // Move all dynamic allocations >512byte to psram (if available)
     heap_caps_malloc_extmem_enable(512);
 
@@ -70,6 +73,7 @@ void setup()
         ESP_LOGE(TAG, "Failed mounting FS; configuration filesystem unavailable");
     }
 
+    Diagnostics::phase(boot.token, Diagnostics::Phase::Configuration);
     // Read configuration values
     ESP_LOGI(TAG, "Reading configuration...");
     Configuration.init(scheduler);
@@ -107,11 +111,13 @@ void setup()
 
     SerialPortManager.init();
 
+    Diagnostics::phase(boot.token, Diagnostics::Phase::Network);
     // Initialize Network
     ESP_LOGI(TAG, "Initializing Network...");
     NetworkSettings.init(scheduler);
     NetworkSettings.applyConfig();
 
+    Diagnostics::phase(boot.token, Diagnostics::Phase::Start);
     // Initialize NTP
     ESP_LOGI(TAG, "Initializing NTP...");
     NtpSettings.init();

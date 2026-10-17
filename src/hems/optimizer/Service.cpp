@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/optimizer/Service.h>
+#include <RuntimeDiagnostics.h>
 #include <hems/energy/Service.h>
 #include <hems/Controller.h>
 #include <LittleFS.h>
@@ -49,6 +50,7 @@ void Service::init()
 }
 bool Service::configure(Config const& c)
 {
+    Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Write);
     JsonDocument doc; doc["version"] = 1; serializeConfig(c, doc["config"].to<JsonObject>());
     Config validated; if (!parseConfig(doc["config"], validated)) { return false; }
     std::lock_guard<std::mutex> lock(_mutex);
@@ -82,6 +84,7 @@ void Service::run()
         if (!_pending || !_config.enabled) { return; }
         _pending = false; c = _config; generation = _generation; _lastRunMs = millis(); _attempted = true;
     }
+    Diagnostics::Scope activity(Diagnostics::Component::Optimizer, Diagnostics::Operation::Calculate);
     auto result = std::unique_ptr<Result>(new (std::nothrow) Result());
     if (!result) {
         std::lock_guard<std::mutex> lock(_mutex);

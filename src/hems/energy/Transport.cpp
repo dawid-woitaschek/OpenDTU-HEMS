@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Native.h>
+#include <RuntimeDiagnostics.h>
 #include <hems/energy/Trust.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -9,6 +10,7 @@
 #include <cstring>
 #include <memory>
 #include <new>
+#include <ctime>
 
 namespace Hems::Energy {
 namespace {
@@ -21,14 +23,17 @@ public:
     int connect(char const* host, uint16_t port, int32_t timeout) override {
         _timeout = timeout;
         IPAddress address;
+        Diagnostics::workerPhase(Diagnostics::Phase::Dns);
         _info.dns = WiFi.hostByName(host, address) ? 1 : 0;
         if (!_info.dns) { _info.connected = memorySample(); return 0; }
+        Diagnostics::workerPhase(Diagnostics::Phase::Connect);
         auto result = WiFiClientSecure::connect(address, port, host, ProviderRoots, nullptr, nullptr);
         // lastError() is the connect result, not a reliable read/write/socket errno.
         auto code = lastError(_info.tlsErrorText, sizeof(_info.tlsErrorText));
         if (code < 0) { _info.tlsError = code; }
         else { _info.tlsErrorText[0] = 0; }
         _info.connected = memorySample();
+        if (result) { Diagnostics::workerPhase(Diagnostics::Phase::TlsHttp); }
         return result;
     }
 private:
@@ -85,10 +90,11 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     http->setConnectTimeout(5000); http->setTimeout(5000); http->setUserAgent("OpenDTU-HEMS");
     char const* headers[] = { "Retry-After" }; http->collectHeaders(headers, 1);
     uint32_t started = millis();
+    Diagnostics::workerPhase(Diagnostics::Phase::TlsHttp);
     int code = http->GET(); info.httpStatus = code; info.durationMs = millis() - started;
-    if (code == 429 || code == 503) {
-        int32_t retry = http->header("Retry-After").toInt();
-        info.retrySeconds = std::max(static_cast<uint32_t>(code == 429 ? 7200 : 900), static_cast<uint32_t>(std::max(static_cast<int32_t>(0), retry)));
+    if (code > 0) {
+        info.retrySeconds = retryAfterSeconds(http->header("Retry-After").c_str(), time(nullptr));
+        if (code == 429 || code == 503) { info.retrySeconds = std::max(info.retrySeconds, static_cast<uint32_t>(code == 429 ? 7200 : 900)); }
     }
     if (code != 200) {
         if (code < 0) { snprintf(info.httpError, sizeof(info.httpError), "%s", HTTPClient::errorToString(code).c_str()); }
@@ -106,6 +112,7 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
         filter["message"]["ratelimit"]["period"] = true;
     }
     if (filter.overflowed()) { error = "insufficient_memory"; http->end(); return false; }
+    Diagnostics::workerPhase(Diagnostics::Phase::Decode);
     Reader reader { *http->getStreamPtr(), http->getSize() };
     auto decoded = deserializeJson(doc, reader, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(6));
     // Consume the entire HTTP body, bounded by Content-Length (if present), bytes and time.

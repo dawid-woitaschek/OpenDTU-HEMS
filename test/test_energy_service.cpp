@@ -1,71 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
-#include <hems/energy/Service.h>
-#include <Arduino.h>
-#include <HttpGetter.h>
-#include <LittleFS.h>
-#include <NetworkSettings.h>
-#include <cassert>
-#include <ctime>
-#include <iostream>
-#include <vector>
-
-extern "C" time_t time(time_t* destination) noexcept
-{
-    time_t now = 1792180800;
-    if (destination) { *destination = now; }
-    return now;
-}
-
-struct TestTask { void (*entry)(void*); void* context; bool notified = false; };
-static std::vector<TestTask*> tasks;
-static TestTask* currentTask;
-struct Idle {};
-int xTaskCreate(void (*entry)(void*), char const*, unsigned, void* context, int, TaskHandle_t* task)
-{
-    *task = new TestTask { entry, context }; tasks.push_back(*task); return pdPASS;
-}
-void xTaskNotifyGive(TaskHandle_t task) { task->notified = true; }
-uint32_t ulTaskNotifyTake(int, uint32_t)
-{
-    if (!currentTask->notified) { throw Idle {}; }
-    currentTask->notified = false; return 1;
-}
-void runWorkers()
-{
-    for (auto task : tasks) {
-        if (!task->notified) { continue; }
-        currentTask = task;
-        try { task->entry(task->context); } catch (Idle const&) {}
-    }
-}
-static unsigned solarRequests = 0, failSolarRequest = 0;
-static int solarRemaining = -1;
-static std::function<void(unsigned)> duringSolar;
-namespace Hems::Energy {
-bool providerGet(char const*, Source source, JsonDocument& doc, NativeInfo& info, char const*& error) {
-    if (source == Source::ForecastSolar) {
-        ++solarRequests; info.rateRemaining = solarRemaining;
-        if (duringSolar) { duringSolar(solarRequests); }
-        if (solarRequests == failSolarRequest) { info.httpStatus = -1; error = "provider_connect_failed"; return false; }
-    }
-    ++httpRequests;
-    if (duringHttp) { auto callback = std::move(duringHttp); duringHttp = {}; callback(); }
-    if (!httpAvailable) { error = "verified_https_failed"; return false; }
-    info.httpStatus = 200;
-    bool ok = !deserializeJson(doc, httpBody); error = ok ? nullptr : "malformed_or_oversized_json"; return ok;
-}
-}
-using namespace Hems::Energy;
-std::string payload(Domain domain)
-{
-    auto now = static_cast<uint32_t>(time(nullptr)); // Deterministic wall-clock seam above.
-    JsonDocument doc; doc["schema"] = schema(domain); doc["source"] = "test-http";
-    doc["generated_at"] = now; doc["currency"] = "EUR";
-    auto interval = doc["intervals"].add<JsonObject>(); interval["start"] = now - 100; interval["end"] = now + 86400;
-    interval["start"] = now; // Max per-interval duration is one day.
-    interval[domain == Domain::Tariff ? "price_micros_per_kwh" : "power_w"] = 500;
-    std::string result; serializeJson(doc, result); return result;
-}
+#include "energy_harness.h"
 int main()
 {
     Service service; Scheduler scheduler; service.init(scheduler);
@@ -94,14 +27,14 @@ int main()
     auto count = httpRequests; scheduler.execute(); runWorkers(); assert(httpRequests == count);
     testNow += 60000; httpAvailable = false; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.hasData && status.error && status.fresh);
-    httpAvailable = true; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
+    httpAvailable = true; testNow += 15000; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.fresh && !status.error);
-    httpBody = "{broken"; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
+    httpBody = "{broken"; testNow += 15000; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.hasData && status.error);
     httpBody = wire;
     // Late HTTP response must not populate a disabled or replaced configuration generation.
     duringHttp = [&] { assert(service.configure(Domain::Tariff, disabled)); };
-    assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
+    testNow += 15000; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(!status.enabled && !status.hasData);
     // Forecast uses the same worker; a disabled tariff never affects it.
     assert(service.configure(Domain::Forecast, settings)); httpBody = payload(Domain::Forecast);
@@ -109,9 +42,9 @@ int main()
     service.snapshot(Domain::Forecast, data, status); assert(status.fresh && data.intervals[0].value == 500);
     service.serialize(Domain::Forecast, api.to<JsonObject>());
     assert(api["current"]["power_w"] == 500 && api["current"]["energy_wh"] == 12000);
-    NetworkSettings.connected = false; assert(service.requestRefresh(Domain::Forecast)); scheduler.execute(); runWorkers();
+    NetworkSettings.connected = false; assert(!service.requestRefresh(Domain::Forecast)); testNow += 60000; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(!strcmp(status.error, "network_unavailable"));
-    NetworkSettings.connected = true; assert(service.requestRefresh(Domain::Forecast)); scheduler.execute(); runWorkers();
+    NetworkSettings.connected = true; testNow += 15000; assert(service.requestRefresh(Domain::Forecast)); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(!status.error && status.fresh);
     // Actual native adapter path, with only the network boundary replaced.
     settings = {}; settings.enabled = true; settings.source = Source::EnergyCharts;
@@ -127,9 +60,9 @@ int main()
     for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
     httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && data.intervals[0].value == -50000);
-    assert(!service.requestRefresh(Domain::Tariff)); // Manual clicks cannot bypass native rate spacing.
+    assert(!service.requestRefresh(Domain::Tariff)); // Short request spacing still applies; the ordinary interval does not block manual refresh.
     testNow += 3600000; httpAvailable = false; scheduler.execute(); runWorkers();
-    service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !strcmp(status.error, "verified_https_failed"));
+    service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !strcmp(status.error, "provider_connect_failed"));
     assert(!service.requestRefresh(Domain::Tariff)); // Retry floor also applies to Refresh now.
     testNow += 3600000; httpAvailable = true; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !status.error);
@@ -145,13 +78,13 @@ int main()
     for (unsigned count : {1U, 2U, 6U}) {
         settings.planeCount = count;
         for (auto& plane : settings.planes) { plane.enabled = true; strcpy(plane.name, "PV"); plane.peakW = 1000; }
-        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0;
+        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; testNow += 15000;
         scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
         assert(data.count == 4 && data.intervals[0].value == int(count * 1000) && status.planningUsable);
         assert(solarRequests == count && tasks.size() == 1);
     }
     settings.planeCount = 2; assert(service.configure(Domain::Forecast, settings));
-    solarRequests = 0; scheduler.execute(); runWorkers();
+    solarRequests = 0; testNow += 15000; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(data.intervals[0].value == 2000);
     auto accepted = data; auto fetchedAt = status.fetchedAt;
     testNow += 7200000; solarRequests = 0; failSolarRequest = 2;
@@ -163,7 +96,7 @@ int main()
     assert(api["plane_status"][0]["http_status"] == 200 && api["plane_status"][1]["http_status"] == -1);
     failSolarRequest = 0;
     testNow += 7200000; solarRequests = 0; solarRemaining = 0;
-    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    testNow += 15000; scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
     assert(solarRequests == 1 && status.hasData && !strcmp(status.error, "provider_rate_limited"));
     assert(data.intervals[0].value == 2000); solarRemaining = -1;
     // A config generation change in the second request cannot publish the old run.
@@ -175,7 +108,7 @@ int main()
     // A generation change between requests stops the obsolete run before another HTTPS request.
     assert(service.configure(Domain::Forecast, settings)); solarRequests = 0;
     duringDelay = [&] { auto replacement = settings; replacement.planes[1].peakW = 2000; assert(service.configure(Domain::Forecast, replacement)); };
-    scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+    testNow += 15000; scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
     assert(solarRequests == 1 && status.enabled && !status.hasData);
     for (auto task : tasks) { delete task; }
     std::cout << "Energy settings persistence/reload, push, HTTP failure/recovery, shared scheduling and generation tests passed\n";

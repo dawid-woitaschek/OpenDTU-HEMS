@@ -5,6 +5,7 @@
 #include "WebApi_file.h"
 #include "Configuration.h"
 #include "RestartHelper.h"
+#include <RuntimeDiagnostics.h>
 #include "Utils.h"
 #include "WebApi.h"
 #include "WebApi_errors.h"
@@ -146,8 +147,9 @@ void WebApiFileClass::onFileDeleteAll(AsyncWebServerRequest* request)
 
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 
+    Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Reset);
     Utils::removeAllFiles();
-    RestartHelper.triggerRestart();
+    RestartHelper.triggerRestart(Diagnostics::RestartSource::ConfigurationReset);
 }
 
 void WebApiFileClass::onFileUpload(AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final)
@@ -157,6 +159,7 @@ void WebApiFileClass::onFileUpload(AsyncWebServerRequest* request, String filena
     }
 
     if (!index) {
+        Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Restore);
         // open the file on first call and store the file handle in the request object
         if (!request->hasParam("file")) {
             request->send(500);
@@ -168,6 +171,7 @@ void WebApiFileClass::onFileUpload(AsyncWebServerRequest* request, String filena
 
     if (len) {
         // stream the incoming chunk to the opened file
+        Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Restore);
         request->_tempFile.write(data, len);
     }
 
@@ -191,5 +195,5 @@ void WebApiFileClass::onFileUploadFinish(AsyncWebServerRequest* request)
     response->addHeader(asyncsrv::T_Connection, asyncsrv::T_close);
     response->addHeader(asyncsrv::T_CORS_ACAO, "*");
     request->send(response);
-    RestartHelper.triggerRestart();
+    RestartHelper.triggerRestart(Diagnostics::RestartSource::FileRestore);
 }

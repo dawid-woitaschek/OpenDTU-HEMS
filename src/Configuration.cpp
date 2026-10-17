@@ -3,6 +3,7 @@
  * Copyright (C) 2022-2026 Thomas Basler and others
  */
 #include "Configuration.h"
+#include <RuntimeDiagnostics.h>
 #include "NetworkSettings.h"
 #include "Utils.h"
 #include "defaults.h"
@@ -333,6 +334,7 @@ void ConfigurationClass::serializeGridChargerTruckiConfig(GridChargerTruckiConfi
 
 bool ConfigurationClass::write()
 {
+    Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Write);
     File f = LittleFS.open(CONFIG_FILENAME, "w");
     if (!f) {
         return false;

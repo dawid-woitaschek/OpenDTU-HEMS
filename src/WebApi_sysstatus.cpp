@@ -3,6 +3,8 @@
  * Copyright (C) 2022-2026 Thomas Basler and others
  */
 #include "WebApi_sysstatus.h"
+#include <RuntimeDiagnostics.h>
+#include <soc/soc_caps.h>
 #include "Configuration.h"
 #include "NetworkSettings.h"
 #include "PinMapping.h"
@@ -82,6 +84,13 @@ void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
 
     reason = ResetReason::get_reset_reason_verbose(1);
     root["resetreason_1"] = reason;
+    root["resetreason_0_raw"] = ResetReason::get_reset_reason_raw(0);
+#if SOC_CPU_CORES_NUM > 1
+    root["resetreason_1_raw"] = ResetReason::get_reset_reason_raw(1);
+#else
+    root["resetreason_1_raw"] = nullptr;
+#endif
+    Diagnostics::serialize(root["reset_diagnostics"].to<JsonObject>());
 
     root["cfgsavecount"] = Configuration.get().Cfg.SaveCount;
     root["runtime_savecount"] = RuntimeData.getWriteCountAndTimeString();

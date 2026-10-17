@@ -83,6 +83,13 @@ public:
     virtual Status status(uint32_t utc, uint32_t nowMs) const = 0;
     virtual bool refreshDue(uint32_t nowMs) const = 0;
 };
+enum class RetryKind : uint8_t { Local, Transport, Provider, RateLimited };
+struct RefreshDecision {
+    char const* reason = nullptr;
+    uint32_t retryAfterSeconds = 0;
+    explicit operator bool() const { return reason == nullptr; }
+};
+
 class JsonProvider final : public Provider {
 public:
     explicit JsonProvider(Domain domain) : _domain(domain) {}
@@ -93,17 +100,22 @@ public:
     bool refreshDue(uint32_t nowMs) const override;
     void attempted(uint32_t nowMs);
     void failed(char const* error, uint32_t nowMs);
-    void defer(uint32_t nowMs, uint32_t seconds);
+    void cooldown(uint32_t nowMs, uint32_t seconds, RetryKind kind);
+    RefreshDecision retryDecision(uint32_t nowMs) const;
+    uint32_t automaticWait(uint32_t nowMs) const;
+    void defer(uint32_t nowMs, uint32_t seconds, RetryKind kind = RetryKind::Provider);
     bool retryAllowed(uint32_t nowMs) const;
     bool accept(Series const& series, uint32_t utc, uint32_t nowMs);
     Domain domain() const { return _domain; }
+    char const* lastError() const { return _error; }
 private:
     Domain _domain;
     Settings _settings;
     Series _data;
     uint32_t _fetchedAt = 0, _fetchedMs = 0, _attemptMs = 0;
     bool _attempted = false;
-    uint32_t _retryMs = 0, _delaySeconds = 0;
+    uint32_t _retryMs = 0, _delaySeconds = 0, _providerMs = 0, _providerSeconds = 0;
+    RetryKind _retryKind = RetryKind::Local, _providerKind = RetryKind::Provider;
     char const* _error = nullptr; // Stable diagnostic codes, never remote response bodies.
 };
 

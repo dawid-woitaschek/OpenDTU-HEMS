@@ -49,8 +49,9 @@ void WebApiHemsClass::onEnergyPost(AsyncWebServerRequest* request)
     char const* message = "Invalid settings or normalized interval data. Previous data retained.";
     int code = 400;
     if (request->url().endsWith("/refresh")) {
-        ok = EnergyData.requestRefresh(domain(request));
-        message = ok ? "Refresh queued." : "Refresh requires an enabled polling provider with no active retry delay.";
+        auto decision = EnergyData.requestRefresh(domain(request)); ok = static_cast<bool>(decision);
+        output["reason"] = decision.reason; output["retry_after_seconds"] = decision.retryAfterSeconds;
+        message = ok ? "Refresh queued." : decision.reason;
         code = ok ? 202 : 409;
     } else {
         auto limit = request->url().endsWith("/config") ? 8192 : MaxPayload;

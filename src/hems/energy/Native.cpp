@@ -35,6 +35,27 @@ bool parseUtc(char const* s, uint32_t& utc, bool bareUtc)
     if (result < MinUtc || result > UINT32_MAX) { return false; }
     utc = result; return true;
 }
+uint32_t retryAfterSeconds(char const* text, uint32_t now)
+{
+    if (!text || !*text) { return 0; }
+    uint64_t seconds = 0; bool digits = true;
+    for (auto p = text; *p; ++p) {
+        if (*p < '0' || *p > '9') { digits = false; break; }
+        seconds = std::min(static_cast<uint64_t>(UINT32_MAX), seconds * 10 + unsigned(*p - '0'));
+    }
+    if (digits) { return seconds; }
+    char weekday[4] {}, month[4] {}; unsigned day, year, hour, minute, second; int end = 0;
+    if (sscanf(text, "%3s, %2u %3s %4u %2u:%2u:%2u GMT%n", weekday, &day, month, &year, &hour, &minute, &second, &end) != 7
+            || !end || text[end]) { return 0; }
+    constexpr char Months[] = "JanFebMarAprMayJunJulAugSepOctNovDec";
+    unsigned m = 0; for (unsigned i = 0; i < 12; ++i) { if (!strncmp(month, Months + 3 * i, 3)) { m = i + 1; break; } }
+    if (!m) { return 0; }
+    if (year > 2105) { return UINT32_MAX; } // Beyond our UTC contract: hold conservatively.
+    char iso[32]; snprintf(iso, sizeof(iso), "%04u-%02u-%02uT%02u:%02u:%02uZ", year, m, day, hour, minute, second);
+    uint32_t date;
+    if (!parseUtc(iso, date) || date <= now) { return 0; }
+    return date - now;
+}
 void forecastUrl(Plane const& p, char* out, size_t capacity)
 {
     snprintf(out, capacity, "https://api.forecast.solar/estimate/%.6f/%.6f/%u/%d/%.3f?time=utc&full=1",
@@ -108,13 +129,13 @@ bool parseForecastSolar(JsonVariantConst j, Series& out, NativeInfo& info, char 
     error = "invalid_forecast_solar_payload";
     auto message = j["message"];
     if (!message["code"].is<int>() || message["code"].as<int>() != 0 || strcmp(message["type"] | "", "success")) {
-        if (message["code"] == 429) { info.retrySeconds = 7200; error = "provider_rate_limited"; }
+        if (message["code"] == 429) { info.retrySeconds = std::max(info.retrySeconds, static_cast<uint32_t>(7200)); error = "provider_rate_limited"; }
         else { error = "forecast_solar_error"; }
         return false;
     }
     if (message["ratelimit"]["limit"].is<int32_t>()) { info.rateLimit = message["ratelimit"]["limit"]; }
     if (message["ratelimit"]["remaining"].is<int32_t>()) { info.rateRemaining = message["ratelimit"]["remaining"]; }
-    if (info.rateRemaining == 0) { info.retrySeconds = std::max(static_cast<uint32_t>(7200), message["ratelimit"]["period"] | static_cast<uint32_t>(0)); }
+    if (info.rateRemaining == 0) { info.retrySeconds = std::max(info.retrySeconds, std::max(static_cast<uint32_t>(7200), message["ratelimit"]["period"] | static_cast<uint32_t>(0))); }
     uint32_t generatedAt;
     if (!parseUtc(message["info"]["time_utc"], generatedAt)) { return false; }
     auto periods = j["result"]["watt_hours_period"].as<JsonObjectConst>();
