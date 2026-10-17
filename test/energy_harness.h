@@ -5,6 +5,7 @@
 #include <HttpGetter.h>
 #include <LittleFS.h>
 #include <NetworkSettings.h>
+#include <NtpSettings.h>
 #include <cassert>
 #include <ctime>
 #include <iostream>
