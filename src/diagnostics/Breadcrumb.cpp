@@ -45,6 +45,12 @@ Activity const* selected(Record const& r)
 void Journal::boot(Storage& storage, bool retain)
 {
     _storage = &storage; previousValid = false;
+    // A discarded (power/unknown-reset) session must not survive in the other
+    // slot and win by its older, higher sequence if this boot resets early.
+    if (!retain) {
+        storage.slots[0].magic = storage.slots[1].magic = 0;
+        __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    }
     bool a = retain && valid(storage.slots[0]), b = retain && valid(storage.slots[1]);
     _slot = b && (!a || static_cast<int32_t>(storage.slots[1].sequence - storage.slots[0].sequence) > 0) ? 1 : 0;
     if (a || b) { previous = storage.slots[_slot]; previousValid = true; }

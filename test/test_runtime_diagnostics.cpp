@@ -50,6 +50,11 @@ int main()
     Journal corrupt; corrupt.boot(torn, true); assert(!corrupt.previousValid);
     Journal powerOn; powerOn.boot(storage, false); assert(!powerOn.previousValid && powerOn.current.generation == 1);
     json.clear(); recordJson(powerOn.previous, false, json.to<JsonObject>()); assert(json["valid"] == false && json.size() == 1);
+    // Reset immediately after a cold boot's first commit: an older warm-reset
+    // slot must not supersede the new session before another checkpoint.
+    Journal immediateReset; immediateReset.boot(storage, true);
+    assert(immediateReset.previousValid && immediateReset.previous.generation == powerOn.current.generation
+        && immediateReset.previous.sequence == powerOn.current.sequence);
     for (auto reason : {ESP_RST_SW, ESP_RST_PANIC, ESP_RST_INT_WDT, ESP_RST_TASK_WDT, ESP_RST_WDT, ESP_RST_DEEPSLEEP}) { assert(mayRetain(reason)); }
     for (auto reason : {ESP_RST_UNKNOWN, ESP_RST_POWERON, ESP_RST_EXT, ESP_RST_BROWNOUT, ESP_RST_SDIO}) { assert(!mayRetain(reason)); }
     assert(!strcmp(resetName(ESP_RST_PANIC), "ESP_RST_PANIC") && !strcmp(resetName(ESP_RST_SW), "ESP_RST_SW"));

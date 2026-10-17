@@ -136,7 +136,9 @@ success is itself retained. Its absence is not proof that no reset occurred.
 not flash. The linker places it in `.rtc_noinit (NOLOAD)`; startup does not clear
 it. Magic, version, size, enum/flag validation and checksum reject invalid/stale
 layouts. The new slot's magic commits last, with memory fences; an interrupted
-write can fall back to the preceding valid slot. A checksum is corruption detection,
+write can fall back to the preceding valid slot. Discarding a power/unknown-reset
+session invalidates both old slots before the first new commit, so a reset after that first
+commit cannot select an old higher-sequence record. A checksum is corruption detection,
 not proof against every possible corruption. First firmware boot may have no valid
 record. An OTA layout change may also invalidate it safely.
 
@@ -237,7 +239,7 @@ Comparable reference builds (`PLATFORMIO_BUILD_FLAGS=-fstack-usage`, frontend bu
 
 | Resource / compiler frame | Previous head | This pass |
 | --- | ---: | ---: |
-| Flash sketch | 2798193 | 2807193 (+9000 bytes) |
+| Flash sketch | 2798193 | 2807201 (+9008 bytes) |
 | Static RAM reported by PIO | 115896 | 116240 (+344 bytes) |
 | Additional RTC no-init record | 0 | 264 bytes (not counted in PIO ordinary RAM total) |
 | Energy worker allocation | 10240 | 10240 |
