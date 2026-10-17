@@ -39,8 +39,10 @@
                             {{ $t(p.origin === 'Built-in' ? 'profiles.Builtin' : 'profiles.Imported') }}<br />{{
                                 p.schema
                             }}<br />
-                            {{ $t('profiles.Entries', { count: p.telemetry_count }) }}<br />{{ $t('profiles.ReadOnly')
-                            }}<br />{{ $t('profiles.NoControl') }}<br />
+                            {{ $t('profiles.Entries', { count: p.telemetry_count }) }}<br />
+                            {{ controlText(p.control_reason) }}<br />
+                            Identity metadata: {{ p.identity_metadata ? 'Yes' : 'No' }} · Recovery metadata:
+                            {{ p.recovery_metadata ? 'Yes' : 'No' }}<br />
                             {{ $t('profiles.Capabilities') }}: {{ capabilityText(p.capabilities) }}
                             <template v-if="p.used_by.length">
                                 <br />{{ $t('profiles.UsedBy') }}: {{ usedByText(p.used_by) }}
@@ -102,6 +104,7 @@
 import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import CardElement from '@/components/CardElement.vue';
+import { controlText } from '@/hemsControl';
 import { authHeader } from '@/utils/authentication';
 
 const emit = defineEmits(['profiles-changed']);
@@ -120,6 +123,10 @@ type Summary = {
     capabilities: string[];
     used_by: string[];
     in_use: boolean;
+    control_supported: boolean;
+    control_reason: string;
+    identity_metadata: boolean;
+    recovery_metadata: boolean;
 };
 type Profile = { id: string; telemetry: { key: string }[] };
 const profiles = ref<Summary[]>([]),
@@ -128,7 +135,7 @@ const profiles = ref<Summary[]>([]),
     notice = ref(''),
     busy = ref(false);
 const file = ref<File>(),
-    replace = ref(false),
+    replace = ref(true),
     selected = ref<Profile>(),
     decodeKey = ref(''),
     hex = ref('0000'),
@@ -167,8 +174,21 @@ function usedByText(values: string[]) {
         .map((value) => (value === 'storage' ? t('profiles.StorageConsumer') : value === 'evse' ? 'EVSE' : value))
         .join(', ');
 }
-function selectFile(event: Event) {
+async function selectFile(event: Event) {
     file.value = (event.target as HTMLInputElement).files?.[0];
+    notice.value = '';
+    if (!file.value || file.value.size > 6144) return;
+    try {
+        const candidate = JSON.parse(await file.value.text());
+        const old = profiles.value.find((p) => p.id === candidate.id);
+        const supported =
+            candidate.schema?.endsWith('/v2') &&
+            candidate.control?.operations?.length &&
+            candidate.control?.release?.length;
+        notice.value = `${candidate.id}: ${old ? `current ${old.schema}, control ${old.control_supported ? 'supported' : 'unavailable'} → ` : ''}new ${candidate.schema}, control ${supported ? 'metadata present' : 'unavailable'}. Backend validates all bounds. Bound devices reload without reboot.`;
+    } catch {
+        error.value = 'Invalid profile JSON';
+    }
 }
 async function upload(persist: boolean) {
     await run(async () => {
@@ -176,10 +196,9 @@ async function upload(persist: boolean) {
             throw new Error(t('profiles.FileLimit'));
         const text = await file.value.text();
         let query = '';
-        if (persist && replace.value) {
+        if (persist && replace.value && profiles.value.some((p) => p.id === JSON.parse(text).id)) {
             const id = JSON.parse(text).id;
             if (typeof id !== 'string') throw new Error(t('profiles.FileLimit'));
-            if (!window.confirm(t('profiles.ConfirmReplace', { id }))) return;
             query = '?replace=' + encodeURIComponent(id);
         }
         const headers = authHeader();

@@ -24,11 +24,11 @@ Some devices change Modbus addresses, scaling or semantics between firmware revi
 
 `opendtu-hems-modbus-profile/v2` keeps the same telemetry model and may additionally declare a bounded `control` block. Control metadata is data, not executable code: it can describe optional acquire/release sequences and named operations made from fixed holding-register writes or a validated numeric operation input. Profiles cannot contain scripts, expressions or arbitrary code.
 
-Importing a v2 profile with control metadata **does not grant HEMS permission to write to the device**. The profile only describes what the device supports and how a supported operation maps to Modbus. Write permission belongs to the concrete configured device instance, and the HEMS policy/control layer decides whether and when an allowed operation is requested.
+Importing a v2 profile with control metadata **does not grant HEMS permission to write to the device**. The profile only describes what the device supports and how a supported operation maps to Modbus. Write permission belongs to the Storage or EVSE device type, and the HEMS policy/control layer decides whether and when an allowed operation is requested.
 
 This separation deliberately supports setups such as a WARP wallbox being used in monitor-only mode while its charging state influences storage policy, for example blocking battery discharge while the vehicle is charging.
 
-The Marstek Venus E 3.0 V148 profile is based on the target setup (Control V148 / Micro V119) and independent cross-checks from multiple public projects/forums rather than one community repository. On that target, register `34002` required scale `0.01`; using `0.1` produced a tenfold SoC error. Register `30006` is normalized to OpenDTU-HEMS storage semantics so charging is positive and discharging is negative. Its v2 control metadata is intentionally limited to the repeatedly cross-checked external-control acquire/release, forced charge, forced discharge and stop operations; disputed schedule/cutoff mappings remain omitted.
+The Marstek Venus E 3.0 V148 / Micro V119 reference contains curated acquire, charge/discharge, stop, target SoC and release operations. Register `30006` is normalized so charging is positive and discharging negative. The current `34002` SoC scale is `0.1`; confirm power/SoC plausibility against the physical firmware before interpreting it. Public Venus maps are firmware-dependent. No new register or assumed watchdog is introduced by the real-control package.
 
 The Tinkerforge WARP3 Smart profile uses the manufacturer's Modbus implementation for telemetry and optional charging-current control metadata. Whether OpenDTU-HEMS may actually use those writes remains a per-device setting, independent of the profile contents.
 
@@ -39,10 +39,8 @@ The repository catalog is deliberately decoupled from firmware releases: profile
 No profile in this directory may add executable write logic.
 
 
-### Reboot recovery capability
+### Normal control and optional metadata
 
-Control-capable does not imply reboot-recovery-capable. WARP input 10/11 now
-provides the manufacturer-provisioned controller eFuse UID, with exact upstream
-provenance in `docs/HEMS_CONTROL.md`. Marstek has no authoritative stable identity
-mapping. Both profiles explicitly keep `recovery.release_replay_safe` false;
-physical identity/release/replay/reboot validation is still outstanding.
+Manual control requires device-type HEMS control permission and normal profile/reachability/freshness readiness. Automatic policy writes also require global Active. Identity/recovery metadata is optional diagnostic information; WARP's eFuse identity and both profiles' `release_replay_safe=false` never block normal control. Marstek does not need stable identity. Watchdog behavior reported by the community remains unvalidated for V148 and is not an actuation prerequisite.
+
+Import the current JSON explicitly. In Devices / Profiles, select a file with the same ID and leave replacement enabled to update the runtime copy. Capability changes are previewed; bound providers reload without firmware reboot after validation. Old schema-v1 or control-metadata-free runtime copies show a concrete explanation and remain readable until replaced.

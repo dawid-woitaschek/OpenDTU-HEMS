@@ -56,6 +56,11 @@
                                     >{{ $t('menu.DeviceManager') }} / {{ $t('profiles.Title') }}</router-link
                                 >
                             </li>
+                            <li>
+                                <router-link @click="onClick" class="dropdown-item" to="/hems/diagnostics">{{
+                                    $t('hemsUi.diagnostics')
+                                }}</router-link>
+                            </li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">

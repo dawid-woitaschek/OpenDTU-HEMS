@@ -1,5 +1,6 @@
 <template>
     <BasePage :title="'HEMS — ' + $t('menu.DeviceManager') + ' / ' + $t('profiles.Title')" :isLoading="dataLoading">
+        <HemsNav />
         <BootstrapAlert
             v-model="alert.show"
             dismissible
@@ -11,7 +12,6 @@
         <template v-if="!dataLoading && !loadFailed && hemsConfig.version === 1">
             <form @submit.prevent="saveWarp">
                 <CardElement :text="$t('hems.Warp')" textVariant="text-bg-primary">
-                    <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
                     <InputElement
                         :label="$t('hems.WarpEnabled')"
                         v-model="hemsConfig.warp.enabled"
@@ -41,18 +41,30 @@
                             }}</label>
                             <div class="col-sm-8">
                                 <select id="hems-evse-profile" class="form-select" v-model="evseBinding.profile">
-                                    <option value="">WARP (legacy)</option>
-                                    <option
-                                        v-if="evseProfileUnavailable"
-                                        :value="evseBinding.profile"
-                                        disabled
-                                    >
+                                    <option value="" disabled>
+                                        {{
+                                            evseProfiles.length
+                                                ? $t('hems.EvseSelectProfile')
+                                                : $t('hems.EvseNoProfiles')
+                                        }}
+                                    </option>
+                                    <option v-if="evseProfileUnavailable" :value="evseBinding.profile" disabled>
                                         ⚠ {{ evseBinding.profile }}
                                     </option>
                                     <option v-for="profile in evseProfiles" :key="profile.id" :value="profile.id">
                                         {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
                                     </option>
                                 </select>
+                                <div v-if="evseProfileUnavailable" class="alert alert-warning mt-2 mb-0" role="alert">
+                                    {{ $t('hems.EvseProfileUnavailable') }}
+                                </div>
+                                <div
+                                    v-else-if="!evseProfiles.length"
+                                    class="alert alert-warning mt-2 mb-0"
+                                    role="alert"
+                                >
+                                    {{ $t('hems.EvseNoProfilesHint') }}
+                                </div>
                             </div>
                         </div>
                         <div class="row mb-3">
@@ -79,7 +91,6 @@
 
             <form @submit.prevent="saveStorage">
                 <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
-                    <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
                     <InputElement
                         :label="$t('storage.Enabled')"
                         v-model="hemsConfig.storage.enabled"
@@ -181,13 +192,20 @@
         <div v-else-if="!dataLoading && !loadFailed" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
         </div>
-        <div v-if="!dataLoading && !loadFailed" class="mt-5">
-            <HemsProfilePanel @profiles-changed="refreshProfiles" />
-        </div>
+        <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
+            <summary>{{ $t('hemsUi.manualControls') }}</summary>
+            <HemsControlPanel />
+        </details>
+        <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
+            <summary>{{ $t('hemsUi.deviceProfiles') }}</summary>
+            <HemsProfilePanel class="mt-3" @profiles-changed="refreshProfiles" />
+        </details>
     </BasePage>
 </template>
 
 <script lang="ts">
+import HemsNav from '@/components/hems/HemsNav.vue';
+import HemsControlPanel from '@/components/HemsControlPanel.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -208,18 +226,26 @@ type ProfileSummary = {
 
 type EvseBinding = {
     profile: string;
-    legacy: boolean;
     control_mode: HemsDeviceControlMode;
 };
 
 export default defineComponent({
-    components: { BasePage, BootstrapAlert, CardElement, FormFooter, HemsProfilePanel, InputElement },
+    components: {
+        HemsNav,
+        HemsControlPanel,
+        BasePage,
+        BootstrapAlert,
+        CardElement,
+        FormFooter,
+        HemsProfilePanel,
+        InputElement,
+    },
     data() {
         return {
             dataLoading: true,
             loadFailed: false,
             hemsConfig: {} as HemsConfig,
-            evseBinding: { profile: '', legacy: true, control_mode: 'monitor' } as EvseBinding,
+            evseBinding: { profile: '', control_mode: 'monitor' } as EvseBinding,
             storageProfiles: [] as ProfileSummary[],
             evseProfiles: [] as ProfileSummary[],
             alert: {} as AlertResponse,
@@ -250,17 +276,20 @@ export default defineComponent({
                 return (
                     parts.length === 4 &&
                     parts.every(
-                        (part) => /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
+                        (part) =>
+                            /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
                     )
                 );
             }
 
-            return host.split('.').every(
-                (label) =>
-                    label.length >= 1 &&
-                    label.length <= 63 &&
-                    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
-            );
+            return host
+                .split('.')
+                .every(
+                    (label) =>
+                        label.length >= 1 &&
+                        label.length <= 63 &&
+                        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
+                );
         },
         validInteger(value: unknown, minimum: number, maximum: number): boolean {
             const number = typeof value === 'number' ? value : Number(value);
@@ -352,11 +381,21 @@ export default defineComponent({
                     this.showError(this.$t('hems.InvalidWallboxPort'));
                     return;
                 }
+                if (!this.evseBinding.profile) {
+                    this.showError(this.$t('hems.EvseProfileRequired'));
+                    return;
+                }
+                if (this.evseProfileUnavailable) {
+                    this.showError(this.$t('hems.EvseProfileUnavailable'));
+                    return;
+                }
+            } else {
+                // A disabled EVSE owns no profile, exactly like disabled storage.
+                this.evseBinding.profile = '';
+                this.evseBinding.control_mode = 'monitor';
             }
 
-            const warp = this.hemsConfig.warp.enabled
-                ? this.hemsConfig.warp
-                : { enabled: false, host: '', port: 502 };
+            const warp = this.hemsConfig.warp.enabled ? this.hemsConfig.warp : { enabled: false, host: '', port: 502 };
             if (!(await this.postConfig({ version: this.hemsConfig.version, warp }))) return;
             if (!(await this.postEvseBinding())) return;
             this.getConfig();
@@ -385,6 +424,7 @@ export default defineComponent({
                 }
             } else {
                 this.hemsConfig.storage.profile = '';
+                this.hemsConfig.storage.control_mode = 'monitor';
             }
 
             if (

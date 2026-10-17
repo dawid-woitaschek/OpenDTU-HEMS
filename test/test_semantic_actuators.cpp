@@ -4,6 +4,9 @@
 
 #include <cassert>
 #include <cstring>
+#include <cmath>
+#include <fstream>
+#include <sstream>
 #include <iostream>
 #include <vector>
 
@@ -62,106 +65,12 @@ bool fakeAuthorized(void* context)
             || io.writes.size() < static_cast<size_t>(io.revokeAfterWrites));
 }
 
-Profiles::Profile storageProfile()
+Profiles::Profile loadProfile(char const* path)
 {
-    Profiles::Profile p;
-    p.schemaVersion = 2;
-    p.capabilities = Profiles::capabilityBit(Profiles::Capability::Storage);
-    p.acquireFirstWrite = 0;
-    p.acquireWriteCount = 1;
-    p.releaseFirstWrite = 1;
-    p.releaseWriteCount = 1;
-    p.controlOperationCount = 4;
-    p.controlWriteCount = 10;
-
-    p.controlWrites[0].address = 42000;
-    p.controlWrites[0].type = Profiles::Type::Uint16;
-    p.controlWrites[0].constant = 21930;
-    p.controlWrites[1].address = 42000;
-    p.controlWrites[1].type = Profiles::Type::Uint16;
-    p.controlWrites[1].constant = 21947;
-
-    std::strcpy(p.controlOperations[0].key, "charge_power_w");
-    p.controlOperations[0].hasInput = true;
-    p.controlOperations[0].minimum = 0;
-    p.controlOperations[0].maximum = 2500;
-    p.controlOperations[0].step = 1;
-    p.controlOperations[0].firstWrite = 2;
-    p.controlOperations[0].writeCount = 2;
-    p.controlWrites[2].address = 42020;
-    p.controlWrites[2].type = Profiles::Type::Uint16;
-    p.controlWrites[2].usesInput = true;
-    p.controlWrites[3].address = 42010;
-    p.controlWrites[3].type = Profiles::Type::Uint16;
-    p.controlWrites[3].constant = 1;
-
-    std::strcpy(p.controlOperations[1].key, "discharge_power_w");
-    p.controlOperations[1].hasInput = true;
-    p.controlOperations[1].minimum = 0;
-    p.controlOperations[1].maximum = 2500;
-    p.controlOperations[1].step = 1;
-    p.controlOperations[1].firstWrite = 4;
-    p.controlOperations[1].writeCount = 2;
-    p.controlWrites[4].address = 42021;
-    p.controlWrites[4].type = Profiles::Type::Uint16;
-    p.controlWrites[4].usesInput = true;
-    p.controlWrites[5].address = 42010;
-    p.controlWrites[5].type = Profiles::Type::Uint16;
-    p.controlWrites[5].constant = 2;
-
-    std::strcpy(p.controlOperations[2].key, "stop");
-    p.controlOperations[2].firstWrite = 6;
-    p.controlOperations[2].writeCount = 3;
-    for (uint8_t i = 0; i < 3; ++i) { p.controlWrites[6 + i].type = Profiles::Type::Uint16; }
-    p.controlWrites[6].address = 42010;
-    p.controlWrites[7].address = 42020;
-    p.controlWrites[8].address = 42021;
-
-    std::strcpy(p.controlOperations[3].key, "target_soc_pct");
-    p.controlOperations[3].hasInput = true;
-    p.controlOperations[3].minimum = 13;
-    p.controlOperations[3].maximum = 100;
-    p.controlOperations[3].step = 1;
-    p.controlOperations[3].firstWrite = 9;
-    p.controlOperations[3].writeCount = 1;
-    p.controlWrites[9].address = 42011;
-    p.controlWrites[9].type = Profiles::Type::Uint16;
-    p.controlWrites[9].usesInput = true;
-    return p;
-}
-
-Profiles::Profile evseProfile()
-{
-    Profiles::Profile p;
-    p.schemaVersion = 2;
-    p.capabilities = Profiles::capabilityBit(Profiles::Capability::Evse);
-    p.releaseFirstWrite = 0;
-    p.releaseWriteCount = 1;
-    p.controlOperationCount = 2;
-    p.controlWriteCount = 3;
-
-    p.controlWrites[0].address = 1002;
-    p.controlWrites[0].type = Profiles::Type::Uint32;
-    p.controlWrites[0].constant = 32000;
-
-    std::strcpy(p.controlOperations[0].key, "set_current_a");
-    p.controlOperations[0].hasInput = true;
-    p.controlOperations[0].minimum = 6;
-    p.controlOperations[0].maximum = 32;
-    p.controlOperations[0].step = 1;
-    p.controlOperations[0].firstWrite = 1;
-    p.controlOperations[0].writeCount = 1;
-    p.controlWrites[1].address = 1002;
-    p.controlWrites[1].type = Profiles::Type::Uint32;
-    p.controlWrites[1].usesInput = true;
-    p.controlWrites[1].scale = 0.001;
-
-    std::strcpy(p.controlOperations[1].key, "stop_charging");
-    p.controlOperations[1].firstWrite = 2;
-    p.controlOperations[1].writeCount = 1;
-    p.controlWrites[2].address = 1002;
-    p.controlWrites[2].type = Profiles::Type::Uint32;
-    return p;
+    std::ifstream file(path); std::stringstream buffer; buffer << file.rdbuf();
+    auto json = buffer.str(); Profiles::Profile result; char const* error = nullptr;
+    assert(Profiles::parse(json.c_str(), json.size(), result, error));
+    return result;
 }
 
 } // namespace
@@ -170,7 +79,7 @@ int main()
 {
     FakeIo fake;
     Actuation::RegisterIo io { &fake, fakeWrite, fakeRead };
-    auto storage = storageProfile();
+    auto storage = loadProfile("../device-profiles/storage/Marstek-Venus-E-3.0.json");
     Storage::Actuator battery;
 
     assert(battery.setChargePower(io, storage, 500));
@@ -206,7 +115,7 @@ int main()
     assert(invalid.stage == Actuation::CommandStage::Operation);
     assert(invalid.planning.error == Profiles::ControlPlanError::InputOutOfRange);
 
-    auto evse = evseProfile();
+    auto evse = loadProfile("../device-profiles/evse/Tinkerforge-WARP3-Smart.json");
     Evse::Actuator charger;
     before = fake.writes.size();
     assert(charger.setCurrent(io, evse, 6));
@@ -230,67 +139,24 @@ int main()
     assert(!wrongProfile && wrongProfile.planning.error == Profiles::ControlPlanError::ControlUnavailable);
     assert(fake.writes.size() == before);
 
-    // A provider generation change must not silently forget ownership of the
-    // previous endpoint. reset() therefore turns an owned actuator into a
-    // fail-closed orphaned state and subsequent commands emit no writes.
-    FakeIo lifecycleStorageWire;
-    Actuation::RegisterIo lifecycleStorageIo { &lifecycleStorageWire, fakeWrite, fakeRead };
-    Storage::Actuator lifecycleBattery;
-    assert(lifecycleBattery.setChargePower(lifecycleStorageIo, storage, 500));
-    assert(lifecycleBattery.ownsControl());
-    before = lifecycleStorageWire.writes.size();
-    assert(!lifecycleBattery.reset());
-    assert(lifecycleBattery.ownershipOrphaned());
-    assert(lifecycleBattery.ownsControl());
-    auto orphanedStorage = lifecycleBattery.stop(lifecycleStorageIo, storage);
-    assert(!orphanedStorage && orphanedStorage.error == Actuation::CommandError::OwnershipOrphaned);
-    assert(lifecycleStorageWire.writes.size() == before);
-
-    FakeIo lifecycleEvseWire;
-    Actuation::RegisterIo lifecycleEvseIo { &lifecycleEvseWire, fakeWrite, fakeRead };
-    Evse::Actuator lifecycleCharger;
-    assert(lifecycleCharger.setCurrent(lifecycleEvseIo, evse, 6));
-    assert(lifecycleCharger.ownsControl());
-    before = lifecycleEvseWire.writes.size();
-    assert(!lifecycleCharger.reset());
-    assert(lifecycleCharger.ownershipOrphaned());
-    assert(lifecycleCharger.ownsControl());
-    auto orphanedEvse = lifecycleCharger.stop(lifecycleEvseIo, evse);
-    assert(!orphanedEvse && orphanedEvse.error == Actuation::CommandError::OwnershipOrphaned);
-    assert(lifecycleEvseWire.writes.size() == before);
-
-    // Retained release is the only allowed escape for an orphaned actuator.
-    assert(lifecycleBattery.releaseRetainedControl(lifecycleStorageIo, storage));
-    assert(!lifecycleBattery.ownsControl() && !lifecycleBattery.ownershipOrphaned());
-    assert(lifecycleBattery.reset());
-    assert(lifecycleBattery.stop(lifecycleStorageIo, storage));
-    assert(lifecycleCharger.releaseRetainedControl(lifecycleEvseIo, evse));
-    assert(!lifecycleCharger.ownsControl() && !lifecycleCharger.ownershipOrphaned());
-    assert(lifecycleCharger.reset());
-    assert(lifecycleCharger.setCurrent(lifecycleEvseIo, evse, 10));
-
-    // Lost acquire response, failed readback and verification mismatch all mean
-    // ownership may exist. Block later operations until a verified release.
+    // Failed acquire/readback can be retried through the same actuator without acknowledgement.
     for (int failure = 0; failure < 3; ++failure) {
-        FakeIo failedWire;
-        failedWire.failWrite = failure == 0;
-        failedWire.failRead = failure == 1;
-        failedWire.mismatch = failure == 2;
-        Actuation::RegisterIo failedIo { &failedWire, fakeWrite, fakeRead, fakeAuthorized };
-        Storage::Actuator uncertain;
-        auto acquired = uncertain.setChargePower(failedIo, storage, 500);
-        assert(!acquired && acquired.stage == Actuation::CommandStage::Acquire);
-        assert(acquired.execution.writeAttempted && uncertain.ownsControl());
-        before = failedWire.writes.size();
-        assert(uncertain.stop(failedIo, storage).error == Actuation::CommandError::OwnershipOrphaned);
-        assert(failedWire.writes.size() == before);
-        assert(!uncertain.reset());
-        assert(!uncertain.releaseRetainedControl(failedIo, storage));
-        assert(uncertain.ownsControl() && uncertain.ownershipOrphaned());
-        failedWire.failWrite = failedWire.failRead = failedWire.mismatch = false;
-        assert(uncertain.releaseRetainedControl(failedIo, storage));
-        assert(!uncertain.ownsControl() && !uncertain.ownershipOrphaned());
-        assert(uncertain.setChargePower(failedIo, storage, 500));
+        FakeIo wire; wire.failWrite = failure == 0; wire.failRead = failure == 1; wire.mismatch = failure == 2;
+        Actuation::RegisterIo failedIo { &wire, fakeWrite, fakeRead, fakeAuthorized };
+        Storage::Actuator actuator;
+        assert(!actuator.setChargePower(failedIo, storage, 500));
+        assert(actuator.ownsControl());
+        wire.failWrite = wire.failRead = wire.mismatch = false;
+        assert(actuator.setChargePower(failedIo, storage, 500));
+        wire.failWrite = true;
+        assert(!actuator.releaseControl(failedIo, storage));
+        wire.failWrite = false;
+        auto writesBeforeRetry = wire.writes.size();
+        assert(actuator.stop(failedIo, storage));
+        assert(wire.writes.size() > writesBeforeRetry && wire.writes[writesBeforeRetry].address == storage.controlWrites[storage.acquireFirstWrite].address);
+        assert(actuator.releaseControl(failedIo, storage));
+        actuator.reset();
+        assert(actuator.stop(failedIo, storage));
     }
 
     // An acquire revoked after an earlier write retains possible ownership.
@@ -322,10 +188,10 @@ int main()
     Evse::Actuator uncertainCharger;
     assert(!uncertainCharger.setCurrent(warpFailureIo, evse, 6));
     assert(uncertainCharger.ownsControl());
-    assert(!uncertainCharger.reset());
+    uncertainCharger.reset();
     warpFailure.failWrite = false;
     assert(uncertainCharger.releaseRetainedControl(warpFailureIo, evse));
-    assert(!uncertainCharger.ownsControl() && !uncertainCharger.ownershipOrphaned());
+    assert(!uncertainCharger.ownsControl());
 
     // Missing release metadata must never become a successful no-op cleanup,
     // nor permit establishing control that cannot subsequently be relinquished.
@@ -340,11 +206,40 @@ int main()
     assert(!unreleasable.releaseRetainedControl(noReleaseIo, noRelease));
     assert(noReleaseWire.writes.empty());
 
+    // Exercise the catalog profiles, rather than a second copy of their mappings.
+    for (double value : { 6.0, 16.0, 32.0 }) {
+        assert(charger.setCurrent(io, evse, value));
+        assert(fake.writes.back().values[1] == static_cast<uint16_t>(value * 1000));
+    }
+    for (double value : { -1.0, 0.0, 5.0, 32.1, 33.0, 6.5, double(NAN), double(INFINITY) }) {
+        auto count = fake.writes.size();
+        assert(!charger.setCurrent(io, evse, value));
+        assert(fake.writes.size() == count);
+    }
+    for (double value : { 0.0, 2500.0 }) {
+        assert(battery.setChargePower(io, storage, value));
+        assert(battery.setDischargePower(io, storage, value));
+    }
+    for (double value : { 13.0, 100.0 }) { assert(battery.setTargetSoc(io, storage, value)); }
+    for (double value : { -1.0, 2501.0, 0.5, double(NAN), double(INFINITY) }) {
+        auto count = fake.writes.size();
+        assert(!battery.setChargePower(io, storage, value));
+        assert(!battery.setDischargePower(io, storage, value));
+        assert(fake.writes.size() == count);
+    }
+    for (double value : { 12.0, 101.0, 13.5, double(NAN) }) {
+        auto count = fake.writes.size();
+        assert(!battery.setTargetSoc(io, storage, value));
+        assert(fake.writes.size() == count);
+    }
+
     // Reset remains harmless before ownership has ever been taken.
     Storage::Actuator cleanBattery;
     Evse::Actuator cleanCharger;
-    assert(cleanBattery.reset() && !cleanBattery.ownershipOrphaned());
-    assert(cleanCharger.reset() && !cleanCharger.ownershipOrphaned());
+    cleanBattery.reset();
+    assert(!cleanBattery.ownsControl());
+    cleanCharger.reset();
+    assert(!cleanCharger.ownsControl());
 
     std::cout << "Semantic storage and EVSE actuator tests passed\n";
 }

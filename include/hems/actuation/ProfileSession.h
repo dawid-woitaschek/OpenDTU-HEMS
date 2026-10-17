@@ -12,18 +12,16 @@ enum class CommandStage : uint8_t {
     Acquire,
     Operation,
     Release,
-    Journal,
 };
 
 enum class CommandError : uint8_t {
     None,
     PlanningFailed,
     ExecutionFailed,
-    OwnershipOrphaned,
-    PersistenceFailed,
 };
 
 struct CommandResult {
+    uint32_t completedMs = 0;
     CommandError error = CommandError::None;
     CommandStage stage = CommandStage::None;
     Profiles::ControlPlanResult planning {};

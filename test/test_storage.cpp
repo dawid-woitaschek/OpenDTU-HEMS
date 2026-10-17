@@ -6,6 +6,9 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <map>
 
 using namespace Hems;
 
@@ -76,6 +79,46 @@ static Profiles::Entry entry(char const* key, Modbus::ReadFunction space, uint16
     result.count = 1;
     result.scale = scale;
     return result;
+}
+
+// Fixtures lock the repository V148 profile's declared convention, not physical device behavior.
+static void testMarstekCatalog()
+{
+    std::ifstream file("../device-profiles/storage/Marstek-Venus-E-3.0.json"); std::stringstream buffer; buffer << file.rdbuf();
+    auto json = buffer.str(); Profiles::Profile profile; char const* error = nullptr;
+    assert(Profiles::parse(json.c_str(), json.size(), profile, error));
+    struct Registers {
+        std::map<uint16_t, uint16_t> values;
+        Modbus::Result readHoldingRegisters(uint16_t address, uint16_t count, uint8_t* output) {
+            for (uint16_t i = 0; i < count; ++i) {
+                auto value = values.at(address + i); output[2 * i] = value >> 8; output[2 * i + 1] = value;
+            }
+            return { Modbus::Error::None, 0, true };
+        }
+        Modbus::Result readInputRegisters(uint16_t, uint16_t, uint8_t*) { assert(false); return {}; }
+        Modbus::Result readDiscreteInputs(uint16_t, uint16_t, uint8_t*) { assert(false); return {}; }
+    } registers;
+    registers.values = { { 34002, 500 }, { 30006, static_cast<uint16_t>(-500) }, { 30001, 520 },
+        { 30100, 5123 }, { 30101, static_cast<uint16_t>(-123) }, { 35000, 253 },
+        { 33000, 0 }, { 33001, 12345 }, { 33002, 0 }, { 33003, 6789 },
+        { 35100, 2 }, { 36000, 0 }, { 36001, 0 }, { 36100, 0 }, { 36101, 0 } };
+    Storage::Sample sample;
+    assert(Storage::poll(registers, profile, sample));
+    assert(sample.socPct.valid && sample.socPct.value == 50);
+    assert(sample.acPowerW.valid && sample.acPowerW.value == 500); // normalized charging positive
+    assert(sample.dcPowerW.valid && sample.dcPowerW.value == 520);
+    assert(std::abs(sample.batteryVoltageV.value - 51.23) < 1e-9);
+    assert(std::abs(sample.batteryCurrentA.value + 12.3) < 1e-9);
+    assert(std::abs(sample.temperatureC.value - 25.3) < 1e-9);
+    assert(std::abs(sample.chargeEnergyTotalKWh.value - 123.45) < 1e-9);
+    assert(std::abs(sample.dischargeEnergyTotalKWh.value - 67.89) < 1e-9);
+    assert(sample.operatingState.value == 2 && sample.faultCode.value == 0 && sample.alarmCode.value == 0);
+    registers.values[30006] = 500;
+    assert(Storage::poll(registers, profile, sample));
+    assert(sample.acPowerW.valid && sample.acPowerW.value == -500); // normalized discharging negative
+    registers.values[34002] = 1001;
+    assert(Storage::poll(registers, profile, sample));
+    assert(!sample.socPct.valid && sample.acPowerW.valid);
 }
 
 static void testAcOnly()
@@ -301,6 +344,7 @@ int main()
     assert(Storage::supportedKey("charging"));
     assert(Storage::supportedKey("fault_active"));
     assert(!Storage::supportedKey("manufacturer_magic"));
+    testMarstekCatalog();
     testAcOnly();
     testDcOnly();
     testDiscreteAndNumericFlags();

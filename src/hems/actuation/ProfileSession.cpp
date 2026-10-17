@@ -23,7 +23,7 @@ CommandResult ProfileSession::runPlan(RegisterIo const& io, Profiles::ControlPla
 CommandResult ProfileSession::acquire(RegisterIo const& io, Profiles::Profile const& profile,
         bool verifyReadback)
 {
-    if (_owned) { return {}; }
+    if (_owned && !_acquireUncertain) { return {}; }
 
     Profiles::ControlPlan plan;
     auto planned = Profiles::planAcquire(profile, plan);
@@ -38,10 +38,11 @@ CommandResult ProfileSession::acquire(RegisterIo const& io, Profiles::Profile co
     auto result = runPlan(io, plan, CommandStage::Acquire, verifyReadback);
     if (result && plan.count) {
         _owned = true;
+        _acquireUncertain = false;
     } else if (result.execution.writeAttempted) {
         // The acquire may have reached the device even if its response or
-        // verification failed. Retain ownership and require release before
-        // accepting more commands; do not silently skip a failed acquire.
+        // verification failed. Retain ownership for best-effort release and retry
+        // acquire on the next normal command.
         _owned = true;
         _acquireUncertain = true;
     }
@@ -51,12 +52,6 @@ CommandResult ProfileSession::acquire(RegisterIo const& io, Profiles::Profile co
 CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile const& profile,
         char const* operation, bool hasInput, double input, bool verifyReadback)
 {
-    if (_acquireUncertain) {
-        CommandResult command;
-        command.error = CommandError::OwnershipOrphaned;
-        command.stage = CommandStage::Acquire;
-        return command;
-    }
     // Validate the semantic command before taking ownership of the device.
     Profiles::ControlPlan operationPlan;
     auto planned = Profiles::planOperation(profile, operation, hasInput, input, operationPlan);
@@ -68,8 +63,7 @@ CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile co
         return command;
     }
 
-    // An empty/missing release cannot resolve persistent ownership. Validate
-    // the escape path before any acquire or operation write can occur.
+    // Profiles must provide a bounded semantic release.
     Profiles::ControlPlan releasePlan;
     planned = Profiles::planRelease(profile, releasePlan);
     if (!planned) {
@@ -80,7 +74,7 @@ CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile co
         return command;
     }
 
-    // A rejected command or invalid acquire must not arm a journal.
+    // Validate acquire before issuing any command.
     Profiles::ControlPlan acquirePlan;
     planned = Profiles::planAcquire(profile, acquirePlan);
     if (!planned) {
@@ -96,27 +90,11 @@ CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile co
         command.execution.error = ExecutionError::AuthorizationRevoked;
         return command;
     }
-    if (!_owned && io.prepareOwnership && !io.prepareOwnership(io.context)) {
-        CommandResult command;
-        command.error = CommandError::PersistenceFailed;
-        command.stage = CommandStage::Journal;
-        return command;
-    }
     auto acquired = acquire(io, profile, verifyReadback);
-    if (!acquired) {
-        if (!_owned && !acquired.execution.writeAttempted && io.clearOwnership && !io.clearOwnership(io.context)) {
-            acquired.error = CommandError::PersistenceFailed;
-            acquired.stage = CommandStage::Journal;
-        }
-        return acquired;
-    }
+    if (!acquired) { return acquired; }
     auto result = runPlan(io, operationPlan, CommandStage::Operation, verifyReadback);
     // Acquire-less profiles establish ownership on the first operation write.
     if (result.execution.writeAttempted || (result && operationPlan.count)) { _owned = true; }
-    else if (!_owned && io.clearOwnership && !io.clearOwnership(io.context)) {
-        result.error = CommandError::PersistenceFailed;
-        result.stage = CommandStage::Journal;
-    }
     return result;
 }
 
@@ -138,11 +116,10 @@ CommandResult ProfileSession::release(RegisterIo const& io, Profiles::Profile co
     auto result = runPlan(io, plan, CommandStage::Release, verifyReadback);
     if (result) {
         _owned = false; _acquireUncertain = false;
-        // Release/readback and local ownership publication precede durable clear.
-        if (io.clearOwnership && !io.clearOwnership(io.context)) {
-            result.error = CommandError::PersistenceFailed;
-            result.stage = CommandStage::Journal;
-        }
+    } else if (result.execution.writeAttempted) {
+        // A lost release reply may mean the device is already back in local mode.
+        // Reacquire on the next command instead of assuming remote mode survived.
+        _acquireUncertain = true;
     }
     return result;
 }

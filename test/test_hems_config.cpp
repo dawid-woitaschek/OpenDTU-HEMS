@@ -125,7 +125,7 @@ void testDisabledStorageCanAlwaysBeDisabledWithSafeLeftovers()
     assert(config.Profile[0] == '\0');
     assert(config.Port == 0);
     assert(config.Unit == 0);
-    assert(config.Control == Hems::ControlMode::HemsControl);
+    assert(config.Control == Hems::ControlMode::MonitorOnly); // Disabling also revokes hidden write permission.
 
     JsonDocument numericGarbage;
     makeStorage(numericGarbage, false, "131.143.9311.11", "bad profile!", 65535, 247);

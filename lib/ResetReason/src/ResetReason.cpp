@@ -20,6 +20,8 @@
 #include "rom/rtc.h"
 #endif
 
+int ResetReason::get_reset_reason_raw(const uint8_t cpu_id) { return static_cast<int>(rtc_get_reset_reason(cpu_id)); }
+
 String ResetReason::get_reset_reason_verbose(const uint8_t cpu_id)
 {
     RESET_REASON reason;

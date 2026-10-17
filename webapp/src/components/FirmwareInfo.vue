@@ -71,6 +71,48 @@
                             </div>
                         </td>
                     </tr>
+                    <tr v-if="systemStatus.reset_diagnostics">
+                        <th>ESP-IDF reset reason</th>
+                        <td>
+                            {{ systemStatus.reset_diagnostics.esp_reset_reason }} ({{
+                                systemStatus.reset_diagnostics.esp_reset_reason_code
+                            }})
+                        </td>
+                    </tr>
+                    <tr v-if="systemStatus.reset_diagnostics">
+                        <th>Raw RTC reset reasons</th>
+                        <td>
+                            CPU 0: {{ systemStatus.resetreason_0_raw }} · CPU 1:
+                            {{ systemStatus.resetreason_1_raw ?? 'Unavailable' }}
+                        </td>
+                    </tr>
+                    <tr v-if="systemStatus.reset_diagnostics">
+                        <th>Previous boot</th>
+                        <td>
+                            <template v-if="systemStatus.reset_diagnostics.previous_boot.valid">
+                                {{
+                                    systemStatus.reset_diagnostics.previous_boot.active
+                                        ? 'Active operation at last checkpoint'
+                                        : 'Last operation completed'
+                                }}: {{ systemStatus.reset_diagnostics.previous_boot.component }} /
+                                {{ systemStatus.reset_diagnostics.previous_boot.operation }} /
+                                {{ systemStatus.reset_diagnostics.previous_boot.phase }} · index
+                                {{ systemStatus.reset_diagnostics.previous_boot.sub_index }} ·
+                                {{ systemStatus.reset_diagnostics.previous_boot.uptime_ms }} ms
+                                <br />
+                                Intentional restart marker:
+                                {{
+                                    systemStatus.reset_diagnostics.previous_boot.intentional_restart ? 'Set' : 'Not set'
+                                }}
+                                · {{ systemStatus.reset_diagnostics.previous_boot.restart_source }}
+                            </template>
+                            <span v-else>No valid retained checkpoint</span>
+                            <details>
+                                <summary>Reset diagnostic record</summary>
+                                <pre>{{ JSON.stringify(systemStatus.reset_diagnostics, null, 2) }}</pre>
+                            </details>
+                        </td>
+                    </tr>
                     <tr>
                         <th>{{ $t('firmwareinfo.ResetReason0') }}</th>
                         <td>{{ systemStatus.resetreason_0 }}</td>

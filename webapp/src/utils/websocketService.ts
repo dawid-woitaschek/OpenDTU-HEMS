@@ -38,10 +38,7 @@ export default class WebSocketService {
     public connect(): void {
         this.stopped = false;
 
-        if (
-            this.socket?.readyState === WebSocket.CONNECTING ||
-            this.socket?.readyState === WebSocket.OPEN
-        ) {
+        if (this.socket?.readyState === WebSocket.CONNECTING || this.socket?.readyState === WebSocket.OPEN) {
             return;
         }
 
@@ -68,10 +65,7 @@ export default class WebSocketService {
         if (this.stopped) {
             return;
         }
-        if (
-            this.socket?.readyState === WebSocket.CONNECTING ||
-            this.socket?.readyState === WebSocket.OPEN
-        ) {
+        if (this.socket?.readyState === WebSocket.CONNECTING || this.socket?.readyState === WebSocket.OPEN) {
             return;
         }
 

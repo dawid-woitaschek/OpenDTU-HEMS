@@ -6,6 +6,7 @@
 #include "Configuration.h"
 #include "FirmwareUpdateValidation.h"
 #include "RestartHelper.h"
+#include <RuntimeDiagnostics.h>
 #include "WebApi.h"
 #include "helper.h"
 #include "__compiled_constants.h"
@@ -60,8 +61,9 @@ void WebApiFirmwareClass::onFirmwareUpdateFinish(AsyncWebServerRequest* request)
     response->addHeader(asyncsrv::T_CORS_ACAO, "*");
     request->send(response);
 
+    Diagnostics::finish(_diagnosticToken);
     RuntimeData.write(10);
-    RestartHelper.triggerRestart();
+    RestartHelper.triggerRestart(Diagnostics::RestartSource::FirmwareUpdate);
 }
 
 void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request, String filename,
@@ -80,22 +82,27 @@ void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request,
     }
 
     if (!index) {
+        _diagnosticToken = Diagnostics::begin(Diagnostics::Component::FirmwareUpdate, Diagnostics::Operation::Upload);
         if (!request->hasParam("MD5", true)) {
+            Diagnostics::finish(_diagnosticToken);
             return request->send(400, asyncsrv::T_text_plain, "MD5 parameter missing");
         }
 
         if (!Update.setMD5(request->getParam("MD5", true)->value().c_str())) {
+            Diagnostics::finish(_diagnosticToken);
             return request->send(400, asyncsrv::T_text_plain, "MD5 parameter invalid");
         }
 
         if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
             Update.printError(Serial);
+            Diagnostics::finish(_diagnosticToken);
             return request->send(400, asyncsrv::T_text_plain, "OTA could not begin");
         }
     }
 
     if (len) {
         if (Update.write(data, len) != len) {
+            Diagnostics::finish(_diagnosticToken);
             return request->send(400, asyncsrv::T_text_plain, "OTA could not begin");
         }
     }
@@ -103,6 +110,7 @@ void WebApiFirmwareClass::onFirmwareUpdateUpload(AsyncWebServerRequest* request,
     if (final) {
         if (!Update.end(true)) {
             Update.printError(Serial);
+            Diagnostics::finish(_diagnosticToken);
             return request->send(400, asyncsrv::T_text_plain, "Could not end OTA");
         }
     } else {

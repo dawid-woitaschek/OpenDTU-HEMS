@@ -9,6 +9,7 @@ public:
     void init(AsyncWebServer& server, Scheduler& scheduler);
 
 private:
+    uint32_t _diagnosticToken = 0;
     bool otaSupported() const;
 
     void onFirmwareUpdateFinish(AsyncWebServerRequest* request);

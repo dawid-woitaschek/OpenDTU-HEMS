@@ -2,16 +2,18 @@
 #pragma once
 
 #include <TaskSchedulerDeclarations.h>
+#include <diagnostics/Breadcrumb.h>
 
 class RestartHelperClass {
 public:
     RestartHelperClass();
     void init(Scheduler& scheduler);
-    void triggerRestart();
+    void triggerRestart(Diagnostics::RestartSource source = Diagnostics::RestartSource::Unspecified);
 
 private:
     void loop();
 
+    Diagnostics::RestartSource _source = Diagnostics::RestartSource::Unspecified;
     Task _rebootTask;
 };
 

@@ -26,4 +26,11 @@ void NtpSettingsClass::setTimezone()
     Mycila::NTP.setTimeZone(Configuration.get().Ntp.TimezoneDescr);
 }
 
+bool NtpSettingsClass::isTimeSynced() const
+{
+    // MycilaNTP 6.0.5 deliberately latches this after the first successful
+    // synchronization, unlike ESP-IDF's transient sync-status enum.
+    return Mycila::NTP.isSynced();
+}
+
 NtpSettingsClass NtpSettings;

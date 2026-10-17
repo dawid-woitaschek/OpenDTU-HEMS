@@ -55,17 +55,55 @@ make test ARDUINOJSON=/path/to/ArduinoJson/src
 
 CI checks out the same `v7.4.3` version before `make test`. Store tests use an
 in-memory backend with injected commit failure; real LittleFS/power-cut and heap
-behavior remain hardware validation. No writes or device activation are exercised.
+behavior remain hardware validation. Semantic writes use fake register I/O; no physical device activation is exercised.
 
 
-Focused recovery/session checks (no full firmware build):
+Focused real-control checks (no local firmware matrix):
 
 ```sh
-make -C test test_recovery test_flash_journal test_provider_cleanup test_validation_session ARDUINOJSON=../work/ArduinoJson/src
-(cd test && ./test_recovery && ./test_flash_journal && ./test_provider_cleanup && ./test_validation_session)
+make -C test test_provider_cleanup test_semantic_actuators test_control_readiness test_ev_protection test_profile_catalog ARDUINOJSON=../work/ArduinoJson/src
+(cd test && ./test_provider_cleanup && ./test_semantic_actuators && ./test_control_readiness && ./test_ev_protection && ./test_profile_catalog)
+python3 test/test_hems_config.py work/ArduinoJson/src
 ```
 
-`test_flash_journal` exercises the production VFS adapter using native files under
-`work/recovery-flash` and faulted write/fsync/rename calls. Identity fixtures are
-synthetic; only the catalog test asserts documented real profile metadata.
-Hardware reboot/replay/API validation remains a separate gate.
+`test_provider_cleanup` compiles the production controller, policy, both provider workers, mailbox, planner and executor. Only external grid/PV inputs, tasks, configuration persistence, profile loading and wire I/O are deterministic seams. It covers all four permission combinations, Monitor manual commands, Active automatic gating/EV protection, debounce, transient failures, one-shot failed release, configuration generation races and same-ID capability reload. Identity/replay metadata is deliberately absent or ineligible and does not prevent control. Parser/catalog and separate semantic/readback tests validate bounded operations. Physical register/charging behavior remains a hardware test.
+
+## Tariff / forecast and Admin regression coverage
+
+`make test ARDUINOJSON=../work/ArduinoJson/src` includes `test_energy` and
+`test_energy_service`: production bounded parser/provider/runtime, deterministic
+UTC and monotonic clocks, local task/network/file seams, gaps, stale/error and
+recovery, atomic settings persistence/reload and configuration generations.
+`test_semantic_actuators` now loads the actual catalog profiles; `test_storage`
+decodes Marstek profile fixtures with the declared positive-charge/negative-
+discharge convention. These fixtures do not physically validate V148 mappings.
+
+After webapp dependencies are installed, run `node test/test_hems_admin.mjs`
+from the repository root. This executes the real Admin setup script and shared
+response handler with fake fetches: successful old/new EVSE responses, release
+warning, saved-but-reload-failed, POST/persistence failure and login expiry.
+The reference HEMS CI build runs it as well. See [energy data](../docs/HEMS_Energy_Data.md).
+
+`test_settings_stores` runs the production EVSE and storage settings stores with
+the in-memory LittleFS seam, including failed persistence, durable unbinding,
+disable/re-enable, explicit profile requirements and permission reload.
+
+### HEMS product presentation
+
+Run `yarn --cwd webapp test` after dependency installation. This retains Admin/auth
+and tariff canonical-unit/save tests and adds deterministic calendar, classification,
+price/forecast/freshness/provider-message and en/de/fr structural checks.
+
+For rendered hardware-free evidence, install Playwright into a scratch directory
+(e.g. `npm install --prefix work/browser playwright`), start
+`yarn --cwd webapp dev --host 127.0.0.1`, then run from the repository root:
+
+```sh
+PLAYWRIGHT_MODULE="$PWD/work/browser/node_modules/playwright" node test/test_hems_browser.mjs
+```
+
+The default Chromium path is `/usr/bin/chromium`; override with `CHROMIUM_PATH`.
+Screenshots go to `work/screenshots` (override `HEMS_SCREENSHOTS`). Fixtures intercept
+all API requests and include a DST fall-back day, six PV planes, effective/source
+prices, battery/EV state and a Shadow schedule. No real devices/providers or commands
+are involved. Browser tooling is optional and adds no firmware/runtime dependency.
