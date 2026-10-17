@@ -171,7 +171,7 @@ Comparable local reference builds, with generated frontend embedded:
 
 | Resource | Before | After | Delta |
 | --- | ---: | ---: | ---: |
-| Flash sketch | 2794781 | 2798209 | +3428 bytes |
+| Flash sketch | 2794781 | 2798193 | +3412 bytes |
 | Static RAM | 114136 | 115896 | +1760 bytes |
 | Optional Energy worker stack | 8192 | 10240 | +2048 bytes runtime heap |
 

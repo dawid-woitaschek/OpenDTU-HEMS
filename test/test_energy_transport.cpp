@@ -30,6 +30,10 @@ int main()
     transportCode=503; retryAfter=0; assert(!get() && info.retrySeconds>=900);
     transportCode=200; transportBody="{broken"; assert(!get());
     transportBody="{} trailing"; assert(!get());
+    // A complete HTTP body with incomplete JSON does not prove a lost connection.
+    transportBody="{\"price\":["; contentLength=transportBody.size();
+    assert(!get() && !strcmp(error,"malformed_or_oversized_json"));
+    contentLength=-1; assert(!get() && !strcmp(error,"malformed_or_oversized_json"));
     transportBody="{}"; contentLength=MaxPayload+1; assert(!get());
     contentLength=5; assert(!get()); // Truncated Content-Length must not accept a complete JSON prefix.
     contentLength=MaxPayload; transportBody="{}"+std::string(MaxPayload-2,' '); assert(get());

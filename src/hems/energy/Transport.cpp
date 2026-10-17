@@ -116,7 +116,7 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     bool ok = !decoded && !doc.overflowed() && reader.remaining && !trailing && !reader.expired && !reader.timedOut && !truncated;
     if (decoded == DeserializationError::NoMemory || doc.overflowed()) { error = "insufficient_memory"; }
     else if (reader.expired || reader.timedOut) { error = "provider_body_timeout"; }
-    else if (truncated || decoded == DeserializationError::IncompleteInput) { error = "provider_connection_lost"; }
+    else if (truncated) { error = "provider_connection_lost"; }
     else if (!ok) { error = "malformed_or_oversized_json"; }
     else { error = nullptr; }
     http->end(); return ok;
