@@ -1,5 +1,6 @@
 <template>
     <BasePage :title="'HEMS — ' + $t('menu.DeviceManager') + ' / ' + $t('profiles.Title')" :isLoading="dataLoading">
+        <HemsNav />
         <BootstrapAlert
             v-model="alert.show"
             dismissible
@@ -191,13 +192,20 @@
         <div v-else-if="!dataLoading && !loadFailed" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
         </div>
-        <div v-if="!dataLoading && !loadFailed" class="mt-5">
-            <HemsProfilePanel @profiles-changed="refreshProfiles" />
-        </div>
+        <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
+            <summary>{{ $t('hemsUi.manualControls') }}</summary>
+            <HemsControlPanel />
+        </details>
+        <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
+            <summary>{{ $t('hemsUi.deviceProfiles') }}</summary>
+            <HemsProfilePanel class="mt-3" @profiles-changed="refreshProfiles" />
+        </details>
     </BasePage>
 </template>
 
 <script lang="ts">
+import HemsNav from '@/components/hems/HemsNav.vue';
+import HemsControlPanel from '@/components/HemsControlPanel.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -222,7 +230,16 @@ type EvseBinding = {
 };
 
 export default defineComponent({
-    components: { BasePage, BootstrapAlert, CardElement, FormFooter, HemsProfilePanel, InputElement },
+    components: {
+        HemsNav,
+        HemsControlPanel,
+        BasePage,
+        BootstrapAlert,
+        CardElement,
+        FormFooter,
+        HemsProfilePanel,
+        InputElement,
+    },
     data() {
         return {
             dataLoading: true,

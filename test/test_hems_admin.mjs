@@ -14,6 +14,12 @@ function compile(source, imports = {}) {
     return module.exports;
 }
 let fetcher;
+const translations = JSON.parse(readFileSync(new URL('../webapp/src/locales/en.json', import.meta.url), 'utf8'));
+const useI18n = () => ({ locale: { value: 'en' }, t: (key, args = {}) => {
+    const value = key.split('.').reduce((o, part) => o?.[part], translations) || key;
+    return value.replace(/\{(\w+)\}/g, (_, name) => args[name]);
+} });
+
 const auth = compile(readFileSync(new URL('../webapp/src/utils/authentication.ts', import.meta.url), 'utf8'));
 const component = readFileSync(new URL('../webapp/src/views/HemsAdminView.vue', import.meta.url), 'utf8');
 const source = component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
@@ -23,6 +29,7 @@ const state = compile(source + '\nexport { save, error, notice, warning, busy, r
     vue: { ref: value => ({ value }), onMounted() {}, getCurrentInstance: () => ({ appContext: { config: {
         globalProperties: { $emitter: { emit() {} } },
     } } }) },
+    'vue-i18n': { useI18n },
     'vue-router': { useRouter: () => router }, '@/utils/authentication': auth,
 });
 const response = (data, status = 200) => new Response(JSON.stringify(data), { status });

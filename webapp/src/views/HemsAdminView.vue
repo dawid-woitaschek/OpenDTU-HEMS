@@ -1,51 +1,44 @@
 <template>
     <BasePage :title="$t('hems.Settings')" :isLoading="loading">
+        <HemsNav />
         <p v-if="error" class="alert alert-danger" role="alert">{{ error }}</p>
         <p v-if="notice" class="alert alert-success" role="status">{{ notice }}</p>
         <p v-if="warning" class="alert alert-warning" role="status">{{ warning }}</p>
         <template v-if="config">
-            <CardElement text="HEMS mode" textVariant="text-bg-primary">
+            <CardElement :text="t('hemsUi.general')" textVariant="text-bg-primary">
                 <form @submit.prevent="saveMode">
-                    <label for="hems-mode" class="form-label">Global HEMS mode</label>
+                    <label for="hems-mode" class="form-label">{{ t('hemsUi.hemsMode') }}</label>
                     <select id="hems-mode" v-model="config.mode" class="form-select mb-2">
-                        <option>Disabled</option>
-                        <option>Monitor</option>
-                        <option>Active</option>
+                        <option v-for="mode in ['Disabled', 'Monitor', 'Active']" :key="mode" :value="mode">
+                            {{ $t('hems.' + mode) }}
+                        </option>
                     </select>
-                    <p>
-                        Monitor calculates policies and permits manual semantic controls. Active also permits automatic
-                        policy writes to enabled device types. Disabled stops HEMS polling and automatic control.
-                    </p>
-                    <button class="btn btn-primary" :disabled="busy">Save mode</button>
+                    <p class="small text-body-secondary">{{ t('hemsUi.modeHint') }}</p>
+                    <button class="btn btn-primary" :disabled="busy">{{ t('hemsUi.save') }}</button>
                 </form>
             </CardElement>
-            <CardElement text="Device write permissions" textVariant="text-bg-primary" add-space>
-                <p>
-                    Monitor only: telemetry is used; HEMS never issues normal commands to this device type. Switching
-                    from HEMS control attempts release once.
-                </p>
-                <p>HEMS control: manual controls and Active policies may write semantic commands.</p>
-                <form class="mb-3" @submit.prevent="saveStorage">
-                    <label for="storage-control" class="form-label fw-bold">Storage control</label>
-                    <select id="storage-control" v-model="config.storage.control_mode" class="form-select mb-2">
-                        <option value="monitor">Monitor only</option>
-                        <option value="hems">HEMS control</option>
-                    </select>
-                    <button class="btn btn-primary" :disabled="busy">Save Storage control</button>
-                </form>
-                <form v-if="binding" @submit.prevent="saveEvse">
-                    <label for="evse-control" class="form-label fw-bold">EVSE control</label>
-                    <select id="evse-control" v-model="binding.control_mode" class="form-select mb-2">
-                        <option value="monitor">Monitor only</option>
-                        <option value="hems">HEMS control</option>
-                    </select>
-                    <button class="btn btn-primary" :disabled="busy">Save EVSE control</button>
-                </form>
-                <RouterLink to="/hems/devices">Configure endpoints and import or replace device profiles</RouterLink>
+            <CardElement :text="t('hemsUi.deviceControl')" textVariant="text-bg-primary" add-space>
+                <p class="small text-body-secondary">{{ t('hemsUi.permissionHint') }}</p>
+                <div class="row g-3 mb-3">
+                    <form class="col-md-6" @submit.prevent="saveStorage">
+                        <label for="storage-control" class="form-label">{{ t('hemsUi.storagePermission') }}</label
+                        ><select id="storage-control" v-model="config.storage.control_mode" class="form-select mb-2">
+                            <option value="monitor">{{ t('hemsUi.monitorOnly') }}</option>
+                            <option value="hems">{{ t('hemsUi.hemsControl') }}</option></select
+                        ><button class="btn btn-primary" :disabled="busy">{{ t('hemsUi.save') }}</button>
+                    </form>
+                    <form v-if="binding" class="col-md-6" @submit.prevent="saveEvse">
+                        <label for="evse-control" class="form-label">{{ t('hemsUi.evsePermission') }}</label
+                        ><select id="evse-control" v-model="binding.control_mode" class="form-select mb-2">
+                            <option value="monitor">{{ t('hemsUi.monitorOnly') }}</option>
+                            <option value="hems">{{ t('hemsUi.hemsControl') }}</option></select
+                        ><button class="btn btn-primary" :disabled="busy">{{ t('hemsUi.save') }}</button>
+                    </form>
+                </div>
+                <RouterLink to="/hems/devices">{{ t('hemsUi.configureDevices') }}</RouterLink>
             </CardElement>
-            <HemsControlPanel :key="revision" />
-            <HemsEnergyPanel />
-            <HemsOptimizerPanel />
+            <HemsEnergyPanel view="settings" />
+            <HemsOptimizerPanel view="settings" />
         </template>
     </BasePage>
 </template>
@@ -54,7 +47,9 @@ import { getCurrentInstance, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
-import HemsControlPanel from '@/components/HemsControlPanel.vue';
+import HemsNav from '@/components/hems/HemsNav.vue';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
 import HemsOptimizerPanel from '@/components/HemsOptimizerPanel.vue';
 import type { HemsConfig, HemsDeviceControlMode } from '@/types/HemsConfig';
@@ -91,9 +86,9 @@ async function save(path: string, data: unknown) {
         // Config endpoints also report validation/persistence failures in HTTP 200 alerts.
         // An explicit persisted result takes precedence over a best-effort release warning.
         if (result.ok !== true && result.type !== 'success') {
-            throw new Error(result.message || 'Settings could not be saved.');
+            throw new Error(result.message || t('hemsUi.saveFailed'));
         }
-        notice.value = 'Settings saved.';
+        notice.value = t('hemsUi.saved');
         if (result.type === 'warning' || result.warning) warning.value = result.warning || result.message;
     } catch (e) {
         error.value = message(e);
@@ -104,14 +99,12 @@ async function save(path: string, data: unknown) {
     try {
         await load();
     } catch (e) {
-        warning.value = [warning.value, 'Settings were saved, but reloading failed: ' + message(e)]
-            .filter(Boolean)
-            .join(' ');
+        warning.value = [warning.value, t('hemsUi.reloadAfterSave') + ' ' + message(e)].filter(Boolean).join(' ');
     }
     busy.value = false;
 }
 function message(e: unknown): string {
-    return e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e || 'Request failed.');
+    return e && typeof e === 'object' && 'message' in e ? String(e.message) : String(e || t('hemsUi.requestFailed'));
 }
 function saveMode() {
     if (config.value) return save('/api/hems/config', { version: config.value.version, mode: config.value.mode });

@@ -1,5 +1,6 @@
 import HemsAdminView from '@/views/HemsAdminView.vue';
 import HemsDevicesView from '@/views/HemsDevicesView.vue';
+import HemsDiagnosticsView from '@/views/HemsDiagnosticsView.vue';
 import HemsInfoView from '@/views/HemsInfoView.vue';
 import AboutView from '@/views/AboutView.vue';
 import BatteryAdminView from '@/views/BatteryAdminView.vue';
@@ -40,6 +41,7 @@ const router = createRouter({
         });
     },
     routes: [
+        { path: '/hems/diagnostics', name: 'HEMS Diagnostics', component: HemsDiagnosticsView },
         {
             path: '/hems/settings',
             alias: '/settings/hems',

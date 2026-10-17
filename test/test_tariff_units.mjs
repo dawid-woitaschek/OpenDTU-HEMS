@@ -6,12 +6,18 @@ import vm from 'node:vm';
 const require = createRequire(new URL('../webapp/package.json', import.meta.url));
 const ts = require('typescript');
 let fetcher;
+const translations = JSON.parse(readFileSync(new URL('../webapp/src/locales/en.json', import.meta.url), 'utf8'));
+const useI18n = () => ({ locale: { value: 'en' }, t: (key, args = {}) => {
+    const value = key.split('.').reduce((o, part) => o?.[part], translations) || key;
+    return value.replace(/\{(\w+)\}/g, (_, name) => args[name]);
+} });
+
 function compile(source, imports = {}) {
     const module = { exports: {} };
     vm.runInNewContext(ts.transpileModule(source, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
     }).outputText, { module, exports: module.exports, require: name => imports[name] || {},
-        structuredClone, FormData, Intl, setInterval, clearInterval, fetch: (...args) => fetcher(...args) });
+        structuredClone, FormData, Intl, defineProps: () => ({ view: 'settings' }), defineEmits: () => () => {}, setInterval, clearInterval, fetch: (...args) => fetcher(...args) });
     return module.exports;
 }
 const units = compile(readFileSync(new URL('../webapp/src/utils/tariffUnits.ts', import.meta.url), 'utf8'));
@@ -35,8 +41,10 @@ const original = { enabled: true, provider: 'energy_charts', url: '', planes: []
     markup_micros_per_kwh: 1234, monthly_micros: 9990000,
 }, refresh_seconds: 3600, max_age_seconds: 3600, horizon_seconds: 86400 };
 const state = compile(component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1] + '\nexport { drafts, save, load, refresh, errors };', {
-    vue: { reactive: value => value, onMounted() {}, onUnmounted() {}, getCurrentInstance: () => ({ appContext: { config: { globalProperties: {} } } }) },
+    vue: { ref: value => ({ value }), computed: fn => ({ get value() { return fn(); } }), reactive: value => value, onMounted() {}, onUnmounted() {}, getCurrentInstance: () => ({ appContext: { config: { globalProperties: {} } } }) },
+    'vue-i18n': { useI18n },
     'vue-router': { useRouter: () => ({}) }, '@/utils/tariffUnits': units,
+    '@/utils/hemsPresentation': compile(readFileSync(new URL('../webapp/src/utils/hemsPresentation.ts', import.meta.url), 'utf8')),
     '@/utils/authentication': { authHeader: () => ({}), handleResponse: x => x },
 });
 fetcher = async (path, options) => {
@@ -57,10 +65,10 @@ await state.save('tariff'); // Saving reloaded canonical values must not convert
 assert.deepEqual(persisted, original);
 console.log('Tariff percent, ct/kWh and EUR/month conversions and API save/reload preserve canonical integer values');
 
-for (const [reason, expected] of [['busy', 'queued or running'], ['network_unavailable', 'Network unavailable'], ['clock_invalid', 'clock synchronization'], ['transport_backoff', 'transport retry'], ['provider_backoff', 'Provider retry delay'], ['rate_limited', 'quota'], ['not_enabled', 'disabled'], ['invalid_config', 'configuration']]) {
+for (const [reason, expected] of [['busy', 'queued or running'], ['network_unavailable', 'Waiting for network connectivity'], ['clock_invalid', 'synchronized system time'], ['transport_backoff', 'retry scheduled'], ['provider_backoff', 'Provider requested a retry delay'], ['rate_limited', 'rate limit'], ['not_enabled', 'Disabled'], ['invalid_config', 'configuration']]) {
     fetcher = async () => new Response(JSON.stringify({ ok: false, reason, retry_after_seconds: 15 }), { status: 409 });
     await state.refresh('tariff');
     assert.ok(state.errors.tariff.includes(expected));
-    assert.ok(state.errors.tariff.includes('retry in 15 seconds'));
+    assert.ok(state.errors.tariff.includes('Retry in 15 seconds'));
 }
 console.log('Manual refresh UI presents backend rejection reasons and retry delay');

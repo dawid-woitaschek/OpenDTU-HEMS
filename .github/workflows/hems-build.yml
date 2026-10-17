@@ -89,6 +89,7 @@ jobs:
         run: |
           node test/test_hems_admin.mjs
           node test/test_tariff_units.mjs
+          node test/test_hems_presentation.mjs
 
       - name: Build firmware
         run: pio run -e ${{ matrix.environment }}

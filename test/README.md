@@ -87,3 +87,23 @@ The reference HEMS CI build runs it as well. See [energy data](../docs/HEMS_Ener
 `test_settings_stores` runs the production EVSE and storage settings stores with
 the in-memory LittleFS seam, including failed persistence, durable unbinding,
 disable/re-enable, explicit profile requirements and permission reload.
+
+### HEMS product presentation
+
+Run `yarn --cwd webapp test` after dependency installation. This retains Admin/auth
+and tariff canonical-unit/save tests and adds deterministic calendar, classification,
+price/forecast/freshness/provider-message and en/de/fr structural checks.
+
+For rendered hardware-free evidence, install Playwright into a scratch directory
+(e.g. `npm install --prefix work/browser playwright`), start
+`yarn --cwd webapp dev --host 127.0.0.1`, then run from the repository root:
+
+```sh
+PLAYWRIGHT_MODULE="$PWD/work/browser/node_modules/playwright" node test/test_hems_browser.mjs
+```
+
+The default Chromium path is `/usr/bin/chromium`; override with `CHROMIUM_PATH`.
+Screenshots go to `work/screenshots` (override `HEMS_SCREENSHOTS`). Fixtures intercept
+all API requests and include a DST fall-back day, six PV planes, effective/source
+prices, battery/EV state and a Shadow schedule. No real devices/providers or commands
+are involved. Browser tooling is optional and adds no firmware/runtime dependency.
