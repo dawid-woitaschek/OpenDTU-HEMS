@@ -12,6 +12,10 @@ const policyCode = ts.transpileModule(readFileSync(new URL('../webapp/src/utils/
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const policy = await import('data:text/javascript;base64,' + Buffer.from(policyCode).toString('base64'));
+const scheduleCode = ts.transpileModule(readFileSync(new URL('../webapp/src/utils/hemsSchedule.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const schedule = await import('data:text/javascript;base64,' + Buffer.from(scheduleCode).toString('base64'));
 const epoch = text => new Date(text).getTime() / 1000;
 const originalZone = process.env.TZ;
 let checks = 0;
@@ -116,6 +120,29 @@ assert.equal(h.feedReadiness({ ...feed, current_covered: false }), 'currentGap')
 assert.equal(h.feedReadiness({ ...feed, horizon_complete: false, partial_horizon: true }), 'partialData');
 assert.equal(h.feedReadiness({ ...feed, last_error: 'provider_rate_limited', manual_refresh: { allowed: false, retry_after_seconds: 600 } }), 'freshData');
 assert.equal(h.feedReadiness({ ...feed, fresh: false, last_error: 'provider_rate_limited' }), 'outdated');
+// Storage schedule presentation merges only true command-equivalent slots, keeps power changes, exposes gaps,
+// and never labels a future slot as the current action.
+const scheduleStart = start + 10000;
+const scheduleSteps = [
+    { start: scheduleStart, end: scheduleStart + 900, used_price_micros_per_kwh: 300000, action: 'charge', reason: 'low_price', battery_w: 1000, end_soc_pct: 51 },
+    { start: scheduleStart + 900, end: scheduleStart + 1800, used_price_micros_per_kwh: 310000, action: 'charge', reason: 'low_price', battery_w: 1000, end_soc_pct: 52 },
+    { start: scheduleStart + 1800, end: scheduleStart + 2700, used_price_micros_per_kwh: 320000, action: 'charge', reason: 'low_price', battery_w: 1500, end_soc_pct: 54 },
+    { start: scheduleStart + 3600, end: scheduleStart + 4500, used_price_micros_per_kwh: 400000, action: 'hold', reason: 'no_shift', battery_w: 0, end_soc_pct: 54 },
+    { start: scheduleStart + 4500, end: scheduleStart + 5400, used_price_micros_per_kwh: 410000, action: 'stop', reason: 'no_shift', battery_w: 0, end_soc_pct: 54 },
+];
+const blocks = schedule.operationBlocks(scheduleSteps);
+assert.equal(blocks.length, 3);
+assert.deepEqual(blocks.map(block => [block.action, block.battery_w, block.slots]), [['charge', 1000, 2], ['charge', 1500, 1], ['hold', 0, 2]]);
+assert.deepEqual([blocks[0].min_price_micros_per_kwh, blocks[0].max_price_micros_per_kwh], [300000, 310000]);
+assert.equal(schedule.currentScheduleStep(scheduleSteps, scheduleStart - 1), undefined);
+assert.equal(schedule.currentScheduleStep(scheduleSteps, scheduleStart + 1000).battery_w, 1000);
+assert.equal(schedule.nextOperationBlock(blocks, scheduleStart + 1000).battery_w, 1500);
+const timeline = schedule.timelineParts(scheduleSteps, scheduleStart, scheduleStart + 5400);
+assert.equal(timeline.filter(part => part.gap).length, 1);
+assert.deepEqual(timeline.find(part => part.gap), { start: scheduleStart + 2700, end: scheduleStart + 3600, action: 'gap', battery_w: 0, gap: true });
+assert.equal(schedule.socAt(scheduleSteps, 50, scheduleStart, scheduleStart), 50);
+assert.equal(schedule.socAt(scheduleSteps, 50, scheduleStart, scheduleStart + 1800), 52);
+assert.equal(schedule.socAt(scheduleSteps, 50, scheduleStart, scheduleStart + 5400), 54);
 // Supported locales must have the same product keys and interpolation parameters.
 const messages = ['en', 'de', 'fr'].map(l => JSON.parse(readFileSync(new URL(`../webapp/src/locales/${l}.json`, import.meta.url), 'utf8')).hemsUi);
 const paths = (o, prefix = '') => Object.entries(o).flatMap(([key, value]) => typeof value === 'object' ? paths(value, prefix + key + '.') : [prefix + key]).sort();
@@ -126,4 +153,4 @@ for (const key of paths(messages[0])) {
     for (const locale of messages.slice(1)) assert.deepEqual(placeholders(locale), placeholders(messages[0]), key);
 }
 if (originalZone === undefined) delete process.env.TZ; else process.env.TZ = originalZone;
-console.log(`HEMS presentation passed: ${checks} timezone/day cases, robust price levels/flat days/duration/signs, gaps, exact prices, forecast summaries, freshness, provider errors and locale parity`);
+console.log(`HEMS presentation passed: ${checks} timezone/day cases, robust price levels/flat days/duration/signs, schedule blocks/gaps/SoC, exact prices, forecast summaries, freshness, provider errors and locale parity`);
