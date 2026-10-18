@@ -105,7 +105,11 @@ bounded command. There is no monetary hysteresis.
 
 Commands distinguish manual, EV Protection and economic origins. The storage
 provider tracks the source of its current RAM session; accepted manual control
-takes responsibility for that session immediately. Economic cleanup checks that
+takes responsibility for an economic session immediately. An existing protection
+session changes source only after an actual manual operating write, not a failed
+request that never wrote. A manual target-SoC setting
+still pauses economics but preserves an existing protection Stop's ownership and
+release obligation, since it is not an operating-mode command. Economic cleanup checks that
 source, and never releases manual or EV Protection ownership. Charging may
 supersede a protection Stop when all charge constraints allow it; the protection
 release obligation then ends. Economic idle/discharge cannot supersede a retained
@@ -183,8 +187,8 @@ Same-environment local production comparison, `generic_esp32s3_usb`, no PSRAM:
 
 | Resource | Policy baseline #24 | Economic dispatch | Delta |
 | --- | ---: | ---: | ---: |
-| Reference sketch | 2,837,249 B | 2,850,201 B | +12,952 B |
-| Normal OTA | 2,837,616 B | 2,850,560 B | +12,944 B |
+| Reference sketch | 2,837,249 B | 2,850,269 B | +13,020 B |
+| Normal OTA | 2,837,616 B | 2,850,640 B | +13,024 B |
 | Static RAM | 116,256 B | 116,416 B | +160 B |
 | Served app gzip | 320,752 B | 322,756 B | +2,004 B |
 | ESP32 DP workspace | 15,768 B | 15,768 B | 0 B |

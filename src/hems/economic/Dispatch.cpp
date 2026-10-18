@@ -49,7 +49,7 @@ bool mapPowerCommand(Optimizer::PlanView const& plan, Constraints::StorageConstr
     }
     command.action = power > 0 ? Action::SetChargePowerW : power < 0 ? Action::SetDischargePowerW : Action::Stop;
     if (!power) { return stopSupported; }
-    if (!operation) { return false; }
+    if (!operation || !operation->hasInput) { return false; }
     if (power) {
         double limit = power > 0 ? plan.config.maxChargeW : plan.config.maxDischargeW;
         auto constraint = power > 0 ? constraints.maxChargePower : constraints.maxDischargePower;

@@ -69,7 +69,7 @@ The current mapping follows Tinkerforge `esp32-firmware` revision `05762aabb8213
 
 Marstek Venus E 3.0 V148 / Micro V119: existing curated acquire, charge/discharge power, stop, target SoC and release plans are unchanged. No stable identity is required; `release_replay_safe=false` is accepted for normal commands. No new register is invented in this package.
 
-Marstek lifecycle behavior still needs physical validation on V148. Community reports of force-command watchdog/timeout behavior are **unvalidated for V148**; firmware assumes no automatic release timeout and does not depend on one. Independently resetting/disconnecting the device is an accepted operational recovery path. Check acquire/release, command persistence, power sign/scale and SoC against the actual device this weekend.
+Marstek lifecycle behavior still needs physical validation on V148. Community reports of force-command watchdog/timeout behavior are **unvalidated for V148**; firmware assumes no automatic release timeout and does not depend on one. Independently resetting/disconnecting the device is an accepted operational recovery path. Check acquire/release, command persistence, power sign/scale and SoC against the actual device as a remaining physical validation gate.
 
 Native tests and CI validate software paths, not physical charging/discharging or firmware-specific register behavior.
 

@@ -56,6 +56,7 @@ int main() {
     { Fixture f; auto d = f.tick(); f.dispatch.accepted(d.command, 7, f.in.nowMs); f.in.mailbox = { MailboxState::Failed, 7, 1, d.command }; assert(f.tick().replan); assert(!f.tick().submit); f.in.plan.revision++; f.in.nowMs += 30000; assert(!f.tick().submit); f.in.successfulPolls++; assert(f.tick().submit); }
     { Fixture f; f.in.constraints.maxChargePower = { true, 525 }; assert(f.tick().command.value == 520); f.in.plan.batteryW = -50; auto d = f.tick(); assert(d.submit && d.command.action == Action::Stop); }
     { Fixture f; f.in.plan.batteryW = 0; f.profile.operationCount = 2; assert(!f.tick().submit); }
+    { Fixture f; f.profile.operations[0].hasInput = false; assert(!f.tick().submit); }
     { Fixture f; f.in.storage.socPct.value = 90; assert(f.tick().command.action == Action::Stop); }
     { Fixture f; f.confirmed(); f.in.providerGeneration++; f.in.owner = Origin::None; assert(f.tick().submit); }
     {

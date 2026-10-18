@@ -215,10 +215,12 @@ bool Provider::submitCommand(Actuation::Command const& command, uint32_t& id)
         return false;
     }
     if (command.origin == Actuation::Origin::Manual) {
-        // Accepted manual control takes responsibility for any existing session.
+        // Accepted manual control takes responsibility for an economic session.
         // Economics cannot release that session while the manual command waits.
         std::lock_guard<std::mutex> lock(_mutex);
-        if (_controlOwned && generation == _generation) { _controlSource = Actuation::Origin::Manual; }
+        if (_controlOwned && generation == _generation && _controlSource == Actuation::Origin::Economic) {
+            _controlSource = Actuation::Origin::Manual;
+        }
     }
     xTaskNotifyGive(worker);
     return true;
@@ -448,7 +450,10 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         if (generation == _generation) {
             _controlOwned = ownsControl;
             if (!ownsControl) { _controlSource = Actuation::Origin::None; }
-            else if (result.execution.writeAttempted) { _controlSource = envelope.command.origin; }
+            else if (result.execution.writeAttempted
+                    && !(envelope.command.action == Actuation::Action::SetTargetSocPct && _controlSource == Actuation::Origin::Protection)) {
+                _controlSource = envelope.command.origin;
+            }
             _polled = false;
         } else if (ownsControl && !_cleanup.valid && profile && port && unit) {
             retainCleanupLocked(config, profile, port, unit);

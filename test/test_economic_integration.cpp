@@ -147,6 +147,14 @@ int main()
     command = HemsController.getActuationCommandSnapshot(ControlTarget::Storage);
     assert(command.command.origin == Actuation::Origin::Protection && command.command.action == Actuation::Action::Stop);
     registers[30006] = 0; ticks(4);
+    Actuation::Command failedManualCharge { ControlTarget::Storage, Actuation::Action::SetChargePowerW, true, 500 };
+    assert(HemsController.submitManual(failedManualCharge, id)); NetworkSettings.connected = false; runWorker();
+    NetworkSettings.connected = true; ticks(8);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"] == "ev_protection");
+    Actuation::Command target { ControlTarget::Storage, Actuation::Action::SetTargetSocPct, true, 70 };
+    assert(HemsController.submitManual(target, id)); runWorker(); ticks(2);
+    assert(ShadowOptimizer.dispatchPlan().paused);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"] == "ev_protection");
     auto releaseCount = [&] { size_t releases = 0; for (auto const& w : writes) { if (w.address == 42000 && w.value == 21947) { ++releases; } } return releases; };
     auto protectionReleases = releaseCount(); c.dispatchEnabled = false; assert(ShadowOptimizer.configure(c)); ticks(20);
     assert(releaseCount() == protectionReleases);
