@@ -135,6 +135,10 @@ successful receipt; `transport_age_seconds` and `source_age_seconds` are separat
 Tariff usability follows authoritative current/future interval coverage, regardless
 of source age. Forecast freshness requires source/transport age within max_age_seconds.
 Unknown native tariff generation time is exposed explicitly rather than invented.
+`source_fresh` (null for an unknown source timestamp) and `transport_fresh` expose
+independent age/clock checks; they do not override tariff coverage usability.
+See [presentation and validation](HEMS_Presentation_Validation.md) for relative
+display levels, chart scales and UI status semantics.
 An unsynchronized/backward clock or source timestamp more than five minutes ahead
 is unusable. Failed refreshes retain data; see the native energy document for details.
 

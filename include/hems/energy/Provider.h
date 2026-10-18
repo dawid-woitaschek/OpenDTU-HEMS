@@ -58,6 +58,7 @@ struct Settings {
 };
 struct Status {
     bool enabled = false, hasData = false, fresh = false, complete = false;
+    bool sourceFresh = false, transportFresh = false; // Ages, independent of tariff coverage usability.
     bool currentCovered = false, planningUsable = false, partial = false;
     uint32_t transportAgeSeconds = 0, sourceAgeSeconds = 0, nextRefresh = 0;
     uint32_t fetchedAt = 0, sourceAt = 0, horizonEnd = 0, ageSeconds = 0;

@@ -159,7 +159,9 @@
                     <p class="form-text mt-0">{{ t('hemsUi.policyHint') }}</p>
                     <div class="row g-3">
                         <div class="col-sm-6">
-                            <label for="optimizer-min_soc_pct" class="form-label">{{ t('hemsUi.batteryReserve') }} (%)</label>
+                            <label for="optimizer-min_soc_pct" class="form-label"
+                                >{{ t('hemsUi.batteryReserve') }} (%)</label
+                            >
                             <input
                                 id="optimizer-min_soc_pct"
                                 v-model.number="draft.min_soc_pct"
@@ -172,7 +174,9 @@
                             />
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-max_soc_pct" class="form-label">{{ t('hemsUi.maxDesiredSoc') }} (%)</label>
+                            <label for="optimizer-max_soc_pct" class="form-label"
+                                >{{ t('hemsUi.maxDesiredSoc') }} (%)</label
+                            >
                             <input
                                 id="optimizer-max_soc_pct"
                                 v-model.number="draft.max_soc_pct"
@@ -185,7 +189,9 @@
                             />
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-grid-charging" class="form-label">{{ t('hemsUi.gridCharging') }}</label>
+                            <label for="optimizer-grid-charging" class="form-label">{{
+                                t('hemsUi.gridCharging')
+                            }}</label>
                             <select
                                 id="optimizer-grid-charging"
                                 v-model="draft.policies.grid_charging_allowed"
@@ -196,7 +202,9 @@
                             </select>
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-economic-discharge" class="form-label">{{ t('hemsUi.economicDischarge') }}</label>
+                            <label for="optimizer-economic-discharge" class="form-label">{{
+                                t('hemsUi.economicDischarge')
+                            }}</label>
                             <select
                                 id="optimizer-economic-discharge"
                                 v-model="draft.policies.discharge_allowed"
@@ -217,7 +225,9 @@
                     >
                     <div v-if="draft.policies.target_enabled" class="row g-3">
                         <div class="col-sm-4">
-                            <label for="optimizer-target-soc" class="form-label">{{ t('hemsUi.targetAtLeast') }} (%)</label>
+                            <label for="optimizer-target-soc" class="form-label"
+                                >{{ t('hemsUi.targetAtLeast') }} (%)</label
+                            >
                             <input
                                 id="optimizer-target-soc"
                                 v-model.number="draft.policies.target_soc_pct"
@@ -230,7 +240,9 @@
                             />
                         </div>
                         <div class="col-sm-8">
-                            <label for="optimizer-target-deadline" class="form-label">{{ t('hemsUi.targetBy') }} · {{ zone }}</label>
+                            <label for="optimizer-target-deadline" class="form-label"
+                                >{{ t('hemsUi.targetBy') }} · {{ zone }}</label
+                            >
                             <input
                                 id="optimizer-target-deadline"
                                 :value="localDeadline(draft.policies.target_deadline)"
@@ -296,7 +308,9 @@
                             class="form-check-input me-2"
                         />{{ t('hemsUi.useExport') }}</label
                     >
-                    <label for="optimizer-export-price" class="form-label">{{ t('hemsUi.exportValue') }} (ct/kWh)</label>
+                    <label for="optimizer-export-price" class="form-label"
+                        >{{ t('hemsUi.exportValue') }} (ct/kWh)</label
+                    >
                     <input
                         id="optimizer-export-price"
                         :value="draft.export_micros_per_kwh / 10000"
@@ -335,7 +349,20 @@
                 <div v-if="plan.schedule.length" class="table-responsive mt-3">
                     <table class="table table-sm">
                         <caption>
-                            {{ t('hemsUi.proposedSchedule') }} · {{ zone }} · {{ plan.interval_count }} {{ t('hemsUi.intervals') }}
+                            {{
+                                t('hemsUi.proposedSchedule')
+                            }}
+                            ·
+                            {{
+                                zone
+                            }}
+                            ·
+                            {{
+                                plan.interval_count
+                            }}
+                            {{
+                                t('hemsUi.intervals')
+                            }}
                         </caption>
                         <thead>
                             <tr>

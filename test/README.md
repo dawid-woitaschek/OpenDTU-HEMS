@@ -140,3 +140,18 @@ configuration suites remain. `test_economic_browser.mjs` uses the same optional
 Playwright setup as the main browser suite, for opt-in, Monitor isolation, blocked
 states, manual pause and explicit Resume at 320/360/768/1440px. These are
 hardware-free fixtures; no physical battery or wallbox behavior is claimed.
+
+### Firmware provenance and price/provider polish
+
+`python3 test/test_firmware_provenance.py` runs the production PR/non-PR manifest
+writer and compiled constant generator; `yarn --cwd webapp test` includes full-SHA
+OTA/source comparison and legacy metadata recovery through the real System
+Information method. See [firmware provenance](../docs/Firmware_Provenance.md).
+
+Presentation tests cover the 2 ct/kWh robust-spread floor, isolated spikes,
+negative/null prices, local/DST days, contiguous periods, visible Y ranges,
+independent provider ages, manual-refresh rejection and display/control isolation.
+Native tests additionally verify serialized freshness fields and retained tariff
+coverage despite old source/transport timestamps. See
+[presentation validation](../docs/HEMS_Presentation_Validation.md) for live network
+limitations and remaining physical checks.

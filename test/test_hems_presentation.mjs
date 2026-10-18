@@ -44,11 +44,19 @@ for (const [zone, date, dayHours] of [
     assert.equal(h.summarize(constant, start, end).energyWh, 1000 * dayHours);
     assert.equal(h.summarize(constant, now, end).energyWh, 1000 * (end - now) / 3600);
     assert.equal(h.summarize(constant, end, h.dayBounds(now, 1)[1]).average, 2000);
-    const intervals = Array.from({ length: 10 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: n }));
+    const intervals = Array.from({ length: 10 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: n * 10000 }));
     const classified = h.classifyTariff(intervals);
     assert.deepEqual(classified.map(i => i.category), [...Array(3).fill('cheap'), ...Array(3).fill('normal'), ...Array(4).fill('expensive')]);
     assert.deepEqual(classified.map(i => i.value), intervals.map(i => i.value)); // display does not mutate economics
     assert.ok(intervals.every(i => !('category' in i)));
+    const daySeries = Array.from({ length: Math.round((end - start) / 900) }, (_, n) => ({
+        start: start + n * 900, end: Math.min(end, start + (n + 1) * 900), value: 300000 + (n % 3) * 100000,
+    }));
+    const grouped = h.classifyTariff([...daySeries, { start: end, end: h.dayBounds(now, 1)[1], value: 350000 }]);
+    assert.equal(grouped[0].category, 'cheap');
+    assert.equal(grouped[2].category, 'expensive');
+    assert.equal(grouped.at(-1).category, 'normal'); // no percentile leakage across local midnight/DST
+    assert.equal(grouped.filter(i => i.start < end).reduce((sum, i) => sum + i.end - i.start, 0), dayHours * 3600);
     checks++;
 }
 process.env.TZ = 'Europe/Berlin';
@@ -62,10 +70,28 @@ for (const value of [-1234, 0, 1234]) {
 assert.equal(h.classifyTariff([{ start, end, value: 0 }])[0].category, 'normal');
 const nearlyFlat = Array.from({ length: 12 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: 350000 + n * 180 }));
 assert.ok(h.classifyTariff(nearlyFlat).every(i => i.category === 'normal'));
-const negative = h.classifyTariff(Array.from({ length: 10 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: n - 10 })));
+// Sub-cent variation around zero must also stay normal (a percentage floor fails here).
+for (const baseline of [-4000, 0, 350000]) {
+    const noise = Array.from({ length: 96 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: baseline + (n % 10) * 500 }));
+    assert.ok(h.classifyTariff(noise).every(i => i.category === 'normal'));
+}
+// One 15-minute outlier cannot set the robust daily span or shift ordinary bands.
+const broadDay = Array.from({ length: 96 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: 300000 + (n % 3) * 100000 }));
+const beforeSpike = h.classifyTariff(broadDay);
+const spiked = h.classifyTariff(broadDay.map((i, n) => n === 95 ? { ...i, value: 5000000 } : i));
+assert.deepEqual(spiked.slice(0, 95).map(i => i.category), beforeSpike.slice(0, 95).map(i => i.category));
+assert.equal(spiked[95].category, 'expensive');
+const flatWithSpike = broadDay.map((i, n) => ({ ...i, value: n === 95 ? 5000000 : 350000 }));
+assert.ok(h.classifyTariff(flatWithSpike).every(i => i.category === 'normal'));
+assert.equal(h.classifyTariff([{ start, end, value: null, category: 'cheap' }])[0].category, undefined);
+// Valid half-hour resolution and partial days retain duration-weighted relative levels.
+const halfHourly = h.classifyTariff(broadDay.slice(0, 12).map((i, n) => ({ ...i, start: start + n * 1800, end: start + (n + 1) * 1800 })));
+assert.equal(halfHourly[0].category, 'cheap');
+assert.equal(halfHourly[2].category, 'expensive');
+const negative = h.classifyTariff(Array.from({ length: 10 }, (_, n) => ({ start: start + n * 900, end: start + (n + 1) * 900, value: (n - 10) * 10000 })));
 assert.equal(negative[9].category, 'expensive'); // negative can still be relatively high within the day
 // Duration, not sample count, determines the robust daily price range.
-const unequal = [{ start, end: start + 3600, value: 1 }, { start: start + 3600, end: start + 4500, value: 2 }];
+const unequal = [{ start, end: start + 3600, value: 10000 }, { start: start + 3600, end: start + 4500, value: 50000 }];
 assert.deepEqual(h.classifyTariff(unequal).map(i => i.category), ['cheap', 'expensive']);
 const nextDayEnd = h.dayBounds(end, 0)[1];
 const crossMidnight = h.classifyTariff([{ start: end - 900, end: end + 900, value: 1 }, { start: end + 900, end: nextDayEnd, value: 9 }]);
@@ -90,6 +116,39 @@ assert.equal((h.stepPath(gaps, x => x - start, y => y, true).match(/M/g) || []).
 assert.equal(h.stepPath([{ start, end: start + 900, value: 1 }, { start: start + 900, end: start + 1800, value: 2 }], x => x - start, y => y), 'M0,1H900L900,2H1800');
 assert.deepEqual(h.nextPeriod(gaps, 'cheap', start + 100), { start: start + 100, end: start + 900 });
 assert.equal(h.nextPeriod(gaps, 'expensive', start), null);
+for (const blocker of [{ category: 'normal', value: 5 }, { category: 'cheap', value: null }, { category: 'expensive', value: 10 }]) {
+    const consecutive = [
+        { start, end: start + 900, value: 1, category: 'cheap' },
+        { start: start + 900, end: start + 1800, ...blocker },
+        { start: start + 1800, end: start + 2700, value: 1, category: 'cheap' },
+    ];
+    assert.deepEqual(h.nextPeriod(consecutive, 'cheap', start), { start, end: start + 900 });
+}
+// Price axis fits visible values, preserving sign and avoiding degenerate/forced-zero ranges.
+assert.deepEqual(h.chartScale([30, 50]), { min: 27.6, max: 52.4, ticks: [30, 40, 50] });
+assert.deepEqual(h.chartScale([-50, -30]), { min: -52.4, max: -27.6, ticks: [-50, -40, -30] });
+for (const values of [[], [null, undefined, NaN, Infinity], [0], [35], [-35], [-5, 10], [0.1, 10], [-10, -0.1], [0.00001, 0.00002]]) {
+    const scale = h.chartScale(values);
+    assert.ok(Number.isFinite(scale.min) && scale.max > scale.min);
+    assert.ok(scale.ticks.length >= 2 && scale.ticks.length <= 6);
+    assert.ok(scale.ticks.every((n, i, ticks) => n >= scale.min && n <= scale.max && (!i || n > ticks[i - 1])));
+    for (const v of values.filter(h.finite)) assert.ok(v >= scale.min && v <= scale.max);
+}
+assert.ok(h.chartScale([-5, 10]).ticks.includes(0));
+assert.ok(h.chartScale([0.1, 10]).ticks.includes(0));
+assert.equal(h.chartScale([30, 50], true).min, 0); // forecast power opts into a baseline
+assert.ok(h.chartScale([35]).min > 0);
+// Architectural guard: only frontend presentation consumes classification. Native optimizer tests
+// independently verify exact-price/category invariance in the production planner.
+const { readdirSync } = await import('node:fs');
+function sourceFiles(directory) {
+    return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        const path = new URL(entry.name + (entry.isDirectory() ? '/' : ''), directory);
+        return entry.isDirectory() ? sourceFiles(path) : /\.(cpp|h)$/.test(entry.name) ? [path] : [];
+    });
+}
+for (const file of [...sourceFiles(new URL('../src/hems/', import.meta.url)), ...sourceFiles(new URL('../include/hems/', import.meta.url))])
+    assert.doesNotMatch(readFileSync(file, 'utf8'), /classifyTariff|TariffClass|MIN_DISPLAY_SPREAD_MICROS|hemsPresentation/);
 const mixed = { intervals: [{ start, end: start + 900, price_micros_per_kwh: -50000, import_price_micros_per_kwh: 123456 }, { start: start + 900, end: start + 1800, price_micros_per_kwh: 0 }] };
 assert.equal(h.tariffBasis(mixed), 'effective');
 assert.equal(h.tariffIntervals(mixed)[0].value, 123456); // authoritative backend value, never recomputed
@@ -120,6 +179,18 @@ assert.equal(h.feedReadiness({ ...feed, current_covered: false }), 'currentGap')
 assert.equal(h.feedReadiness({ ...feed, horizon_complete: false, partial_horizon: true }), 'partialData');
 assert.equal(h.feedReadiness({ ...feed, last_error: 'provider_rate_limited', manual_refresh: { allowed: false, retry_after_seconds: 600 } }), 'freshData');
 assert.equal(h.feedReadiness({ ...feed, fresh: false, last_error: 'provider_rate_limited' }), 'outdated');
+assert.equal(h.feedReadiness(feed, false, 'tariff'), 'coveredData');
+assert.equal(h.feedReadiness({ ...feed, horizon_complete: false, partial_horizon: true }, false, 'tariff'), 'partialData');
+const ages = { ...feed, config: { max_age_seconds: 3600 }, source_age_seconds: 7200, transport_age_seconds: 5 };
+assert.equal(h.feedFreshness(ages, 'source'), 'outdated');
+assert.equal(h.feedFreshness(ages, 'transport'), 'freshData');
+assert.equal(h.feedReadiness(ages, false, 'tariff'), 'coveredData'); // stale source does not create an outage
+assert.equal(h.feedFreshness({ ...ages, source_age_seconds: null }, 'source'), 'freshnessUnknown');
+assert.equal(h.feedFreshness({ ...ages, source_fresh: false, source_age_seconds: 1 }, 'source'), 'outdated'); // clock guard wins
+assert.equal(h.feedFreshness({ ...ages, transport_fresh: false }, 'transport'), 'outdated');
+assert.equal(h.feedReadiness({ ...ages, fresh: false }, false, 'forecast'), 'outdated');
+assert.equal(h.providerMessage('provider_tls_error'), 'transportFailed');
+assert.equal(h.providerMessage('provider_http_error'), 'updateFailed');
 // Storage schedule presentation merges only true command-equivalent slots, keeps power changes, exposes gaps,
 // and never labels a future slot as the current action.
 const scheduleStart = start + 10000;

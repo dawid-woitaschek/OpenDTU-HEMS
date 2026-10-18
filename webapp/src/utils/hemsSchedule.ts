@@ -31,7 +31,10 @@ function normalizedAction(action: string) {
 }
 
 export function operationBlocks(steps: StorageScheduleStep[]): StorageOperationBlock[] {
-    const sorted = steps.filter(valid).slice().sort((a, b) => a.start - b.start || a.end - b.end);
+    const sorted = steps
+        .filter(valid)
+        .slice()
+        .sort((a, b) => a.start - b.start || a.end - b.end);
     const result: StorageOperationBlock[] = [];
     for (const source of sorted) {
         const action = normalizedAction(source.action);
@@ -79,7 +82,10 @@ export function nextOperationBlock(blocks: StorageOperationBlock[], now: number)
 
 export function timelineParts(steps: StorageScheduleStep[], start: number, end: number): StorageTimelinePart[] {
     if (!(end > start)) return [];
-    const sorted = steps.filter(valid).slice().sort((a, b) => a.start - b.start || a.end - b.end);
+    const sorted = steps
+        .filter(valid)
+        .slice()
+        .sort((a, b) => a.start - b.start || a.end - b.end);
     const result: StorageTimelinePart[] = [];
     let cursor = start;
     for (const step of sorted) {
@@ -120,7 +126,10 @@ export function socAt(
     horizonStart: number | undefined,
     time: number
 ): number | undefined {
-    const sorted = steps.filter(valid).slice().sort((a, b) => a.start - b.start || a.end - b.end);
+    const sorted = steps
+        .filter(valid)
+        .slice()
+        .sort((a, b) => a.start - b.start || a.end - b.end);
     let value = Number.isFinite(initialSoc) && horizonStart != null && time >= horizonStart ? initialSoc : undefined;
     for (const step of sorted) {
         if (step.end > time) break;

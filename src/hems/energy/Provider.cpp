@@ -287,6 +287,8 @@ Status JsonProvider::status(uint32_t utc, uint32_t nowMs) const
     result.sourceAgeSeconds = utc >= _data.generatedAt ? utc - _data.generatedAt : 0;
     if (_settings.enabled && pollable(_settings) && utc >= MinUtc) { result.nextRefresh = utc + automaticWait(nowMs); }
     bool clock = utc >= MinUtc && utc >= _fetchedAt && _data.generatedAt <= static_cast<uint64_t>(utc) + 300;
+    result.sourceFresh = result.hasData && clock && _data.sourceTimestampKnown && result.sourceAgeSeconds <= _settings.maxAgeSeconds;
+    result.transportFresh = result.hasData && clock && result.transportAgeSeconds <= _settings.maxAgeSeconds;
     result.fresh = result.enabled && result.hasData && clock && (_domain == Domain::Tariff || result.ageSeconds <= _settings.maxAgeSeconds);
     uint64_t end = static_cast<uint64_t>(utc) + _settings.horizonSeconds;
     result.complete = result.hasData && end <= UINT32_MAX && _data.covers(utc, static_cast<uint32_t>(end));

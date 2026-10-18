@@ -12,6 +12,7 @@ int main()
     JsonDocument api; service.serialize(Domain::Tariff, api.to<JsonObject>());
     assert(api["current"]["price_micros_per_kwh"] == 500 && api["fresh"] == true);
     assert(api["current"]["import_price_micros_per_kwh"].isNull());
+    assert(api["source_fresh"] == true && api["transport_fresh"] == true);
     assert(!service.requestRefresh(Domain::Tariff));
     scheduler.execute(); assert(tasks.empty());
     failCommit = true; auto disabled = settings; disabled.enabled = false;
@@ -60,9 +61,15 @@ int main()
     for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
     httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && data.intervals[0].value == -50000);
+    api.clear(); service.serialize(Domain::Tariff, api.to<JsonObject>());
+    assert(api["source_fresh"].isNull() && api["source_age_seconds"].isNull());
+    assert(api["transport_fresh"] == true && api["planning_usable"] == true);
     assert(!service.requestRefresh(Domain::Tariff)); // Short request spacing still applies; the ordinary interval does not block manual refresh.
     testNow += 3600000; httpAvailable = false; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !strcmp(status.error, "provider_connect_failed"));
+    api.clear(); service.serialize(Domain::Tariff, api.to<JsonObject>());
+    assert(api["planning_usable"] == true && api["last_error"] == "provider_connect_failed");
+    assert(api["transport_age_seconds"].as<unsigned>() >= 3600);
     assert(!service.requestRefresh(Domain::Tariff)); // Retry floor also applies to Refresh now.
     testNow += 3600000; httpAvailable = true; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !status.error);

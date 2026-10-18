@@ -125,7 +125,8 @@ const notice = ref('');
 const error = ref('');
 const lastBytes = ref(0);
 
-const SECRET_KEY = /(password|passwd|passphrase|secret|token|api[_-]?key|apikey|authorization|cookie|credential|private[_-]?key|psk)/i;
+const SECRET_KEY =
+    /(password|passwd|passphrase|secret|token|api[_-]?key|apikey|authorization|cookie|credential|private[_-]?key|psk)/i;
 const NETWORK_KEY = /(^|_)(host(name)?|ip(v4|v6)?|gateway|dns|ssid|bssid|mac|address|url|endpoint)(_|$)/i;
 const LOCATION_KEY = /(^|_)(lat|latitude|lon|lng|longitude|location|coordinates)(_|$)/i;
 const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
@@ -150,14 +151,19 @@ function sanitize(value: unknown, key = ''): unknown {
     if (SECRET_KEY.test(key)) return '[redacted-secret]';
     if (!includeLocation.value && LOCATION_KEY.test(key)) return '[redacted-location]';
     if (!includeNetwork.value && NETWORK_KEY.test(key)) return '[redacted-network]';
-    if (!includeNetwork.value && typeof value === 'string' && (IPV4.test(value) || MAC.test(value) || URL_VALUE.test(value))) {
+    if (
+        !includeNetwork.value &&
+        typeof value === 'string' &&
+        (IPV4.test(value) || MAC.test(value) || URL_VALUE.test(value))
+    ) {
         return '[redacted-network]';
     }
     return value;
 }
 
 function message(value: unknown): string {
-    if (value && typeof value === 'object' && 'message' in value) return String((value as { message: unknown }).message);
+    if (value && typeof value === 'object' && 'message' in value)
+        return String((value as { message: unknown }).message);
     return String(value || 'request failed');
 }
 

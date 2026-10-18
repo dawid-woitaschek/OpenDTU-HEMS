@@ -48,7 +48,10 @@
             <template v-else>
                 <div class="row g-3 mb-3">
                     <div class="col-md-6">
-                        <section class="schedule-summary h-100 rounded border p-3" aria-labelledby="hems-current-action">
+                        <section
+                            class="schedule-summary h-100 rounded border p-3"
+                            aria-labelledby="hems-current-action"
+                        >
                             <div id="hems-current-action" class="small text-body-secondary">{{ copy.now }}</div>
                             <template v-if="currentStep">
                                 <div class="d-flex align-items-baseline gap-2 flex-wrap mt-1">
@@ -98,10 +101,18 @@
                             </div>
                         </div>
                         <div class="d-flex flex-wrap gap-3 small" aria-label="Schedule legend">
-                            <span class="legend-item"><span class="legend-swatch action-charge"></span>{{ copy.charge }}</span>
-                            <span class="legend-item"><span class="legend-swatch action-hold"></span>{{ copy.hold }}</span>
-                            <span class="legend-item"><span class="legend-swatch action-discharge"></span>{{ copy.discharge }}</span>
-                            <span class="legend-item"><span class="legend-swatch action-gap"></span>{{ copy.gap }}</span>
+                            <span class="legend-item"
+                                ><span class="legend-swatch action-charge"></span>{{ copy.charge }}</span
+                            >
+                            <span class="legend-item"
+                                ><span class="legend-swatch action-hold"></span>{{ copy.hold }}</span
+                            >
+                            <span class="legend-item"
+                                ><span class="legend-swatch action-discharge"></span>{{ copy.discharge }}</span
+                            >
+                            <span class="legend-item"
+                                ><span class="legend-swatch action-gap"></span>{{ copy.gap }}</span
+                            >
                         </div>
                     </div>
                     <div class="timeline-wrap">
@@ -152,7 +163,10 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="block in operationRows" :key="`${block.start}-${block.action}-${block.battery_w}`">
+                                <tr
+                                    v-for="block in operationRows"
+                                    :key="`${block.start}-${block.action}-${block.battery_w}`"
+                                >
                                     <td class="text-nowrap">{{ timeRange(block.start, block.end) }}</td>
                                     <td>
                                         <span class="operation-dot" :class="actionClass(block.action)"></span>
@@ -175,16 +189,27 @@
                     <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
                         <div>
                             <h2 id="hems-soc-plan" class="h6 mb-1">{{ copy.socPlan }}</h2>
-                            <div class="small text-body-secondary">
-                                {{ soc(startSoc) }} → {{ soc(visibleEndSoc) }}
-                            </div>
+                            <div class="small text-body-secondary">{{ soc(startSoc) }} → {{ soc(visibleEndSoc) }}</div>
                         </div>
                         <div class="small text-body-secondary">
-                            {{ copy.reserve }} {{ plan.config.min_soc_pct }}% · {{ copy.maximum }} {{ plan.config.max_soc_pct }}%
+                            {{ copy.reserve }} {{ plan.config.min_soc_pct }}% · {{ copy.maximum }}
+                            {{ plan.config.max_soc_pct }}%
                         </div>
                     </div>
-                    <svg class="soc-chart" viewBox="0 0 1000 140" preserveAspectRatio="none" role="img" :aria-label="copy.socPlan">
-                        <line x1="0" x2="1000" :y1="socY(plan.config.min_soc_pct)" :y2="socY(plan.config.min_soc_pct)" class="reserve-line" />
+                    <svg
+                        class="soc-chart"
+                        viewBox="0 0 1000 140"
+                        preserveAspectRatio="none"
+                        role="img"
+                        :aria-label="copy.socPlan"
+                    >
+                        <line
+                            x1="0"
+                            x2="1000"
+                            :y1="socY(plan.config.min_soc_pct)"
+                            :y2="socY(plan.config.min_soc_pct)"
+                            class="reserve-line"
+                        />
                         <path :d="socPath" class="soc-line" />
                     </svg>
                     <div class="d-flex justify-content-between small text-body-secondary">
@@ -201,19 +226,23 @@
                     </div>
                     <div class="row g-2 mt-1">
                         <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.reserve }}</span><br />
+                            <span class="text-body-secondary">{{ copy.reserve }}</span
+                            ><br />
                             <strong>{{ plan.config.min_soc_pct }}%</strong>
                         </div>
                         <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.gridCharging }}</span><br />
+                            <span class="text-body-secondary">{{ copy.gridCharging }}</span
+                            ><br />
                             <strong>{{ yesNo(plan.config.policies?.grid_charging_allowed !== false) }}</strong>
                         </div>
                         <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.discharge }}</span><br />
+                            <span class="text-body-secondary">{{ copy.discharge }}</span
+                            ><br />
                             <strong>{{ yesNo(plan.config.policies?.discharge_allowed !== false) }}</strong>
                         </div>
                         <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.target }}</span><br />
+                            <span class="text-body-secondary">{{ copy.target }}</span
+                            ><br />
                             <strong>{{ targetLabel }}</strong>
                         </div>
                     </div>
@@ -304,43 +333,165 @@ type Plan = {
 };
 
 type Copy = {
-    title: string; loadFailed: string; noPlan: string; noCurrent: string; now: string; nextChange: string; noChange: string;
-    reason: string; action: string; power: string; price: string; period: string; soc: string; timeline: string; timelineAria: string;
-    charge: string; hold: string; discharge: string; gap: string; operationPlan: string; operationPlanHint: string; moreBlocks: string;
-    socPlan: string; reserve: string; maximum: string; plannedRange: string; strategy: string; editStrategy: string; gridCharging: string;
-    target: string; none: string; until: string; coverage: string; settings: string; allowed: string; blocked: string; hours: string;
+    title: string;
+    loadFailed: string;
+    noPlan: string;
+    noCurrent: string;
+    now: string;
+    nextChange: string;
+    noChange: string;
+    reason: string;
+    action: string;
+    power: string;
+    price: string;
+    period: string;
+    soc: string;
+    timeline: string;
+    timelineAria: string;
+    charge: string;
+    hold: string;
+    discharge: string;
+    gap: string;
+    operationPlan: string;
+    operationPlanHint: string;
+    moreBlocks: string;
+    socPlan: string;
+    reserve: string;
+    maximum: string;
+    plannedRange: string;
+    strategy: string;
+    editStrategy: string;
+    gridCharging: string;
+    target: string;
+    none: string;
+    until: string;
+    coverage: string;
+    settings: string;
+    allowed: string;
+    blocked: string;
+    hours: string;
 };
 
 const texts: Record<string, Copy> = {
     en: {
-        title: 'Storage schedule', loadFailed: 'Storage schedule could not be loaded.', noPlan: 'No usable storage schedule is available.',
-        noCurrent: 'No active plan interval right now', now: 'Now', nextChange: 'Next command change', noChange: 'No further command change in the loaded horizon',
-        reason: 'Reason', action: 'Action', power: 'Power', price: 'Price', period: 'Period', soc: 'SoC', timeline: 'Next storage actions',
-        timelineAria: 'Storage schedule timeline with charge, hold, discharge and unavailable intervals', charge: 'Charge', hold: 'Hold', discharge: 'Discharge', gap: 'No plan data',
-        operationPlan: 'Planned storage operation', operationPlanHint: 'Generated by the optimizer from exact prices and constraints; these are not fixed user rules.',
-        moreBlocks: '{count} more generated blocks are available in diagnostics.', socPlan: 'Expected state of charge', reserve: 'Reserve', maximum: 'Maximum',
-        plannedRange: 'planned SoC range', strategy: 'Storage strategy', editStrategy: 'Edit strategy', gridCharging: 'Grid charging', target: 'Target',
-        none: 'None', until: 'by', coverage: 'Loaded plan coverage', settings: 'Economic settings', allowed: 'Allowed', blocked: 'Blocked', hours: 'h',
+        title: 'Storage schedule',
+        loadFailed: 'Storage schedule could not be loaded.',
+        noPlan: 'No usable storage schedule is available.',
+        noCurrent: 'No active plan interval right now',
+        now: 'Now',
+        nextChange: 'Next command change',
+        noChange: 'No further command change in the loaded horizon',
+        reason: 'Reason',
+        action: 'Action',
+        power: 'Power',
+        price: 'Price',
+        period: 'Period',
+        soc: 'SoC',
+        timeline: 'Next storage actions',
+        timelineAria: 'Storage schedule timeline with charge, hold, discharge and unavailable intervals',
+        charge: 'Charge',
+        hold: 'Hold',
+        discharge: 'Discharge',
+        gap: 'No plan data',
+        operationPlan: 'Planned storage operation',
+        operationPlanHint:
+            'Generated by the optimizer from exact prices and constraints; these are not fixed user rules.',
+        moreBlocks: '{count} more generated blocks are available in diagnostics.',
+        socPlan: 'Expected state of charge',
+        reserve: 'Reserve',
+        maximum: 'Maximum',
+        plannedRange: 'planned SoC range',
+        strategy: 'Storage strategy',
+        editStrategy: 'Edit strategy',
+        gridCharging: 'Grid charging',
+        target: 'Target',
+        none: 'None',
+        until: 'by',
+        coverage: 'Loaded plan coverage',
+        settings: 'Economic settings',
+        allowed: 'Allowed',
+        blocked: 'Blocked',
+        hours: 'h',
     },
     de: {
-        title: 'Speicherfahrplan', loadFailed: 'Der Speicherfahrplan konnte nicht geladen werden.', noPlan: 'Es ist derzeit kein nutzbarer Speicherfahrplan verfügbar.',
-        noCurrent: 'Aktuell ist kein Fahrplanintervall aktiv', now: 'Jetzt', nextChange: 'Nächste Befehlsänderung', noChange: 'Keine weitere Befehlsänderung im geladenen Planungshorizont',
-        reason: 'Grund', action: 'Aktion', power: 'Leistung', price: 'Preis', period: 'Zeitraum', soc: 'SoC', timeline: 'Nächste Speicheraktionen',
-        timelineAria: 'Speicherfahrplan mit Lade-, Halte-, Entlade- und nicht verfügbaren Intervallen', charge: 'Laden', hold: 'Halten', discharge: 'Entladen', gap: 'Keine Plandaten',
-        operationPlan: 'Geplanter Speicherbetrieb', operationPlanHint: 'Vom Optimierer aus exakten Preisen und Begrenzungen erzeugt; keine fest hinterlegten Benutzerregeln.',
-        moreBlocks: '{count} weitere erzeugte Blöcke sind in der Diagnose verfügbar.', socPlan: 'Erwarteter Ladezustand', reserve: 'Reserve', maximum: 'Maximum',
-        plannedRange: 'geplanter SoC-Bereich', strategy: 'Speicherstrategie', editStrategy: 'Strategie bearbeiten', gridCharging: 'Netzladen', target: 'Ziel',
-        none: 'Keins', until: 'bis', coverage: 'Geladener Planungshorizont', settings: 'Wirtschaftlichkeits-Einstellungen', allowed: 'Erlaubt', blocked: 'Gesperrt', hours: 'h',
+        title: 'Speicherfahrplan',
+        loadFailed: 'Der Speicherfahrplan konnte nicht geladen werden.',
+        noPlan: 'Es ist derzeit kein nutzbarer Speicherfahrplan verfügbar.',
+        noCurrent: 'Aktuell ist kein Fahrplanintervall aktiv',
+        now: 'Jetzt',
+        nextChange: 'Nächste Befehlsänderung',
+        noChange: 'Keine weitere Befehlsänderung im geladenen Planungshorizont',
+        reason: 'Grund',
+        action: 'Aktion',
+        power: 'Leistung',
+        price: 'Preis',
+        period: 'Zeitraum',
+        soc: 'SoC',
+        timeline: 'Nächste Speicheraktionen',
+        timelineAria: 'Speicherfahrplan mit Lade-, Halte-, Entlade- und nicht verfügbaren Intervallen',
+        charge: 'Laden',
+        hold: 'Halten',
+        discharge: 'Entladen',
+        gap: 'Keine Plandaten',
+        operationPlan: 'Geplanter Speicherbetrieb',
+        operationPlanHint:
+            'Vom Optimierer aus exakten Preisen und Begrenzungen erzeugt; keine fest hinterlegten Benutzerregeln.',
+        moreBlocks: '{count} weitere erzeugte Blöcke sind in der Diagnose verfügbar.',
+        socPlan: 'Erwarteter Ladezustand',
+        reserve: 'Reserve',
+        maximum: 'Maximum',
+        plannedRange: 'geplanter SoC-Bereich',
+        strategy: 'Speicherstrategie',
+        editStrategy: 'Strategie bearbeiten',
+        gridCharging: 'Netzladen',
+        target: 'Ziel',
+        none: 'Keins',
+        until: 'bis',
+        coverage: 'Geladener Planungshorizont',
+        settings: 'Wirtschaftlichkeits-Einstellungen',
+        allowed: 'Erlaubt',
+        blocked: 'Gesperrt',
+        hours: 'h',
     },
     fr: {
-        title: 'Planification du stockage', loadFailed: 'La planification du stockage n’a pas pu être chargée.', noPlan: 'Aucune planification de stockage exploitable n’est disponible.',
-        noCurrent: 'Aucun intervalle de plan n’est actif actuellement', now: 'Maintenant', nextChange: 'Prochain changement de commande', noChange: 'Aucun autre changement de commande dans l’horizon chargé',
-        reason: 'Raison', action: 'Action', power: 'Puissance', price: 'Prix', period: 'Période', soc: 'SoC', timeline: 'Prochaines actions du stockage',
-        timelineAria: 'Chronologie du stockage avec charge, maintien, décharge et intervalles indisponibles', charge: 'Charge', hold: 'Maintien', discharge: 'Décharge', gap: 'Aucune donnée de plan',
-        operationPlan: 'Fonctionnement planifié du stockage', operationPlanHint: 'Généré par l’optimiseur à partir des prix exacts et des contraintes ; il ne s’agit pas de règles utilisateur fixes.',
-        moreBlocks: '{count} blocs générés supplémentaires sont disponibles dans les diagnostics.', socPlan: 'État de charge attendu', reserve: 'Réserve', maximum: 'Maximum',
-        plannedRange: 'plage de SoC planifiée', strategy: 'Stratégie de stockage', editStrategy: 'Modifier la stratégie', gridCharging: 'Charge depuis le réseau', target: 'Objectif',
-        none: 'Aucun', until: 'avant', coverage: 'Horizon de planification chargé', settings: 'Réglages économiques', allowed: 'Autorisé', blocked: 'Bloqué', hours: 'h',
+        title: 'Planification du stockage',
+        loadFailed: 'La planification du stockage n’a pas pu être chargée.',
+        noPlan: 'Aucune planification de stockage exploitable n’est disponible.',
+        noCurrent: 'Aucun intervalle de plan n’est actif actuellement',
+        now: 'Maintenant',
+        nextChange: 'Prochain changement de commande',
+        noChange: 'Aucun autre changement de commande dans l’horizon chargé',
+        reason: 'Raison',
+        action: 'Action',
+        power: 'Puissance',
+        price: 'Prix',
+        period: 'Période',
+        soc: 'SoC',
+        timeline: 'Prochaines actions du stockage',
+        timelineAria: 'Chronologie du stockage avec charge, maintien, décharge et intervalles indisponibles',
+        charge: 'Charge',
+        hold: 'Maintien',
+        discharge: 'Décharge',
+        gap: 'Aucune donnée de plan',
+        operationPlan: 'Fonctionnement planifié du stockage',
+        operationPlanHint:
+            'Généré par l’optimiseur à partir des prix exacts et des contraintes ; il ne s’agit pas de règles utilisateur fixes.',
+        moreBlocks: '{count} blocs générés supplémentaires sont disponibles dans les diagnostics.',
+        socPlan: 'État de charge attendu',
+        reserve: 'Réserve',
+        maximum: 'Maximum',
+        plannedRange: 'plage de SoC planifiée',
+        strategy: 'Stratégie de stockage',
+        editStrategy: 'Modifier la stratégie',
+        gridCharging: 'Charge depuis le réseau',
+        target: 'Objectif',
+        none: 'Aucun',
+        until: 'avant',
+        coverage: 'Horizon de planification chargé',
+        settings: 'Réglages économiques',
+        allowed: 'Autorisé',
+        blocked: 'Bloqué',
+        hours: 'h',
     },
 };
 
@@ -358,11 +509,20 @@ let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let clockTimer: ReturnType<typeof setInterval> | undefined;
 let generation = 0;
 
-const label = (value: string) => te('hemsUi.optimizerStates.' + value) ? t('hemsUi.optimizerStates.' + value) : value.replaceAll('_', ' ');
-const reasonLabel = (value: string) => value ? label(value) : '—';
-const dispatchLabel = (value: string) => te('hemsUi.dispatchStates.' + value) ? t('hemsUi.dispatchStates.' + value) : t('hemsUi.dispatchStates.plan_unavailable');
+const label = (value: string) =>
+    te('hemsUi.optimizerStates.' + value) ? t('hemsUi.optimizerStates.' + value) : value.replaceAll('_', ' ');
+const reasonLabel = (value: string) => (value ? label(value) : '—');
+const dispatchLabel = (value: string) =>
+    te('hemsUi.dispatchStates.' + value)
+        ? t('hemsUi.dispatchStates.' + value)
+        : t('hemsUi.dispatchStates.plan_unavailable');
 const stateLabel = computed(() => label(plan.value?.state || 'not_ready'));
-const hasPlan = computed(() => !!plan.value && ['ready', 'partial'].includes(plan.value.state) && plan.value.schedule.some((step) => step.end > now.value));
+const hasPlan = computed(
+    () =>
+        !!plan.value &&
+        ['ready', 'partial'].includes(plan.value.state) &&
+        plan.value.schedule.some((step) => step.end > now.value)
+);
 
 async function getPage(offset: number): Promise<Plan> {
     const response = await fetch(`/api/hems/optimizer?all=1&offset=${offset}`, { headers: authHeader() });
@@ -382,7 +542,8 @@ async function load() {
         while (page.has_more && schedule.length < 96) {
             const next = await getPage(offset);
             if (disposed || loadGeneration !== generation) return;
-            if (first.plan_revision != null && next.plan_revision != null && first.plan_revision !== next.plan_revision) break;
+            if (first.plan_revision != null && next.plan_revision != null && first.plan_revision !== next.plan_revision)
+                break;
             let added = 0;
             for (const step of next.schedule || []) {
                 if (seen.has(step.start)) continue;
@@ -398,7 +559,8 @@ async function load() {
         plan.value = { ...first, schedule };
         error.value = '';
     } catch (reason) {
-        error.value = reason && typeof reason === 'object' && 'message' in reason ? String(reason.message) : String(reason);
+        error.value =
+            reason && typeof reason === 'object' && 'message' in reason ? String(reason.message) : String(reason);
     } finally {
         fetching.value = false;
     }
@@ -413,7 +575,8 @@ async function resume() {
         await handleResponse(response, emitter, router, true);
         await load();
     } catch (reason) {
-        error.value = reason && typeof reason === 'object' && 'message' in reason ? String(reason.message) : String(reason);
+        error.value =
+            reason && typeof reason === 'object' && 'message' in reason ? String(reason.message) : String(reason);
     } finally {
         busy.value = false;
     }
@@ -432,22 +595,32 @@ const windowEnd = computed(() => {
     return Math.min(windowStart.value + 86400, scheduleEnd, planEnd);
 });
 const windowMiddle = computed(() => windowStart.value + (windowEnd.value - windowStart.value) / 2);
-const visibleSteps = computed(() => (plan.value?.schedule || []).filter((step) => step.end > windowStart.value && step.start < windowEnd.value));
+const visibleSteps = computed(() =>
+    (plan.value?.schedule || []).filter((step) => step.end > windowStart.value && step.start < windowEnd.value)
+);
 const parts = computed(() => timelineParts(plan.value?.schedule || [], windowStart.value, windowEnd.value));
 const nowPosition = computed(() => {
-    if (!(windowEnd.value > windowStart.value) || now.value < windowStart.value || now.value > windowEnd.value) return null;
+    if (!(windowEnd.value > windowStart.value) || now.value < windowStart.value || now.value > windowEnd.value)
+        return null;
     return ((now.value - windowStart.value) / (windowEnd.value - windowStart.value)) * 100;
 });
-const horizonLabel = computed(() => `${((windowEnd.value - windowStart.value) / 3600).toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${copy.value.hours}`);
+const horizonLabel = computed(
+    () =>
+        `${((windowEnd.value - windowStart.value) / 3600).toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${copy.value.hours}`
+);
 const coverageLabel = computed(() => {
     if (!visibleSteps.value.length) return '—';
     const hours = (visibleSteps.value.at(-1)!.end - visibleSteps.value[0]!.start) / 3600;
     return `${hours.toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${copy.value.hours}`;
 });
-const startSoc = computed(() => socAt(plan.value?.schedule || [], plan.value?.initial_soc_pct, plan.value?.horizon_start, windowStart.value));
+const startSoc = computed(() =>
+    socAt(plan.value?.schedule || [], plan.value?.initial_soc_pct, plan.value?.horizon_start, windowStart.value)
+);
 const visibleEndSoc = computed(() => visibleSteps.value.at(-1)?.end_soc_pct ?? startSoc.value);
 const socRange = computed<[number, number]>(() => {
-    const values = [startSoc.value, ...visibleSteps.value.map((step) => step.end_soc_pct)].filter((value): value is number => Number.isFinite(value));
+    const values = [startSoc.value, ...visibleSteps.value.map((step) => step.end_soc_pct)].filter(
+        (value): value is number => Number.isFinite(value)
+    );
     if (!values.length) return [0, 100];
     let low = Math.max(0, Math.floor(Math.min(...values) - 2));
     let high = Math.min(100, Math.ceil(Math.max(...values) + 2));
@@ -464,16 +637,24 @@ function socY(value: number) {
     return 130 - ((Math.min(high, Math.max(low, value)) - low) / Math.max(1, high - low)) * 120;
 }
 const socPath = computed(() => {
-    if (!visibleSteps.value.length || windowEnd.value <= windowStart.value || !Number.isFinite(startSoc.value)) return '';
+    if (!visibleSteps.value.length || windowEnd.value <= windowStart.value || !Number.isFinite(startSoc.value))
+        return '';
     const span = windowEnd.value - windowStart.value;
     const points: Array<[number, number]> = [[windowStart.value, startSoc.value!]];
-    for (const step of visibleSteps.value) if (Number.isFinite(step.end_soc_pct)) points.push([Math.min(step.end, windowEnd.value), step.end_soc_pct]);
+    for (const step of visibleSteps.value)
+        if (Number.isFinite(step.end_soc_pct)) points.push([Math.min(step.end, windowEnd.value), step.end_soc_pct]);
     if (points.length < 2) return '';
-    return points.map(([time, value], index) => `${index ? 'L' : 'M'}${((time - windowStart.value) / span) * 1000},${socY(value)}`).join(' ');
+    return points
+        .map(
+            ([time, value], index) => `${index ? 'L' : 'M'}${((time - windowStart.value) / span) * 1000},${socY(value)}`
+        )
+        .join(' ');
 });
 const targetLabel = computed(() => {
     const policy = plan.value?.config.policies;
-    return !policy?.target_enabled ? copy.value.none : `${policy.target_soc_pct}% ${copy.value.until} ${date(policy.target_deadline)}`;
+    return !policy?.target_enabled
+        ? copy.value.none
+        : `${policy.target_soc_pct}% ${copy.value.until} ${date(policy.target_deadline)}`;
 });
 
 function actionLabel(action?: string) {
@@ -488,26 +669,57 @@ function actionClass(action: string) {
     if (action === 'discharge') return 'action-discharge';
     return 'action-hold';
 }
-function powerLabel(value: number) { return `${Math.abs(value || 0).toLocaleString(locale.value)} W`; }
+function powerLabel(value: number) {
+    return `${Math.abs(value || 0).toLocaleString(locale.value)} W`;
+}
 function blockPrice(block: StorageOperationBlock) {
     const low = formatPrice(block.min_price_micros_per_kwh, plan.value?.currency, locale.value);
-    return block.min_price_micros_per_kwh === block.max_price_micros_per_kwh ? low : `${low} – ${formatPrice(block.max_price_micros_per_kwh, plan.value?.currency, locale.value)}`;
+    return block.min_price_micros_per_kwh === block.max_price_micros_per_kwh
+        ? low
+        : `${low} – ${formatPrice(block.max_price_micros_per_kwh, plan.value?.currency, locale.value)}`;
 }
 function partTitle(part: StorageTimelinePart) {
-    return part.gap ? `${copy.value.gap} · ${timeRange(part.start, part.end)}` : `${actionLabel(part.action)} · ${powerLabel(part.battery_w)} · ${timeRange(part.start, part.end)}`;
+    return part.gap
+        ? `${copy.value.gap} · ${timeRange(part.start, part.end)}`
+        : `${actionLabel(part.action)} · ${powerLabel(part.battery_w)} · ${timeRange(part.start, part.end)}`;
 }
 function date(epoch?: number) {
-    return epoch ? new Date(epoch * 1000).toLocaleString(locale.value, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    return epoch
+        ? new Date(epoch * 1000).toLocaleString(locale.value, {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+          })
+        : '—';
 }
-function shortDateTime(epoch: number) { return new Date(epoch * 1000).toLocaleString(locale.value, { weekday: 'short', hour: '2-digit', minute: '2-digit' }); }
-function shortTime(epoch: number) { return new Date(epoch * 1000).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' }); }
+function shortDateTime(epoch: number) {
+    return new Date(epoch * 1000).toLocaleString(locale.value, {
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+function shortTime(epoch: number) {
+    return new Date(epoch * 1000).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' });
+}
 function timeRange(start: number, end: number) {
     const sameDay = new Date(start * 1000).toDateString() === new Date((end - 1) * 1000).toDateString();
     return sameDay ? `${shortTime(start)}–${shortTime(end)}` : `${date(start)} – ${date(end)}`;
 }
-function soc(value?: number) { return value == null || !Number.isFinite(value) ? '—' : `${value.toLocaleString(locale.value, { maximumFractionDigits: 1 })}%`; }
-function money(value?: number) { return value == null || !Number.isFinite(value) ? '—' : `${(value / 1e9).toLocaleString(locale.value, { maximumFractionDigits: 4 })} ${plan.value?.currency || ''}`; }
-function yesNo(value: boolean) { return value ? copy.value.allowed : copy.value.blocked; }
+function soc(value?: number) {
+    return value == null || !Number.isFinite(value)
+        ? '—'
+        : `${value.toLocaleString(locale.value, { maximumFractionDigits: 1 })}%`;
+}
+function money(value?: number) {
+    return value == null || !Number.isFinite(value)
+        ? '—'
+        : `${(value / 1e9).toLocaleString(locale.value, { maximumFractionDigits: 4 })} ${plan.value?.currency || ''}`;
+}
+function yesNo(value: boolean) {
+    return value ? copy.value.allowed : copy.value.blocked;
+}
 
 async function poll() {
     await load();
@@ -528,8 +740,12 @@ onUnmounted(() => {
 
 <style scoped>
 .dispatch-strip,
-.schedule-summary { background: var(--bs-body-bg); }
-.timeline-wrap { position: relative; }
+.schedule-summary {
+    background: var(--bs-body-bg);
+}
+.timeline-wrap {
+    position: relative;
+}
 .schedule-timeline {
     display: flex;
     min-height: 3.25rem;
@@ -538,13 +754,30 @@ onUnmounted(() => {
     border-radius: var(--bs-border-radius);
     background: var(--bs-tertiary-bg);
 }
-.schedule-segment { flex-basis: 0; min-width: 2px; }
-.schedule-segment + .schedule-segment { border-left: 1px solid color-mix(in srgb, var(--bs-body-color) 18%, transparent); }
-.action-charge { background: var(--bs-success-bg-subtle); }
-.action-hold { background: var(--bs-secondary-bg-subtle); }
-.action-discharge { background: var(--bs-warning-bg-subtle); }
+.schedule-segment {
+    flex-basis: 0;
+    min-width: 2px;
+}
+.schedule-segment + .schedule-segment {
+    border-left: 1px solid color-mix(in srgb, var(--bs-body-color) 18%, transparent);
+}
+.action-charge {
+    background: var(--bs-success-bg-subtle);
+}
+.action-hold {
+    background: var(--bs-secondary-bg-subtle);
+}
+.action-discharge {
+    background: var(--bs-warning-bg-subtle);
+}
 .action-gap {
-    background: repeating-linear-gradient(135deg, var(--bs-tertiary-bg), var(--bs-tertiary-bg) 6px, color-mix(in srgb, var(--bs-secondary-color) 18%, transparent) 6px, color-mix(in srgb, var(--bs-secondary-color) 18%, transparent) 12px);
+    background: repeating-linear-gradient(
+        135deg,
+        var(--bs-tertiary-bg),
+        var(--bs-tertiary-bg) 6px,
+        color-mix(in srgb, var(--bs-secondary-color) 18%, transparent) 6px,
+        color-mix(in srgb, var(--bs-secondary-color) 18%, transparent) 12px
+    );
 }
 .now-marker {
     position: absolute;
@@ -555,12 +788,27 @@ onUnmounted(() => {
     background: var(--bs-primary);
     pointer-events: none;
 }
-.legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
 .legend-swatch,
-.operation-dot { width: 0.8rem; height: 0.8rem; border: 1px solid var(--bs-border-color); border-radius: 0.2rem; }
-.operation-dot { display: inline-block; margin-right: 0.35rem; vertical-align: -0.05rem; }
+.operation-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.2rem;
+}
+.operation-dot {
+    display: inline-block;
+    margin-right: 0.35rem;
+    vertical-align: -0.05rem;
+}
 .operation-table th,
-.operation-table td { padding-inline: 0.55rem; }
+.operation-table td {
+    padding-inline: 0.55rem;
+}
 .soc-chart {
     display: block;
     width: 100%;
@@ -569,10 +817,24 @@ onUnmounted(() => {
     background: var(--bs-tertiary-bg);
     border-radius: var(--bs-border-radius);
 }
-.soc-line { fill: none; stroke: currentColor; stroke-width: 4; vector-effect: non-scaling-stroke; }
-.reserve-line { stroke: var(--bs-warning); stroke-width: 2; stroke-dasharray: 8 8; vector-effect: non-scaling-stroke; }
+.soc-line {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 4;
+    vector-effect: non-scaling-stroke;
+}
+.reserve-line {
+    stroke: var(--bs-warning);
+    stroke-width: 2;
+    stroke-dasharray: 8 8;
+    vector-effect: non-scaling-stroke;
+}
 @media (max-width: 575.98px) {
-    .schedule-timeline { min-height: 2.75rem; }
-    .soc-chart { height: 6.5rem; }
+    .schedule-timeline {
+        min-height: 2.75rem;
+    }
+    .soc-chart {
+        height: 6.5rem;
+    }
 }
 </style>

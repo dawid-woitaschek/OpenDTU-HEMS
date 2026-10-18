@@ -87,9 +87,15 @@ int main()
     tariff.configure(s); forecast.configure(s); a = {}; a.generatedAt = Now - 36000; a.count = 4;
     for (size_t i=0;i<4;++i) { a.intervals[i] = {Now+uint32_t(i)*900,Now+uint32_t(i+1)*900,1000,0,false}; }
     assert(tariff.accept(a,Now,0)); assert(tariff.status(Now,0).planningUsable && tariff.status(Now,0).complete);
+    assert(!tariff.status(Now,0).sourceFresh && tariff.status(Now,0).transportFresh);
+    assert(tariff.status(Now,3601000).planningUsable && !tariff.status(Now,3601000).transportFresh);
+    assert(tariff.status(Now+900,100).partial && tariff.status(Now+900,100).planningUsable);
     tariff.failed("verified_https_failed",100); assert(tariff.status(Now,100).planningUsable && tariff.status(Now,100).error);
     assert(forecast.accept(a,Now,0)); assert(!forecast.status(Now,0).planningUsable && forecast.status(Now,0).sourceAgeSeconds == 36000);
+    assert(!forecast.status(Now,0).sourceFresh && forecast.status(Now,0).transportFresh);
     a.generatedAt=Now; assert(forecast.accept(a,Now,0)); forecast.failed("network",100);
+    assert(forecast.status(Now,100).sourceFresh && forecast.status(Now,100).transportFresh);
+    assert(!forecast.status(Now,3601000).transportFresh && !forecast.status(Now,3601000).planningUsable);
     assert(forecast.status(Now,100).planningUsable); assert(!forecast.status(Now+3601,3601000).planningUsable);
     assert(!forecast.status(Now-1,100).planningUsable); assert(!tariff.status(Now-1,100).planningUsable);
     ++a.generatedAt; assert(tariff.accept(a,Now+1,101)); assert(tariff.data().generatedAt == Now+1);
