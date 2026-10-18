@@ -51,8 +51,11 @@ int main()
     auto count = writes.size(); auto stableRevision = ShadowOptimizer.dispatchPlan().revision;
     ticks(30); assert(writes.size() == count && ShadowOptimizer.dispatchPlan().revision == stableRevision);
     auto plan = ShadowOptimizer.dispatchPlan(); assert(plan.valid);
+    auto identicalWrites = writes.size();
     assert(Energy::EnergyData.ingest(Energy::Domain::Tariff, tariff.as<JsonVariantConst>()));
     assert(!ShadowOptimizer.dispatchPlan().valid); ticks(8); assert(ShadowOptimizer.dispatchPlan().valid);
+    assert(writes.size() == identicalWrites); // An identical refreshed plan keeps confirmed ownership.
+    assert(ShadowOptimizer.requestRecalculate()); ticks(8); assert(writes.size() == identicalWrites);
     // Numeric prices can reverse the CURRENT action; presentation categories are absent.
     for (unsigned i = 0; i < 16; ++i) { tariff["intervals"][i]["price_micros_per_kwh"] = i < 12 ? 400000 : 0; }
     assert(Energy::EnergyData.ingest(Energy::Domain::Tariff, tariff.as<JsonVariantConst>())); ticks(8);
@@ -90,6 +93,11 @@ int main()
     assert(ShadowOptimizer.resume()); assert(!ShadowOptimizer.dispatchPlan().valid); ticks(8);
     assert(!ShadowOptimizer.dispatchPlan().paused && ShadowOptimizer.dispatchPlan().valid);
     assert(writes.size() > count);
+    c.maxChargeW = 1000; assert(ShadowOptimizer.configure(c)); writeFails = true; ticks(8);
+    assert(HemsController.getActuationCommandSnapshot(ControlTarget::Storage).state == Actuation::MailboxState::Failed);
+    count = writes.size(); ticks(20); assert(writes.size() == count); // No busy retry despite fresh polling.
+    writeFails = false; ticks(40);
+    assert(HemsController.getActuationCommandSnapshot(ControlTarget::Storage).state == Actuation::MailboxState::Succeeded);
     // Revoke a running economic command between bounded writes.
     assert(ShadowOptimizer.requestRecalculate()); ticks(8);
     c.maxChargeW = 1500; assert(ShadowOptimizer.configure(c));
@@ -103,12 +111,53 @@ int main()
     command = HemsController.getActuationCommandSnapshot(ControlTarget::Storage);
     // A newer plan may already have recovered; the wire callback cannot authorize later old writes.
     assert(command.command.target == ControlTarget::Storage);
+    // Economic disable may not release an actual EV Protection intervention.
+    c.policies.targetEnabled = false; c.policies.dischargeAllowed = true;
+    for (unsigned i = 0; i < 16; ++i) { tariff["intervals"][i]["price_micros_per_kwh"] = 200000; }
+    assert(Energy::EnergyData.ingest(Energy::Domain::Tariff, tariff.as<JsonVariantConst>()));
+    assert(ShadowOptimizer.configure(c)); ticks(8);
+    for (bool permissionChange : { false, true }) {
+        ticks(4); auto hold = ShadowOptimizer.dispatchPlan(); assert(hold.valid && hold.batteryW == 0);
+        Actuation::Command queued { ControlTarget::Storage, Actuation::Action::Stop };
+        queued.origin = Actuation::Origin::Economic; queued.authority = hold.revision;
+        assert(HemsController.submitActuation(queued, id));
+        if (!permissionChange) {
+            // Queued work is cancelled before the worker can write.
+            settings.Mode = Mode::Monitor; HemsController.updateSettings(); count = writes.size(); runWorker();
+            assert(writes.size() == count);
+            ticks(4); settings.Mode = Mode::Active; HemsController.updateSettings(); ticks(8);
+            hold = ShadowOptimizer.dispatchPlan(); queued.authority = hold.revision;
+            assert(HemsController.submitActuation(queued, id));
+        }
+        onWrite = [&] {
+            if (permissionChange) { storage.Control = ControlMode::MonitorOnly; Storage::StorageSettings.set(storage); }
+            else { settings.Mode = Mode::Monitor; }
+            HemsController.updateSettings();
+        };
+        count = writes.size(); runWorker(); assert(writes.size() == count + 1);
+        assert(HemsController.getActuationCommandResult(ControlTarget::Storage).execution.error == Actuation::ExecutionError::AuthorizationRevoked);
+        ticks(8); count = writes.size(); ticks(12); assert(writes.size() == count);
+        // Only the existing one-shot semantic courtesy release may write after withdrawal.
+        settings.Mode = Mode::Active; storage.Control = ControlMode::HemsControl;
+        Storage::StorageSettings.set(storage); HemsController.updateSettings(); ticks(8);
+    }
+    settings.Warp.Enabled = true; strcpy(settings.Warp.Host, "warp.invalid");
+    Evse::BindingConfig binding; strcpy(binding.Profile, warp.id); binding.Control = ControlMode::MonitorOnly;
+    Evse::BindingSettings.set(binding); registers[30006] = 500; HemsController.updateSettings(); ticks(8);
+    command = HemsController.getActuationCommandSnapshot(ControlTarget::Storage);
+    assert(command.command.origin == Actuation::Origin::Protection && command.command.action == Actuation::Action::Stop);
+    registers[30006] = 0; ticks(4);
+    auto releaseCount = [&] { size_t releases = 0; for (auto const& w : writes) { if (w.address == 42000 && w.value == 21947) { ++releases; } } return releases; };
+    auto protectionReleases = releaseCount(); c.dispatchEnabled = false; assert(ShadowOptimizer.configure(c)); ticks(20);
+    assert(releaseCount() == protectionReleases);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"] == "ev_protection");
     // Loss of Active revokes automatic work and uses existing one-shot release.
     settings.Mode = Mode::Monitor; HemsController.updateSettings(); ticks(8);
     count = writes.size(); ticks(20); assert(writes.size() == count);
     // No economic EVSE producer, even when the EVSE is made writable.
     for (auto const& write : writes) { assert(write.host == "storage.invalid"); }
     // Disabling dispatch preserves planning, and cannot clear a persisted manual pause.
+    c.dispatchEnabled = true; assert(ShadowOptimizer.configure(c)); ticks(8);
     assert(HemsController.submitManual(manual, id)); runWorker(); ticks(2);
     c.dispatchEnabled = false; assert(ShadowOptimizer.configure(c)); assert(ShadowOptimizer.dispatchPlan().paused);
     ticks(8); assert(!ShadowOptimizer.dispatchPlan().config.dispatchEnabled);

@@ -143,10 +143,10 @@ Frontend tests cover local/UTC/DST conversion and localized message parity;
 rendered fixtures cover policy settings/save/reload and mobile layouts with zero
 device commands. Existing semantic/security/no-write tests remain required.
 
-No physical WARP/Marstek or live-provider validation is claimed. Before Active
-economic dispatch, physical command lifecycle/sign/scaling/watchdog/reboot and
-EV Protection end-to-end validation, provider/TLS smoke tests, ESP32 runtime/heap/
-stack measurements and separate dispatch/manual arbitration validation remain.
+No physical WARP/Marstek or live-provider validation is claimed. Physical command lifecycle/sign/scaling/watchdog/reboot and EV Protection
+end-to-end validation, provider/TLS smoke tests and ESP32 runtime/heap/stack
+measurements remain. The separate dispatch/manual arbitration software is now
+implemented and tested; it does not claim physical validation.
 
 ## Measured resource delta
 

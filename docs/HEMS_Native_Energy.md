@@ -3,6 +3,8 @@
 Foundation/productization milestone: PR #23, `feature/hems-real-control` →
 `integration/hems-next`. Device control, permissions and EV Protection retain the
 existing semantic command path. **Economic planning has no device-write path.**
+The later [economic dispatch milestone](HEMS_Economic_Dispatch.md) adds a separate,
+explicitly opted-in runtime consumer; legacy installations still default off.
 
 ## Setup
 

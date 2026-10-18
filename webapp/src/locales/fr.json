@@ -1371,7 +1371,8 @@
             "command_pending": "Commande économique en cours",
             "charging": "Charge économique",
             "holding": "Maintien au repos économique",
-            "discharging": "Décharge économique"
+            "discharging": "Décharge économique",
+            "replanning": "Recalcul de l’intervalle actuel"
         }
     }
 }

@@ -42,6 +42,7 @@ public:
     Warp::Snapshot getWarpSnapshot() const;
     Storage::Snapshot getStorageSnapshot() const;
     Model::SystemState getNormalizedState() const;
+    Model::StorageState getStoragePlanningState() const;
     Constraints::ConstraintSet getConstraints() const;
     Policies::EvProtectionSnapshot getEvProtectionShadowSnapshot() const;
     uint64_t economicContextRevision() const;

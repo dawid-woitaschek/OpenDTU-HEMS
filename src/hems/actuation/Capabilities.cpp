@@ -27,6 +27,18 @@ bool planCommand(Profiles::Profile const& profile, Command const& command)
         operationKey(command.target, command.action), command.hasValue, command.value, plan);
 }
 
+bool describeOperation(Profiles::Profile const& profile, ControlTarget target, Action action, OperationInfo& output)
+{
+    for (uint8_t i = 0; i < profile.controlOperationCount; ++i) {
+        auto const& op = profile.controlOperations[i];
+        if (std::strcmp(op.key, operationKey(target, action))) { continue; }
+        output.action = action; output.hasInput = op.hasInput;
+        output.minimum = op.minimum; output.maximum = op.maximum; output.step = op.step;
+        std::memcpy(output.unit, op.unit, sizeof(output.unit));
+        return true;
+    }
+    return false;
+}
 ProfileInfo describeProfile(Profiles::Profile const* profile, uint32_t fingerprint)
 {
     ProfileInfo info;

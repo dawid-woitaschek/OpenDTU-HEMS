@@ -2,6 +2,7 @@
 #include <hems/economic/Dispatch.h>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 namespace Hems::Economic {
 namespace {
 bool busy(Actuation::MailboxState state)
@@ -21,30 +22,37 @@ bool fresh(Model::StorageState const& storage)
 } // namespace
 bool mapCommand(Context const& in, Actuation::Command& command)
 {
+    if (!in.profile || !in.profile->control) { return false; }
+    Actuation::OperationInfo const* power = nullptr;
+    bool stop = false;
+    auto action = in.plan.batteryW > 0 ? Actuation::Action::SetChargePowerW : Actuation::Action::SetDischargePowerW;
+    for (uint8_t i = 0; i < in.profile->operationCount; ++i) {
+        auto const& op = in.profile->operations[i];
+        if (op.action == action) { power = &op; }
+        if (op.action == Actuation::Action::Stop) { stop = true; }
+    }
+    return mapPowerCommand(in.plan, in.constraints, in.storage.socPct.value, power, stop, command);
+}
+bool mapPowerCommand(Optimizer::PlanView const& plan, Constraints::StorageConstraints const& constraints,
+    double soc, Actuation::OperationInfo const* operation, bool stopSupported, Actuation::Command& command)
+{
     using Actuation::Action;
     command = { ControlTarget::Storage, Action::Stop };
     command.automatic = true; command.origin = Actuation::Origin::Economic;
-    command.authority = in.plan.revision;
-    if (!in.profile || !in.profile->control) { return false; }
-    auto power = in.plan.batteryW;
+    command.authority = plan.revision;
+    auto power = plan.batteryW;
     if (power > 0) {
-        if (!in.constraints.chargeAllowed || in.storage.socPct.value >= in.plan.config.maxSoc) { power = 0; }
+        if (!constraints.chargeAllowed || soc >= plan.config.maxSoc) { power = 0; }
     } else if (power < 0) {
-        if (!in.constraints.dischargeAllowed || !in.plan.config.policies.dischargeAllowed
-                || in.storage.socPct.value <= in.plan.config.minSoc) { power = 0; }
+        if (!constraints.dischargeAllowed || !plan.config.policies.dischargeAllowed
+                || soc <= plan.config.minSoc) { power = 0; }
     }
     command.action = power > 0 ? Action::SetChargePowerW : power < 0 ? Action::SetDischargePowerW : Action::Stop;
-    auto find = [&](Action action) -> Actuation::OperationInfo const* {
-        for (uint8_t i = 0; i < in.profile->operationCount; ++i) {
-            if (in.profile->operations[i].action == action) { return &in.profile->operations[i]; }
-        }
-        return nullptr;
-    };
-    auto operation = find(command.action);
+    if (!power) { return stopSupported; }
     if (!operation) { return false; }
     if (power) {
-        double limit = power > 0 ? in.plan.config.maxChargeW : in.plan.config.maxDischargeW;
-        auto constraint = power > 0 ? in.constraints.maxChargePower : in.constraints.maxDischargePower;
+        double limit = power > 0 ? plan.config.maxChargeW : plan.config.maxDischargeW;
+        auto constraint = power > 0 ? constraints.maxChargePower : constraints.maxDischargePower;
         if (constraint.active) { limit = std::min(limit, std::max(0.0, constraint.valueW)); }
         double value = std::min({ std::abs(static_cast<double>(power)), limit, operation->maximum });
         if (operation->step > 0 && value >= operation->minimum) {
@@ -53,7 +61,7 @@ bool mapCommand(Context const& in, Actuation::Command& command)
         // Never round a sub-minimum request up beyond the plan/configured bound.
         if (value < operation->minimum || value <= 0) {
             command.action = Action::Stop;
-            return find(Action::Stop) != nullptr;
+            return stopSupported;
         }
         command.hasValue = true; command.value = value;
     }
@@ -64,11 +72,13 @@ Decision Dispatch::update(Context const& in)
     using Actuation::Origin;
     using Actuation::MailboxState;
     Decision decision;
-    if (_generation != in.providerGeneration) {
-        _generation = in.providerGeneration; _state.confirmed = false; _pendingId = 0;
-    }
+    bool generationChanged = _generation != in.providerGeneration;
+    _generation = in.providerGeneration;
     if (_pendingId && in.mailbox.id == _pendingId && !busy(in.mailbox.state)) {
         bool success = in.mailbox.state == MailboxState::Succeeded;
+        _state.lastState = in.mailbox.state;
+        _state.result = (in.mailbox.state == MailboxState::Succeeded || in.mailbox.state == MailboxState::Failed)
+            ? in.result : Actuation::CommandResult {};
         _state.confirmed = success && in.owner == Origin::Economic;
         if (in.mailbox.state == MailboxState::Failed) {
             ++_state.failures; _failurePoll = in.successfulPolls;
@@ -77,9 +87,12 @@ Decision Dispatch::update(Context const& in)
         } else if (success) { _state.failures = 0; }
         _pendingId = 0;
     }
+    if (generationChanged) { _state.confirmed = false; }
+    if (_pendingId && in.mailbox.id != _pendingId) { _pendingId = 0; _state.confirmed = false; }
     if (in.owner != Origin::Economic) { _state.confirmed = false; }
     if (_state.failures && in.now / 900 != _failureSlot) { _state.failures = 0; }
     _state.planRevision = in.plan.revision; _state.start = in.plan.start; _state.end = in.plan.end;
+    _state.cleanupPending = false;
     char const* blocked = nullptr;
     if (!in.plan.config.dispatchEnabled) { blocked = "disabled"; }
     else if (in.plan.paused) { blocked = "paused_manual"; }
@@ -90,16 +103,30 @@ Decision Dispatch::update(Context const& in)
     else if ((in.protectionOwned || in.owner == Origin::Protection) && in.plan.batteryW <= 0) { blocked = "blocked_protection"; }
     else if (in.plan.batteryW < 0 && !in.constraints.dischargeAllowed) { blocked = "blocked_protection"; }
     if (blocked) {
-        _state.state = blocked; _state.confirmed = false;
+        // A usable feed revision often computes the identical action. Retain the
+        // confirmed physical state for at most 10 s while replanning, without
+        // authorizing any old queued write or extending an expired interval.
+        Actuation::Command retained;
+        bool grace = _state.confirmed && in.owner == Origin::Economic && !in.protectionOwned && in.plan.inputsUsable
+            && in.mode == Mode::Active && in.permission && !in.plan.paused && in.plan.config.dispatchEnabled
+            && fresh(in.storage) && !std::strcmp(in.plan.reason, "energy_revision")
+            && in.now >= in.plan.start && in.now < in.plan.end
+            && mapCommand(in, retained) && same(_state.last, retained);
+        if (grace && !_waitingReplan) { _waitingReplan = true; _invalidSinceMs = in.nowMs; }
+        grace = grace && in.nowMs - _invalidSinceMs < 10000;
+        if (!grace) { _state.confirmed = false; _waitingReplan = false; }
+        _state.state = grace ? "replanning" : blocked;
+        _state.cleanupPending = grace;
         // Revocation is safe even before a command establishes ownership.
         decision.cancel = busy(in.mailbox.state) && in.mailbox.command.origin == Origin::Economic && in.mailbox.id != _revokedId;
         if (decision.cancel) { _revokedId = in.mailbox.id; }
         // Manual/protection ownership is never released by economics. Wait for
         // usable telemetry before making a best-effort semantic release.
         decision.cleanup = in.owner == Origin::Economic && in.cleanupReady
-            && !busy(in.mailbox.state) && !in.protectionOwned;
+            && !busy(in.mailbox.state) && !in.protectionOwned && !grace;
         return decision;
     }
+    _waitingReplan = false;
     if (!mapCommand(in, decision.command)) {
         _state.state = "unsupported_action"; _state.confirmed = false;
         decision.cleanup = in.owner == Origin::Economic && in.cleanupReady && !busy(in.mailbox.state) && !in.protectionOwned;
@@ -122,6 +149,8 @@ Decision Dispatch::update(Context const& in)
 void Dispatch::accepted(Actuation::Command const& command, uint32_t id, uint32_t nowMs)
 {
     _state.last = command; _state.commandId = _pendingId = id;
+    _state.lastState = Actuation::MailboxState::Pending;
+    _state.result = {};
     _state.confirmed = false; _lastAttemptMs = nowMs; _state.state = "command_pending";
 }
 } // namespace Hems::Economic

@@ -40,6 +40,12 @@ int main() {
     { Fixture f; f.confirmed(); for (int i = 0; i < 1000; ++i) assert(!f.tick().submit); f.in.plan.revision++; assert(!f.tick().submit); f.in.plan.batteryW = 539; assert(!f.tick().submit); }
     { Fixture f; f.confirmed(); f.in.now = f.in.plan.end; assert(!f.tick().submit && f.tick().cleanup); f.in.plan.start = f.in.now; f.in.plan.end += 900; f.in.plan.revision++; f.in.plan.batteryW = -500; assert(f.tick().submit); }
     { Fixture f; f.in.plan.valid = false; assert(!f.tick().submit); }
+    {
+        Fixture f; f.confirmed(); f.in.plan.valid = false; f.in.plan.inputsUsable = true; f.in.plan.reason = "energy_revision";
+        assert(!f.tick().cleanup); f.in.nowMs += 9000; assert(!f.tick().cleanup);
+        f.in.plan.valid = true; ++f.in.plan.revision; assert(!f.tick().submit);
+        f.in.plan.valid = false; assert(!f.tick().cleanup); f.in.nowMs += 10000; assert(f.tick().cleanup);
+    }
     { Fixture f; f.in.now = f.in.plan.start - 1; assert(!f.tick().submit); }
     { Fixture f; f.in.plan.paused = true; assert(!f.tick().submit); f.in.owner = Origin::Manual; assert(!f.tick().cleanup); f.in.plan.paused = false; assert(f.tick().submit); }
     { Fixture f; f.in.constraints.dischargeAllowed = false; f.in.plan.batteryW = -500; assert(!f.tick().submit); f.in.plan.batteryW = 500; assert(f.tick().submit); }
@@ -52,5 +58,15 @@ int main() {
     { Fixture f; f.in.plan.batteryW = 0; f.profile.operationCount = 2; assert(!f.tick().submit); }
     { Fixture f; f.in.storage.socPct.value = 90; assert(f.tick().command.action == Action::Stop); }
     { Fixture f; f.confirmed(); f.in.providerGeneration++; f.in.owner = Origin::None; assert(f.tick().submit); }
+    {
+        Fixture f;
+        for (uint32_t attempt = 1; attempt <= 3; ++attempt) {
+            auto d = f.tick(); assert(d.submit); f.dispatch.accepted(d.command, attempt, f.in.nowMs);
+            f.in.mailbox = { MailboxState::Failed, attempt, 1, d.command }; assert(f.tick().replan);
+            assert(!f.tick().submit); f.in.nowMs += 30000; ++f.in.successfulPolls; ++f.in.plan.revision;
+        }
+        assert(!f.tick().submit); f.in.now += 900; f.in.plan.start += 900; f.in.plan.end += 900;
+        assert(f.tick().submit); // Slot boundary permits a bounded new attempt, no permanent latch.
+    }
     std::cout << "Economic current-slot mapping, live gates, ownership, idempotence, pause, bounded retry and no-write storms passed; Dispatch=" << sizeof(Economic::Dispatch) << " bytes\n";
 }

@@ -127,10 +127,46 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  browser:
+    name: HEMS browser regressions
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install UI and isolated browser test dependencies
+        run: |
+          corepack enable
+          yarn --cwd webapp install --frozen-lockfile
+          npm install --prefix work/browser --no-package-lock playwright@1.64.1
+      - name: Exercise product and economic dispatch flows without hardware
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+        run: |
+          yarn --cwd webapp dev --host 127.0.0.1 > work/vite.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          export PLAYWRIGHT_MODULE="$GITHUB_WORKSPACE/work/browser/node_modules/playwright"
+          node test/test_hems_browser.mjs
+          node test/test_economic_browser.mjs
+      - name: Keep browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hems-browser-evidence
+          path: |
+            work/screenshots
+            work/vite.log
+
   publish_firmware_channel:
     name: Publish firmware update channel
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-    needs: build
+    needs: [build, browser]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -76,9 +76,12 @@ Native tests and CI validate software paths, not physical charging/discharging o
 
 ## Economic policy boundary
 
-Practical [storage/economic policies](HEMS_Policies.md) constrain the read-only optimizer.
-Opt-in [economic storage dispatch](HEMS_Economic_Dispatch.md) consumes only its valid current interval. They do not restrict explicit manual controls or create a command
-producer. Hardware safety and actionable EV Protection remain authoritative over
-manual discharge. Economic planning cannot override protection or manual actions.
-Economic dispatch uses this same semantic path with durable manual pause and explicit
-authenticated Resume; no implicit economic override timer exists.
+Practical [storage/economic policies](HEMS_Policies.md) constrain the read-only DP.
+The separate [economic dispatcher](HEMS_Economic_Dispatch.md) can consume its
+current interval only after explicit default-off opt-in, Active, Storage HEMS
+Control and every current plan/readiness/constraint gate. Manual storage commands
+persist a pause; authenticated explicit Resume requires fresh replanning. Economic
+idle uses semantic Stop, while cleanup Release relinquishes only economic
+ownership. Hardware safety and EV Protection remain authoritative. The same
+provider generation, depth-one mailbox, worker, profile plans and per-write
+semantic executor checks handle every command. No implicit override timer exists.

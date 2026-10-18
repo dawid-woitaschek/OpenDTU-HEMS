@@ -56,7 +56,7 @@ print('Shadow no-write architecture, authenticated optimizer API and verified pr
 # transport/register implementation or EVSE economic producer may appear here.
 for path in list((root / 'src/hems/economic').glob('*.cpp')) + list((root / 'include/hems/economic').glob('*.h')):
     source = path.read_text()
-    for forbidden in ('writeHoldingRegisters', 'RegisterIo', 'Modbus::', 'ControlTarget::Evse', 'setCurrent'):
+    for forbidden in ('writeHoldingRegisters', 'RegisterIo', 'Modbus::', 'ControlTarget::Evse', 'setCurrent', 'cheap', 'expensive', 'category'):
         assert forbidden not in source, (path, forbidden)
 controller = (root / 'src/hems/Controller.cpp').read_text()
 dispatch = controller[controller.index('void Controller::applyEconomic()'):controller.index('void Controller::serializeEconomic(')]

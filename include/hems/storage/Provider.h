@@ -25,6 +25,7 @@ public:
     bool controlCapable() const;
     void controlProfileId(char* buffer, size_t capacity) const;
     Actuation::ProfileInfo profileInfo() const;
+    bool operationInfo(Actuation::Action action, Actuation::OperationInfo& output) const;
     bool supportsCommand(Actuation::Command const& command) const;
     bool workerBusy() const;
     uint32_t generation() const;
@@ -62,6 +63,8 @@ private:
 
     static void workerEntry(void* context);
     void worker();
+    // Poll scratch must not remain on the command/authorization call stack.
+    __attribute__((noinline)) void processPoll();
     bool ensureWorkerLocked();
     bool commandAuthorized(uint32_t generation, Actuation::Command const& command) const;
     bool cleanupAuthorized(uint32_t token) const;

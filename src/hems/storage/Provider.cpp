@@ -129,6 +129,11 @@ bool Provider::supportsCommand(Actuation::Command const& command) const
     std::lock_guard<std::mutex> lock(_mutex);
     return _profile && Actuation::planCommand(*_profile, command);
 }
+bool Provider::operationInfo(Actuation::Action action, Actuation::OperationInfo& output) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _profile && Actuation::describeOperation(*_profile, ControlTarget::Storage, action, output);
+}
 
 uint32_t Provider::generation() const
 {
@@ -517,6 +522,68 @@ void Provider::processCleanup()
             attempts);
 }
 
+void Provider::processPoll()
+{
+    bool cleanupWork = false;
+    StorageConfig config;
+    std::shared_ptr<Profiles::Profile const> profile;
+    uint16_t port = 0;
+    uint8_t unit = 0;
+    uint32_t generation = 0;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!_busy) { return; }
+        cleanupWork = _cleanup.valid && _cleanupState == Actuation::CleanupState::Running;
+        if (!cleanupWork) {
+            if (!_enabled) { _busy = false; return; }
+            config = _config;
+            profile = _profile;
+            port = _port;
+            unit = _unit;
+            generation = _generation;
+        }
+    }
+
+    if (cleanupWork) {
+        processCleanup();
+        return;
+    }
+
+    Sample sample;
+    Modbus::Result result { Modbus::Error::Network };
+    if (profile && NetworkSettings.isConnected()) {
+        result = _client.open(config.Host, port, unit);
+        if (result) {
+            bool current;
+            {
+                std::lock_guard<std::mutex> lock(_mutex);
+                current = _enabled && generation == _generation;
+            }
+            if (current) { result = poll(_client, *profile, sample); }
+        }
+    }
+    _client.close();
+
+    bool available = false;
+    bool changedError = false;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _busy = false;
+        if (!_enabled || generation != _generation) { return; }
+        _lastPollMs = millis();
+        auto previous = _state.snapshot(millis());
+        _state.apply(sample, result, millis());
+        available = result && !previous.valid;
+        changedError = !result && (previous.error != result.error || previous.exception != result.exception);
+    }
+    if (available) {
+        ESP_LOGI(TAG, "Read-only storage telemetry available/recovered");
+    } else if (changedError) {
+        ESP_LOGW(TAG, "Read-only storage poll failed: %s (Modbus exception %u)",
+                Modbus::errorName(result.error), result.exception);
+    }
+}
+
 void Provider::worker()
 {
     for (;;) {
@@ -528,64 +595,7 @@ void Provider::worker()
             continue;
         }
 
-        bool cleanupWork = false;
-        StorageConfig config;
-        std::shared_ptr<Profiles::Profile const> profile;
-        uint16_t port = 0;
-        uint8_t unit = 0;
-        uint32_t generation = 0;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            if (!_busy) { continue; }
-            cleanupWork = _cleanup.valid && _cleanupState == Actuation::CleanupState::Running;
-            if (!cleanupWork) {
-                if (!_enabled) { _busy = false; continue; }
-                config = _config;
-                profile = _profile;
-                port = _port;
-                unit = _unit;
-                generation = _generation;
-            }
-        }
-
-        if (cleanupWork) {
-            processCleanup();
-            continue;
-        }
-
-        Sample sample;
-        Modbus::Result result { Modbus::Error::Network };
-        if (profile && NetworkSettings.isConnected()) {
-            result = _client.open(config.Host, port, unit);
-            if (result) {
-                bool current;
-                {
-                    std::lock_guard<std::mutex> lock(_mutex);
-                    current = _enabled && generation == _generation;
-                }
-                if (current) { result = poll(_client, *profile, sample); }
-            }
-        }
-        _client.close();
-
-        bool available = false;
-        bool changedError = false;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            _busy = false;
-            if (!_enabled || generation != _generation) { continue; }
-            _lastPollMs = millis();
-            auto previous = _state.snapshot(millis());
-            _state.apply(sample, result, millis());
-            available = result && !previous.valid;
-            changedError = !result && (previous.error != result.error || previous.exception != result.exception);
-        }
-        if (available) {
-            ESP_LOGI(TAG, "Read-only storage telemetry available/recovered");
-        } else if (changedError) {
-            ESP_LOGW(TAG, "Read-only storage poll failed: %s (Modbus exception %u)",
-                    Modbus::errorName(result.error), result.exception);
-        }
+        processPoll();
     }
 }
 

@@ -18,7 +18,7 @@ Inputs liveInputs()
     in.controlRevision = HemsController.economicContextRevision();
     in.tariffStatus = Energy::EnergyData.status(Energy::Domain::Tariff);
     in.forecastStatus = Energy::EnergyData.status(Energy::Domain::Forecast);
-    in.storage = HemsController.getNormalizedState().storage;
+    in.storage = HemsController.getStoragePlanningState();
     in.currentConstraints = HemsController.getEvProtectionShadowSnapshot().proposedConstraints.storage;
     auto constraints = HemsController.getConstraints().storage;
     in.currentConstraints.chargeAllowed = in.currentConstraints.chargeAllowed && constraints.chargeAllowed;
@@ -103,6 +103,7 @@ bool Service::resume()
 {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_config.dispatchEnabled || !_config.enabled) { return false; }
+    if (!_manualPaused) { return true; }
     if (!persistLocked(_config, false)) { _error = "resume_persist_failed"; return false; }
     _manualPaused = false; ++_generation; ++_planRevision; _result.reset();
     _error = nullptr;
@@ -117,7 +118,9 @@ void Service::invalidate(char const* reason)
 bool Service::requestRecalculate()
 {
     std::lock_guard<std::mutex> lock(_mutex); if (!_config.enabled) { return false; }
-    ++_generation; ++_planRevision; _result.reset(); _pending = true; _replanReason = "requested"; return true;
+    // An explicit recalculation does not revoke an unchanged, still valid
+    // interval. Live input changes revoke it independently in dispatchPlan().
+    _pending = true; _replanReason = "requested"; return true;
 }
 char const* Service::changedLocked(Inputs const& inputs, uint32_t revision) const
 {
@@ -182,6 +185,12 @@ PlanView Service::dispatchPlan() const
     std::lock_guard<std::mutex> lock(_mutex);
     PlanView view; view.config = _config; view.paused = _manualPaused;
     view.revision = _planRevision; view.energyRevision = revision;
+    view.inputsUsable = inputs.tariffStatus.fresh && inputs.tariffStatus.planningUsable && inputs.tariffStatus.currentCovered
+        && (!_result || !_result->plan.pvIncluded || (inputs.forecastStatus.fresh && inputs.forecastStatus.planningUsable));
+    if (_result && _result->plan.count) {
+        auto const& current = _result->plan.steps[0];
+        view.start = current.start; view.end = current.end; view.batteryW = current.batteryW;
+    }
     if (!_config.enabled) { view.reason = "planner_disabled"; return view; }
     if (auto reason = changedLocked(inputs, revision)) { view.reason = reason; return view; }
     if (!_result || !_result->plan.count) { return view; }

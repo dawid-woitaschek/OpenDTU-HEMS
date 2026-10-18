@@ -121,3 +121,22 @@ still links to a controller exposing only read-only methods.
 locale parity. The optional browser fixture saves and reloads policy permissions
 and a dated target on mobile; all intercepted traffic still asserts zero device
 commands. Socket/loopback tests require the environment's network permission.
+
+### Economic storage dispatch
+
+`test_economic_dispatch` exercises current-slot mapping, profile resolution, idle,
+authorization gates, idempotence, ownership, source-specific cleanup, next-slot
+transition and bounded retries. `test_economic_integration` runs the real optimizer,
+controller, providers, mailbox, semantic plans and executor on deterministic wire/
+filesystem/clock/task seams. It covers opt-in/default/Monitor/permission isolation,
+charge/discharge readback, tariff/PV revisions, significant SoC changes, no repeated
+DP/writes for unchanged inputs, durable manual pause/Resume/reboot, failed writes,
+mid-command policy revocation and preserving actual EV Protection ownership on
+economic disable. Existing control tests retain the explicit dispatch-off case.
+
+`test_control_surface.py` guards the semantic-only, storage-only runtime and
+authenticated Resume. Existing optimizer category-invariance, policy, TLS and
+configuration suites remain. `test_economic_browser.mjs` uses the same optional
+Playwright setup as the main browser suite, for opt-in, Monitor isolation, blocked
+states, manual pause and explicit Resume at 320/360/768/1440px. These are
+hardware-free fixtures; no physical battery or wallbox behavior is claimed.

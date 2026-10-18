@@ -1766,7 +1766,8 @@
             "command_pending": "Wirtschaftlicher Befehl wird ausgeführt",
             "charging": "Wirtschaftliches Laden",
             "holding": "Wirtschaftlicher Leerlauf",
-            "discharging": "Wirtschaftliches Entladen"
+            "discharging": "Wirtschaftliches Entladen",
+            "replanning": "Aktuelles Intervall wird neu geplant"
         }
     }
 }

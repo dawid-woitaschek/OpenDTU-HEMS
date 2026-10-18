@@ -7,7 +7,7 @@ struct PlanView {
     Config config;
     uint32_t revision = 0, energyRevision = 0, start = 0, end = 0;
     int32_t batteryW = 0;
-    bool paused = false, valid = false;
+    bool paused = false, valid = false, inputsUsable = false;
     char const* reason = "plan_unavailable";
 };
 } // namespace Hems::Optimizer

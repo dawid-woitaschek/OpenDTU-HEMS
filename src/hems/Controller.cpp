@@ -253,12 +253,14 @@ bool Controller::economicAuthorized(Actuation::Command const& command) const
             || plan.paused || !plan.valid || command.authority != plan.revision) { return false; }
     auto owner = _storage.owner();
     if ((_evProtectionOwned || owner == Actuation::Origin::Protection) && plan.batteryW <= 0) { return false; }
-    Economic::Context input; input.plan = plan; input.storage = getNormalizedState().storage;
-    input.constraints = getConstraints().storage;
-    if (plan.batteryW < 0 && !input.constraints.dischargeAllowed) { return false; }
-    auto profile = _storage.profileInfo(); input.profile = &profile;
+    auto constraints = getConstraints().storage;
+    if (plan.batteryW < 0 && !constraints.dischargeAllowed) { return false; }
+    Actuation::OperationInfo power, stop;
+    bool hasPower = _storage.operationInfo(plan.batteryW > 0 ? Actuation::Action::SetChargePowerW : Actuation::Action::SetDischargePowerW, power);
+    bool hasStop = _storage.operationInfo(Actuation::Action::Stop, stop);
     Actuation::Command desired;
-    return Economic::mapCommand(input, desired) && desired.action == command.action
+    return Economic::mapPowerCommand(plan, constraints, _storage.snapshot().sample.socPct.value, hasPower ? &power : nullptr, hasStop, desired)
+        && desired.action == command.action
         && desired.hasValue == command.hasValue && (!desired.hasValue || desired.value == command.value);
 }
 void Controller::applyEconomic()
@@ -266,7 +268,7 @@ void Controller::applyEconomic()
     Economic::Context input;
     input.plan = Optimizer::ShadowOptimizer.dispatchPlan();
     input.mode = getMode(); input.permission = controlPermissionGranted(ControlTarget::Storage);
-    input.storage = getNormalizedState().storage; input.constraints = getConstraints().storage;
+    input.storage = getStoragePlanningState(); input.constraints = getConstraints().storage;
     auto telemetry = _storage.snapshot();
     input.successfulPolls = telemetry.successfulPolls;
     input.cleanupReady = telemetry.reachable && telemetry.valid && !telemetry.stale;
@@ -274,7 +276,7 @@ void Controller::applyEconomic()
     auto profile = _storage.profileInfo(); input.profile = &profile;
     input.providerGeneration = _storage.generation(); input.owner = _storage.owner();
     input.protectionOwned = _evProtectionOwned;
-    input.mailbox = _storage.commandSnapshot();
+    input.mailbox = _storage.commandSnapshot(); input.result = _storage.commandResult();
     input.now = time(nullptr); input.nowMs = millis();
     std::lock_guard<std::mutex> lock(_economicMutex);
     auto decision = _economic.update(input);
@@ -296,6 +298,7 @@ void Controller::serializeEconomic(JsonObject output) const
     auto state = _economic.snapshot();
     output["enabled"] = plan.config.dispatchEnabled; output["paused_manual"] = plan.paused;
     output["global_mode"] = modeName(getMode()); output["storage_permission"] = controlPermissionGranted(ControlTarget::Storage);
+    output["pause_reason"] = plan.paused ? "manual_control" : nullptr;
     output["state"] = !plan.config.dispatchEnabled ? "disabled" : plan.paused ? "paused_manual" : state.state;
     output["owner"] = Actuation::originName(_storage.owner());
     output["plan_revision"] = plan.revision; output["energy_revision"] = plan.energyRevision;
@@ -307,12 +310,18 @@ void Controller::serializeEconomic(JsonObject output) const
     output["last_action"] = Actuation::actionName(state.last.action);
     output["last_power_w"] = state.last.hasValue ? state.last.value : 0;
     output["command_id"] = state.commandId; output["confirmed"] = state.confirmed;
+    output["last_command_plan_revision"] = state.last.authority;
+    output["command_completed_ms"] = state.result.completedMs;
     output["failures"] = state.failures; output["provider_generation"] = _storage.generation();
     auto cleanup = _storage.cleanupSnapshot();
     output["cleanup_state"] = Actuation::cleanupStateName(cleanup.state);
-    output["cleanup_pending"] = cleanup.retainedContext;
-    output["command_result"] = Actuation::mailboxStateName(_storage.commandSnapshot().state);
-    output["command_error"] = Actuation::commandErrorName(_storage.commandResult().error);
+    output["cleanup_pending"] = cleanup.retainedContext || state.cleanupPending;
+    output["command_result"] = Actuation::mailboxStateName(state.lastState);
+    output["command_error"] = Actuation::commandErrorName(state.result.error);
+    output["execution_error"] = Actuation::executionErrorName(state.result.execution.error);
+    output["transport_error"] = Modbus::errorName(state.result.execution.transport.error);
+    output["readback_verified"] = state.result.execution.readbackVerified;
+    output["modbus_exception"] = state.result.execution.transport.exception;
 }
 
 bool Controller::cancelPendingActuation(ControlTarget target, uint32_t id)
@@ -366,6 +375,10 @@ Model::SystemState Controller::getNormalizedState() const
     auto result = Model::normalize(_warp.snapshot(), _storage.snapshot());
     Model::normalizeSources(result);
     return result;
+}
+Model::StorageState Controller::getStoragePlanningState() const
+{
+    return Model::normalizeStorage(_storage.snapshot());
 }
 
 Constraints::ConstraintSet Controller::getConstraints() const

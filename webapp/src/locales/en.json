@@ -1770,7 +1770,8 @@
             "command_pending": "Economic command in progress",
             "charging": "Charging economically",
             "holding": "Holding idle economically",
-            "discharging": "Discharging economically"
+            "discharging": "Discharging economically",
+            "replanning": "Replanning the current interval"
         }
     }
 }

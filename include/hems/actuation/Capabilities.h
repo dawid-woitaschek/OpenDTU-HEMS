@@ -22,5 +22,6 @@ struct ProfileInfo {
 char const* operationKey(ControlTarget target, Action action);
 bool planCommand(Profiles::Profile const& profile, Command const& command);
 ProfileInfo describeProfile(Profiles::Profile const* profile, uint32_t fingerprint = 0);
+bool describeOperation(Profiles::Profile const& profile, ControlTarget target, Action action, OperationInfo& output);
 uint32_t profileFingerprint(Profiles::Profile const& profile);
 } // namespace Hems::Actuation
