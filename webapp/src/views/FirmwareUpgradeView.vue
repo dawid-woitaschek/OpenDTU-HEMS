@@ -46,20 +46,22 @@
         </CardElement>
 
         <template v-else-if="!loading">
-            <CardElement
-                v-if="!uploading"
-                :text="$t('firmwareupgrade.RepositoryUpdate')"
-                textVariant="text-bg-primary"
-            >
+            <CardElement v-if="!uploading" :text="$t('firmwareupgrade.RepositoryUpdate')" textVariant="text-bg-primary">
                 <div class="text-start">
                     <h6>{{ $t('firmwareupgrade.InstalledFirmware') }}</h6>
                     <dl class="row mb-0">
                         <dt class="col-sm-4">{{ $t('firmwareupgrade.Branch') }}</dt>
-                        <dd class="col-sm-8"><code>{{ firmwareStatus.git_branch }}</code></dd>
+                        <dd class="col-sm-8">
+                            <code>{{ firmwareStatus.git_branch }}</code>
+                        </dd>
                         <dt class="col-sm-4">{{ $t('firmwareupgrade.Commit') }}</dt>
-                        <dd class="col-sm-8"><code>{{ shortSha(firmwareStatus.git_sha) }}</code></dd>
+                        <dd class="col-sm-8">
+                            <code>{{ shortSha(firmwareStatus.git_sha) }}</code>
+                        </dd>
                         <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildTarget') }}</dt>
-                        <dd class="col-sm-8"><code>{{ firmwareStatus.pioenv }}</code></dd>
+                        <dd class="col-sm-8">
+                            <code>{{ firmwareStatus.pioenv }}</code>
+                        </dd>
                         <dt class="col-sm-4">{{ $t('firmwareupgrade.UpdateChannel') }}</dt>
                         <dd class="col-sm-8">
                             <code>{{ firmwareStatus.update_channel || '—' }}</code>
@@ -84,8 +86,8 @@
                                 @keyup.enter="checkRemoteUpdate"
                             />
                             <div class="form-text">
-                                Kanal direkt wechseln, z. B. <code>hems-next</code>, <code>hems</code> oder
-                                einen temporären PR-Kanal wie <code>pr-20</code>.
+                                Kanal direkt wechseln, z. B. <code>hems-next</code>, <code>hems</code> oder einen
+                                temporären PR-Kanal wie <code>pr-20</code>.
                             </div>
                         </div>
                         <div class="col-lg-4 d-grid">
@@ -119,11 +121,17 @@
                         <h6>{{ $t('firmwareupgrade.AvailableFirmware') }}</h6>
                         <dl class="row mb-3">
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.UpdateChannel') }}</dt>
-                            <dd class="col-sm-8"><code>{{ updateManifest.channel }}</code></dd>
+                            <dd class="col-sm-8">
+                                <code>{{ updateManifest.channel }}</code>
+                            </dd>
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.Branch') }}</dt>
-                            <dd class="col-sm-8"><code>{{ updateManifest.branch }}</code></dd>
+                            <dd class="col-sm-8">
+                                <code>{{ updateManifest.branch }}</code>
+                            </dd>
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.Commit') }}</dt>
-                            <dd class="col-sm-8"><code>{{ shortSha(updateManifest.commit) }}</code></dd>
+                            <dd class="col-sm-8">
+                                <code>{{ shortSha(updateManifest.commit) }}</code>
+                            </dd>
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildTarget') }}</dt>
                             <dd class="col-sm-8">
                                 <code>{{ firmwareStatus.pioenv }}</code>
@@ -459,7 +467,8 @@ export default defineComponent({
             try {
                 const response = await fetch(this.manifestUrl(), { cache: 'no-store' });
                 if (!response.ok) {
-                    if (response.status === 404) throw new Error(this.$t('firmwareupgrade.ChannelNotPublished') as string);
+                    if (response.status === 404)
+                        throw new Error(this.$t('firmwareupgrade.ChannelNotPublished') as string);
                     throw new Error(this.$t('firmwareupgrade.UpdateCheckFailed') as string);
                 }
                 const manifest = (await response.json()) as unknown;
@@ -512,7 +521,9 @@ export default defineComponent({
                 this.remoteUpdating = false;
                 this.remoteStatus = '';
                 this.OTAError =
-                    error instanceof Error ? error.message : (this.$t('firmwareupgrade.RemoteDownloadFailed') as string);
+                    error instanceof Error
+                        ? error.message
+                        : (this.$t('firmwareupgrade.RemoteDownloadFailed') as string);
             }
         },
         getFirmwareStatus() {

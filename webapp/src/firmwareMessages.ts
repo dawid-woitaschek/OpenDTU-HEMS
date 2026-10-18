@@ -9,7 +9,8 @@ export const firmwareSupplementMessages = {
             BuildTarget: 'Build target',
             UpdateChannel: 'Update channel',
             Published: 'Published',
-            NoUpdateChannel: 'This firmware was not built from a published update channel. Use the manual installer below.',
+            NoUpdateChannel:
+                'This firmware was not built from a published update channel. Use the manual installer below.',
             ChannelNotPublished: 'No published firmware snapshot is available for this update channel yet.',
             UpdateCheckFailed: 'The firmware update channel could not be checked.',
             ManifestInvalid: 'The published firmware manifest is invalid.',
@@ -22,7 +23,8 @@ export const firmwareSupplementMessages = {
             IntegrityCheckFailed: 'The downloaded firmware did not pass the integrity check.',
             RemoteDownloadFailed: 'The firmware image could not be downloaded.',
             ManualInstall: 'Install firmware manually',
-            ManualInstallHint: 'Use this fallback to upload a local OTA image. Factory images remain blocked for OTA updates.',
+            ManualInstallHint:
+                'Use this fallback to upload a local OTA image. Factory images remain blocked for OTA updates.',
             RetryCheck: 'Check again',
         },
     },
@@ -36,7 +38,8 @@ export const firmwareSupplementMessages = {
             BuildTarget: 'Build-Target',
             UpdateChannel: 'Update-Kanal',
             Published: 'Veröffentlicht',
-            NoUpdateChannel: 'Diese Firmware wurde nicht aus einem veröffentlichten Update-Kanal gebaut. Nutze unten die manuelle Installation.',
+            NoUpdateChannel:
+                'Diese Firmware wurde nicht aus einem veröffentlichten Update-Kanal gebaut. Nutze unten die manuelle Installation.',
             ChannelNotPublished: 'Für diesen Update-Kanal wurde noch kein Firmware-Snapshot veröffentlicht.',
             UpdateCheckFailed: 'Der Firmware-Update-Kanal konnte nicht geprüft werden.',
             ManifestInvalid: 'Das veröffentlichte Firmware-Manifest ist ungültig.',
@@ -63,7 +66,8 @@ export const firmwareSupplementMessages = {
             BuildTarget: 'Cible de build',
             UpdateChannel: 'Canal de mise à jour',
             Published: 'Publié',
-            NoUpdateChannel: 'Ce firmware ne provient pas d’un canal de mise à jour publié. Utilisez l’installation manuelle ci-dessous.',
+            NoUpdateChannel:
+                'Ce firmware ne provient pas d’un canal de mise à jour publié. Utilisez l’installation manuelle ci-dessous.',
             ChannelNotPublished: 'Aucun snapshot de firmware n’est encore publié pour ce canal.',
             UpdateCheckFailed: 'Le canal de mise à jour du firmware n’a pas pu être vérifié.',
             ManifestInvalid: 'Le manifeste de firmware publié est invalide.',
@@ -76,7 +80,8 @@ export const firmwareSupplementMessages = {
             IntegrityCheckFailed: 'Le firmware téléchargé n’a pas passé le contrôle d’intégrité.',
             RemoteDownloadFailed: 'L’image firmware n’a pas pu être téléchargée.',
             ManualInstall: 'Installer le firmware manuellement',
-            ManualInstallHint: 'Solution de secours pour téléverser une image OTA locale. Les images factory restent interdites en OTA.',
+            ManualInstallHint:
+                'Solution de secours pour téléverser une image OTA locale. Les images factory restent interdites en OTA.',
             RetryCheck: 'Vérifier à nouveau',
         },
     },

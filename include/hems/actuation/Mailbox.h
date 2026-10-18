@@ -21,6 +21,7 @@ struct Command {
     Action action = Action::Stop;
     bool hasValue = false;
     double value = 0;
+    bool automatic = false;
 };
 
 enum class MailboxState : uint8_t {

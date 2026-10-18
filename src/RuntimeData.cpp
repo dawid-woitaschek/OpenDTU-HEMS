@@ -23,6 +23,7 @@
 #include <esp_log.h>
 #include <ArduinoJson.h>
 #include "RuntimeData.h"
+#include <RuntimeDiagnostics.h>
 
 
 #undef TAG
@@ -102,6 +103,7 @@ bool RuntimeClass::write(uint16_t const freezeMinutes)
 
     } // mutex is automatically released when lock goes out of this scope
 
+    Diagnostics::Scope activity(Diagnostics::Component::Runtime, Diagnostics::Operation::Write);
     // prepare the JSON document and store the runtime data in it is done outside the
     // mutex protection to minimize the time the mutex is locked.
     JsonDocument doc;

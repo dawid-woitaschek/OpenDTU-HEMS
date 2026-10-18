@@ -4,6 +4,7 @@
 #include <Configuration.h>
 #include <defaults.h>
 #include <hems/Controller.h>
+#include <hems/actuation/Capabilities.h>
 #include <hems/evse/SettingsStore.h>
 #include <hems/evse/Telemetry.h>
 #include <hems/profiles/FlashStore.h>
@@ -168,7 +169,12 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
         o["license"] = static_cast<char const*>(p->license);
         o["telemetry_count"] = p->entryCount;
         o["control_metadata"] = hasControl(*p);
-        o["read_only"] = !hasControl(*p);
+        auto info = Hems::Actuation::describeProfile(p.get());
+        o["read_only"] = !info.control;
+        o["control_supported"] = info.control;
+        o["control_reason"] = info.reason;
+        o["identity_metadata"] = info.identity;
+        o["recovery_metadata"] = info.recovery;
         auto capabilities = o["capabilities"].to<JsonArray>();
         if (Hems::Storage::supportsProfile(*p)) { capabilities.add("storage"); }
         if (Hems::Evse::supportsProfile(*p)) { capabilities.add("evse"); }

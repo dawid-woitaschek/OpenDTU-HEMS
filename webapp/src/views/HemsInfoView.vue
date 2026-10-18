@@ -1,547 +1,229 @@
 <template>
-    <BasePage :title="$t('hems.Info')" :isLoading="dataLoading" :show-reload="true" @reload="getStatus">
-        <div v-if="fetchFailed" class="alert alert-warning" role="alert">{{ $t('hems.StatusUnavailable') }}</div>
-        <CardElement :text="$t('hems.Status')" textVariant="text-bg-primary" table>
-            <div class="table-responsive">
-                <table class="table table-hover table-condensed">
-                    <tbody v-if="hemsStatus.warp">
-                        <tr>
-                            <th>{{ $t('hems.State') }}</th>
-                            <td>{{ $t('hems.' + hemsStatus.state) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Decision') }}</th>
-                            <td>{{ $t('hems.' + hemsStatus.decision) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.ExternalDevices') }}</th>
-                            <td>{{ hemsStatus.external_devices || $t('hems.NoneConfigured') }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </CardElement>
-
-        <CardElement
-            v-if="hemsStatus.normalized"
-            :text="$t('hems.NormalizedState')"
-            textVariant="text-bg-primary"
-            table
-            add-space
-        >
-            <div class="alert alert-info m-3" role="alert">{{ $t('hems.NormalizedHint') }}</div>
-            <div class="table-responsive">
-                <table class="table table-hover table-condensed">
-                    <tbody>
-                        <tr>
-                            <th>{{ $t('hems.GridPower') }}</th>
-                            <td>
-                                {{ signalNumberText(hemsStatus.normalized.grid.power_w, 'W') }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.grid.power_w)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.grid.power_w) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.PvPower') }}</th>
-                            <td>
-                                {{ signalNumberText(hemsStatus.normalized.pv.power_w, 'W') }}
-                                <span class="badge ms-2" :class="signalQualityClass(hemsStatus.normalized.pv.power_w)">
-                                    {{ signalQualityText(hemsStatus.normalized.pv.power_w) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.StorageSoc') }}</th>
-                            <td>
-                                {{ signalNumberText(hemsStatus.normalized.storage.soc_pct, '%') }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.storage.soc_pct)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.storage.soc_pct) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.AcPower') }}</th>
-                            <td>
-                                {{ signalNumberText(hemsStatus.normalized.storage.ac_power_w, 'W') }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.storage.ac_power_w)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.storage.ac_power_w) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.Charging') }}</th>
-                            <td>
-                                {{ signalBooleanText(hemsStatus.normalized.storage.charging) }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.storage.charging)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.storage.charging) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.Discharging') }}</th>
-                            <td>
-                                {{ signalBooleanText(hemsStatus.normalized.storage.discharging) }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.storage.discharging)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.storage.discharging) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.EvseVehicle') }}</th>
-                            <td>
-                                {{ signalBooleanText(hemsStatus.normalized.evse.vehicle_connected) }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.evse.vehicle_connected)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.evse.vehicle_connected) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Charging') }}</th>
-                            <td>
-                                {{ signalBooleanText(hemsStatus.normalized.evse.charging) }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.evse.charging)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.evse.charging) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Power') }}</th>
-                            <td>
-                                {{ signalNumberText(hemsStatus.normalized.evse.power_w, 'W') }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.evse.power_w)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.evse.power_w) }}
-                                </span>
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.AllowedCurrent') }}</th>
-                            <td>
-                                {{ signalNumberText(hemsStatus.normalized.evse.allowed_current_a, 'A') }}
-                                <span
-                                    class="badge ms-2"
-                                    :class="signalQualityClass(hemsStatus.normalized.evse.allowed_current_a)"
-                                >
-                                    {{ signalQualityText(hemsStatus.normalized.evse.allowed_current_a) }}
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </CardElement>
-
-        <CardElement
-            v-if="hemsStatus.constraints"
-            :text="$t('hems.Constraints')"
-            textVariant="text-bg-primary"
-            table
-            add-space
-        >
-            <div class="alert alert-info m-3" role="alert">{{ $t('hems.ConstraintsHint') }}</div>
-            <div class="table-responsive">
-                <table class="table table-hover table-condensed">
-                    <tbody>
-                        <tr>
-                            <th>{{ $t('hems.StorageChargeAllowed') }}</th>
-                            <td>{{ booleanText(hemsStatus.constraints.storage.charge_allowed) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.StorageDischargeAllowed') }}</th>
-                            <td>{{ booleanText(hemsStatus.constraints.storage.discharge_allowed) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.MaxChargePower') }}</th>
-                            <td>{{ limitText(hemsStatus.constraints.storage.max_charge_power) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.MaxDischargePower') }}</th>
-                            <td>{{ limitText(hemsStatus.constraints.storage.max_discharge_power) }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </CardElement>
-
-        <CardElement v-if="hemsStatus.warp" :text="$t('hems.Warp')" textVariant="text-bg-primary" table add-space>
-            <div class="alert alert-info m-3" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
-            <div class="table-responsive">
-                <table class="table table-hover table-condensed">
-                    <tbody>
-                        <tr>
-                            <th>{{ $t('hems.Status') }}</th>
-                            <td>{{ $t('hems.' + (fetchFailed ? 'Unknown' : hemsStatus.warp.status)) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Vehicle') }}</th>
-                            <td>{{ booleanText(hemsStatus.warp.vehicle_connected) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Charging') }}</th>
-                            <td>{{ booleanText(hemsStatus.warp.charging) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.ChargingState') }}</th>
-                            <td>{{ chargingStateText() }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Power') }}</th>
-                            <td>{{ numberText(hemsStatus.warp.power_w, 'W') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.AllowedCurrent') }}</th>
-                            <td>{{ numberText(hemsStatus.warp.allowed_current_a, 'A') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.SessionEnergy') }}</th>
-                            <td>{{ numberText(hemsStatus.warp.session_energy_kwh, 'kWh') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.MeterAvailable') }}</th>
-                            <td>{{ booleanText(hemsStatus.warp.meter_available) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.DataAge') }}</th>
-                            <td>
-                                {{
-                                    numberText(
-                                        hemsStatus.warp.age_ms === null ? null : hemsStatus.warp.age_ms / 1000,
-                                        's'
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.LastSuccess') }}</th>
-                            <td>
-                                {{
-                                    numberText(
-                                        hemsStatus.warp.last_success_ms === null
-                                            ? null
-                                            : hemsStatus.warp.last_success_ms / 1000,
-                                        's'
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.LastError') }}</th>
-                            <td>
-                                {{ $t('hems.Errors.' + hemsStatus.warp.error)
-                                }}<span v-if="hemsStatus.warp.modbus_exception">
-                                    ({{ hemsStatus.warp.modbus_exception }})</span
-                                >
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.PollCounts') }}</th>
-                            <td>{{ hemsStatus.warp.successful_polls }} / {{ hemsStatus.warp.failed_polls }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </CardElement>
-
-        <CardElement
-            v-if="hemsStatus.storage"
-            :text="$t('storage.Title')"
-            textVariant="text-bg-primary"
-            table
-            add-space
-        >
-            <div class="alert alert-info m-3" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
-            <div class="table-responsive">
-                <table class="table table-hover table-condensed">
-                    <tbody>
-                        <tr>
-                            <th>{{ $t('hems.Status') }}</th>
-                            <td>{{ $t('hems.' + (fetchFailed ? 'Unknown' : hemsStatus.storage.status)) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.Profile') }}</th>
-                            <td>{{ hemsStatus.storage.profile || $t('hems.Unknown') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.Host') }}</th>
-                            <td>{{ hemsStatus.storage.host || $t('hems.Unknown') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.ModbusEndpoint') }}</th>
-                            <td>{{ endpointText() }}</td>
-                        </tr>
-                        <tr>
-                            <th>SoC</th>
-                            <td>{{ numberText(hemsStatus.storage.soc_pct, '%') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.AcPower') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.ac_power_w, 'W') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.DcPower') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.dc_power_w, 'W') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.BatteryVoltage') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.battery_voltage_v, 'V') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.BatteryCurrent') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.battery_current_a, 'A') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.Temperature') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.temperature_c, '°C') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.Charging') }}</th>
-                            <td>{{ booleanText(hemsStatus.storage.charging) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.Discharging') }}</th>
-                            <td>{{ booleanText(hemsStatus.storage.discharging) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.ChargeEnergyTotal') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.charge_energy_total_kwh, 'kWh') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.DischargeEnergyTotal') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.discharge_energy_total_kwh, 'kWh') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.OperatingState') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.operating_state, '') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.FaultCode') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.fault_code, '') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.AlarmCode') }}</th>
-                            <td>{{ numberText(hemsStatus.storage.alarm_code, '') }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.FaultActive') }}</th>
-                            <td>{{ booleanText(hemsStatus.storage.fault_active) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('storage.AlarmActive') }}</th>
-                            <td>{{ booleanText(hemsStatus.storage.alarm_active) }}</td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.DataAge') }}</th>
-                            <td>
-                                {{
-                                    numberText(
-                                        hemsStatus.storage.age_ms === null ? null : hemsStatus.storage.age_ms / 1000,
-                                        's'
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.LastSuccess') }}</th>
-                            <td>
-                                {{
-                                    numberText(
-                                        hemsStatus.storage.last_success_ms === null
-                                            ? null
-                                            : hemsStatus.storage.last_success_ms / 1000,
-                                        's'
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.LastError') }}</th>
-                            <td>
-                                {{ $t('hems.Errors.' + hemsStatus.storage.error)
-                                }}<span v-if="hemsStatus.storage.modbus_exception">
-                                    ({{ hemsStatus.storage.modbus_exception }})</span
-                                >
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>{{ $t('hems.PollCounts') }}</th>
-                            <td>{{ hemsStatus.storage.successful_polls }} / {{ hemsStatus.storage.failed_polls }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </CardElement>
-        <CardElement v-if="hemsStatus.actuation" :text="$t('hems.Recovery')" textVariant="text-bg-primary" add-space>
-            <div class="p-3">
-                <p>{{ $t('hems.RecoveryHint') }}</p>
-                <div v-if="hemsStatus.validation" class="alert alert-warning">
-                    {{ $t('hems.ValidationWarning') }}
-                    {{ hemsStatus.validation.state }} · {{ Math.ceil(hemsStatus.validation.remaining_ms / 1000) }} s
+    <BasePage :title="$t('hemsUi.overviewTitle')" :isLoading="loading" show-reload @reload="load">
+        <HemsNav />
+        <div v-if="offline" class="alert alert-warning" role="alert">{{ $t('hems.StatusUnavailable') }}</div>
+        <template v-if="status">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <div>
+                    <span
+                        class="badge fs-6 me-2"
+                        :class="
+                            offline
+                                ? 'text-bg-secondary'
+                                : status.state === 'Active'
+                                  ? 'text-bg-primary'
+                                  : 'text-bg-secondary'
+                        "
+                        >{{ offline ? $t('hems.Unknown') : $t('hems.' + status.state) }}</span
+                    >
+                    <span :class="issues ? 'text-warning-emphasis' : 'text-body-secondary'">{{
+                        $t(
+                            offline
+                                ? 'hemsUi.connectionLost'
+                                : issues
+                                  ? 'hemsUi.needsAttention'
+                                  : 'hemsUi.devicesHealthy'
+                        )
+                    }}</span>
                 </div>
-                <div v-for="{ target, name } in actuationTargets" :key="name" class="mb-3">
-                    <strong>{{ name }}</strong>
-                    <div>{{ $t('hems.ReadinessBlockers') }}: {{ target.blockers.join(', ') || '—' }}</div>
-                    <div v-if="target.validation">
-                        {{ $t('hems.ValidationBlockers') }}: {{ target.validation.blockers.join(', ') || '—' }}
-                    </div>
-                    <template v-if="target.recovery">
-                        <div :class="{ 'text-danger': target.recovery.blocked }">
-                            {{ target.recovery.state }} / {{ target.recovery.reason }}
+                <RouterLink to="/hems/settings" class="btn btn-outline-primary btn-sm">{{
+                    $t('hemsUi.settings')
+                }}</RouterLink>
+            </div>
+            <div class="row g-3">
+                <div v-for="card in cards" :key="card.name" class="col-6 col-xl-3">
+                    <section class="card h-100">
+                        <div class="card-body">
+                            <h2 class="h6 text-body-secondary d-flex align-items-center gap-2">
+                                <component :is="card.icon" />{{ $t('hemsUi.' + card.name) }}
+                            </h2>
+                            <div class="fs-2 fw-semibold lh-sm my-2">{{ card.value }}</div>
+                            <div class="fw-medium">{{ $t('hemsUi.' + card.state) }}</div>
+                            <div v-if="card.detail" class="small text-body-secondary mt-1">{{ card.detail }}</div>
+                            <div v-if="card.health" class="small text-warning-emphasis mt-2">
+                                {{ $t('hemsUi.' + card.health) }}
+                            </div>
                         </div>
-                        <div>
-                            {{ $t('hems.RecoveryJournal') }}: {{ booleanText(target.recovery.journal_present) }} ·
-                            {{ $t('hems.RecoveryAutomatic') }}: {{ booleanText(target.recovery.automatic_supported) }} ·
-                            {{ $t('hems.RecoveryIdentity') }}: {{ booleanText(target.recovery.identity_available) }}
-                        </div>
-                        <div>
-                            {{ $t('hems.RecoveryAttempts') }}: {{ target.recovery.attempts }} ·
-                            {{ $t('hems.RecoveryRetry') }}: {{ Math.ceil(target.recovery.retry_in_ms / 1000) }} s
-                        </div>
-                        <div>
-                            {{ target.recovery.last_stage }} / {{ target.recovery.last_error }} /
-                            {{ target.recovery.execution_error }} / {{ target.recovery.transport_error }}
-                        </div>
-                    </template>
-                    <div>
-                        {{ $t('hems.RecoveryCleanup') }}: {{ target.cleanup.state }} / {{ target.cleanup.last_error }}
-                    </div>
-                    <div>
-                        {{ $t('hems.RecoveryCommand') }}: {{ target.command.state }} /
-                        {{ target.command.action || '—' }} / {{ target.command.last_stage }} /
-                        {{ target.command.last_error }} / {{ target.command.execution_error }}
-                    </div>
+                    </section>
                 </div>
             </div>
-        </CardElement>
+            <CardElement :text="$t('hemsUi.automation')" textVariant="text-bg-primary" add-space>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <h2 class="h6">{{ $t('hemsUi.evProtection') }}</h2>
+                        <div class="fw-semibold">{{ $t('hemsUi.' + protection) }}</div>
+                        <p
+                            v-if="!offline && status.shadow.ev_protection.state === 'waiting'"
+                            class="small text-body-secondary mb-0"
+                        >
+                            {{ $t('hemsUi.protectionWaiting') }}
+                        </p>
+                        <p
+                            v-else-if="!offline && !status.shadow.ev_protection.charging_known"
+                            class="small text-body-secondary mb-0"
+                        >
+                            {{ $t('hemsUi.evStateUnknown') }}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="row mb-0">
+                            <dt class="col-6 fw-normal">{{ $t('hemsUi.storagePermission') }}</dt>
+                            <dd class="col-6">{{ permission('storage') }}</dd>
+                            <dt class="col-6 fw-normal">{{ $t('hemsUi.evsePermission') }}</dt>
+                            <dd class="col-6">{{ permission('evse') }}</dd>
+                        </dl>
+                    </div>
+                </div>
+                <p class="small text-body-secondary mb-0 mt-3">{{ $t('hemsUi.modeSummary' + status.state) }}</p>
+            </CardElement>
+        </template>
+        <HemsEnergyPanel view="overview" @health="providerIssue = $event" />
+        <HemsOptimizerPanel view="overview" />
     </BasePage>
 </template>
-
-<script lang="ts">
+<script setup lang="ts">
+import { computed, getCurrentInstance, markRaw, onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
+import { BIconPlug, BIconSun, BIconBatteryHalf, BIconEvStation } from 'bootstrap-icons-vue';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
-import type { HemsActuationTarget, HemsPowerLimit, HemsQuality, HemsSignal, HemsStatus } from '@/types/HemsStatus';
+import HemsNav from '@/components/hems/HemsNav.vue';
+import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
+import HemsOptimizerPanel from '@/components/HemsOptimizerPanel.vue';
+import type { HemsStatus, HemsSignal } from '@/types/HemsStatus';
+import { signalValue } from '@/utils/hemsPresentation';
 import { authHeader, handleResponse } from '@/utils/authentication';
-import { defineComponent } from 'vue';
-
-export default defineComponent({
-    components: { BasePage, CardElement },
-    data() {
-        return {
-            dataLoading: true,
-            hemsStatus: {} as HemsStatus,
-            timer: undefined as ReturnType<typeof setInterval> | undefined,
-            fetching: false,
-            fetchFailed: false,
-        };
-    },
-    created() {
-        this.getStatus();
-        this.timer = setInterval(() => this.getStatus(), 3000);
-    },
-    beforeUnmount() {
-        clearInterval(this.timer);
-    },
-    computed: {
-        actuationTargets(): { name: string; target: HemsActuationTarget }[] {
-            const actuation = this.hemsStatus.actuation;
-            return actuation
-                ? [
-                      { name: 'evse', target: actuation.evse },
-                      { name: 'storage', target: actuation.storage },
-                  ]
-                : [];
+const { t, locale } = useI18n();
+const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
+const router = useRouter();
+const status = ref<HemsStatus>(),
+    loading = ref(true),
+    offline = ref(false);
+const icons = [BIconPlug, BIconSun, BIconBatteryHalf, BIconEvStation].map(markRaw);
+const val = <T,>(signal?: HemsSignal<T>) => signalValue(signal, offline.value);
+const number = (value: number | null, unit: string) =>
+    value === null ? '—' : `${value.toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${unit}`;
+const power = (value: number | null) =>
+    value === null
+        ? '—'
+        : number(
+              Math.abs(value) >= 1000 ? Math.abs(value) / 1000 : Math.abs(value),
+              Math.abs(value) >= 1000 ? 'kW' : 'W'
+          );
+function deviceHealth(name: 'storage' | 'warp') {
+    const d = status.value?.[name];
+    if (offline.value) return 'connectionLost';
+    if (!d?.configured) return 'notConfigured';
+    if (!d.enabled) return 'disabled';
+    if (!d.reachable) return 'unreachable';
+    if (!d.valid) return 'waitingData';
+    if (d.stale) return 'outdated';
+    if (name === 'storage' && val(status.value?.normalized.storage.fault_active)) return 'deviceFault';
+    if (name === 'storage' && val(status.value?.normalized.storage.alarm_active)) return 'deviceAlarm';
+    return '';
+}
+const cards = computed(() => {
+    const n = status.value?.normalized;
+    const grid = val(n?.grid.power_w),
+        pv = val(n?.pv.power_w);
+    const charging = val(n?.storage.charging),
+        discharging = val(n?.storage.discharging);
+    const ev = val(n?.evse.charging),
+        connected = val(n?.evse.vehicle_connected);
+    const signalHealth = (signal?: HemsSignal<unknown>) =>
+        offline.value
+            ? 'connectionLost'
+            : signal?.quality === 'stale'
+              ? 'outdated'
+              : signal?.value == null || signal?.quality !== 'fresh'
+                ? 'waitingData'
+                : '';
+    return [
+        {
+            name: 'grid',
+            value: power(grid),
+            state: grid === null ? 'unavailable' : grid > 0 ? 'importing' : grid < 0 ? 'exporting' : 'balanced',
+            detail: '',
+            health: signalHealth(n?.grid.power_w),
+            icon: icons[0],
         },
-    },
-    methods: {
-        booleanText(value: boolean | null) {
-            return this.$t('hems.' + (this.fetchFailed || value === null ? 'Unknown' : value ? 'Yes' : 'No'));
+        {
+            name: 'pv',
+            value: power(pv),
+            state: pv === null ? 'unavailable' : pv > 0 ? 'producing' : 'idle',
+            detail: '',
+            health: signalHealth(n?.pv.power_w),
+            icon: icons[1],
         },
-        numberText(value: number | null, unit: string) {
-            if (this.fetchFailed || value === null) return this.$t('hems.Unknown');
-            const number = value.toLocaleString(undefined, { maximumFractionDigits: 3 });
-            return unit ? number + ' ' + unit : number;
+        {
+            name: 'battery',
+            value: number(val(n?.storage.soc_pct), '%'),
+            state:
+                charging === true
+                    ? 'charging'
+                    : discharging === true
+                      ? 'discharging'
+                      : charging === false && discharging === false
+                        ? 'idle'
+                        : 'unavailable',
+            detail: `${t('storage.AcPower')}: ${power(val(n?.storage.ac_power_w))}`,
+            health: deviceHealth('storage') || signalHealth(n?.storage.soc_pct),
+            icon: icons[2],
         },
-        signalNumberText(signal: HemsSignal<number>, unit: string) {
-            return this.numberText(signal.value, unit);
+        {
+            name: 'evCharger',
+            value: power(val(n?.evse.power_w)),
+            state: ev === true ? 'charging' : ev === false ? 'notCharging' : 'unavailable',
+            detail: `${t(connected === null ? 'hemsUi.vehicleUnknown' : connected ? 'hemsUi.vehicleConnected' : 'hemsUi.vehicleDisconnected')} · ${number(val(n?.evse.allowed_current_a), 'A')}`,
+            health: deviceHealth('warp'),
+            icon: icons[3],
         },
-        signalBooleanText(signal: HemsSignal<boolean>) {
-            return this.booleanText(signal.value);
-        },
-        displayedQuality(quality: HemsQuality): HemsQuality {
-            return this.fetchFailed ? 'unknown' : quality;
-        },
-        signalQualityText(signal: HemsSignal<unknown>) {
-            const quality = this.displayedQuality(signal.quality);
-            return this.$t('hems.Quality' + quality.charAt(0).toUpperCase() + quality.slice(1));
-        },
-        signalQualityClass(signal: HemsSignal<unknown>) {
-            switch (this.displayedQuality(signal.quality)) {
-                case 'fresh':
-                    return 'text-bg-success';
-                case 'stale':
-                    return 'text-bg-warning';
-                default:
-                    return 'text-bg-secondary';
-            }
-        },
-        limitText(limit: HemsPowerLimit) {
-            if (this.fetchFailed) return this.$t('hems.Unknown');
-            if (!limit.active) return this.$t('hems.NoLimit');
-            return this.numberText(limit.value_w, 'W');
-        },
-        endpointText() {
-            if (this.fetchFailed || !this.hemsStatus.storage.port || !this.hemsStatus.storage.unit) {
-                return this.$t('hems.Unknown');
-            }
-            return `${this.hemsStatus.storage.port} / Unit ${this.hemsStatus.storage.unit}`;
-        },
-        chargingStateText() {
-            const state = this.hemsStatus.warp.charging_state;
-            return this.fetchFailed || state === null
-                ? this.$t('hems.Unknown')
-                : this.$t('hems.ChargingStates.' + state);
-        },
-        getStatus() {
-            if (this.fetching) return;
-            this.fetching = true;
-            fetch('/api/hems/status', { headers: authHeader() })
-                .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data: HemsStatus) => {
-                    this.hemsStatus = data;
-                    this.dataLoading = false;
-                    this.fetchFailed = false;
-                })
-                .catch(() => {
-                    this.fetchFailed = true;
-                    this.dataLoading = false;
-                })
-                .finally(() => {
-                    this.fetching = false;
-                });
-        },
-    },
+    ];
+});
+const providerIssue = ref(false);
+const issues = computed(
+    () => providerIssue.value || cards.value.some((c) => c.health && !['notConfigured', 'disabled'].includes(c.health))
+);
+const protection = computed(() => {
+    const p = status.value?.shadow.ev_protection;
+    if (offline.value || !p) return 'unavailable';
+    if (p.blocking_storage_discharge) return 'protectionBlocking';
+    if (p.would_block_storage_discharge) return 'protectionShadow';
+    return p.charging_known ? 'protectionIdle' : 'unavailable';
+});
+function permission(name: 'storage' | 'evse') {
+    return offline.value
+        ? t('hemsUi.unavailable')
+        : t(status.value?.actuation[name].control_mode === 'hems' ? 'hemsUi.hemsControl' : 'hemsUi.monitorOnly');
+}
+let timer: ReturnType<typeof setTimeout> | undefined,
+    disposed = false,
+    fetching = false;
+async function load() {
+    if (fetching) return;
+    fetching = true;
+    try {
+        const response = await fetch('/api/hems/status', { headers: authHeader() });
+        const data = await handleResponse(response, emitter, router);
+        if (!disposed) {
+            status.value = data;
+            offline.value = false;
+        }
+    } catch {
+        offline.value = true;
+    } finally {
+        fetching = false;
+        loading.value = false;
+    }
+}
+async function poll() {
+    await load();
+    if (!disposed) timer = setTimeout(poll, 3000);
+}
+onMounted(poll);
+onUnmounted(() => {
+    disposed = true;
+    clearTimeout(timer);
 });
 </script>

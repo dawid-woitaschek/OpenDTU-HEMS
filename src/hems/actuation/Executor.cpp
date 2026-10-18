@@ -51,7 +51,7 @@ ExecutionResult execute(RegisterIo const& io, Profiles::ControlPlan const& plan,
             }
         }
     }
-    return { ExecutionError::None, {}, 0xff, plan.count != 0 };
+    return { ExecutionError::None, {}, 0xff, plan.count != 0, verifyReadback && plan.count != 0 };
 }
 
 } // namespace Hems::Actuation

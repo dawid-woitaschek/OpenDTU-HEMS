@@ -129,7 +129,7 @@ bool PowerLimiterInverter::update()
         // inverter is unreachable, no matter how long (a whole night) that might be.
         if (_updateTimeouts >= 20) {
             DTU_LOGE("restarting system since inverter is unresponsive");
-            RestartHelper.triggerRestart();
+            RestartHelper.triggerRestart(Diagnostics::RestartSource::InverterUnresponsive);
         }
         else if (_updateTimeouts >= 10) {
             DTU_LOGW("issuing restart command after update timed out or failed %d times",

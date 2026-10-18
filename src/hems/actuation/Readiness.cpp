@@ -17,11 +17,7 @@ Readiness evaluateReadiness(ReadinessInput const& input)
     add(ReadinessBlocker::ProfileNotControllable, !input.profileControllable);
     add(ReadinessBlocker::DeviceUnreachable, !input.reachable);
     add(ReadinessBlocker::TelemetryNotFresh, !input.telemetryFresh);
-    add(ReadinessBlocker::DeviceFault, input.faulted);
-    add(ReadinessBlocker::CleanupPending, input.cleanupPending);
-    add(ReadinessBlocker::RecoveryPending, input.recoveryPending);
-    add(ReadinessBlocker::ValidationInactive, input.validationInactive);
-    add(ReadinessBlocker::RecoveryUnsupported, input.recoveryUnsupported);
+    add(ReadinessBlocker::CommandBusy, input.commandBusy);
     return result;
 }
 
@@ -35,11 +31,7 @@ char const* readinessBlockerName(ReadinessBlocker blocker)
         case ReadinessBlocker::ProfileNotControllable: return "profile_not_controllable";
         case ReadinessBlocker::DeviceUnreachable: return "device_unreachable";
         case ReadinessBlocker::TelemetryNotFresh: return "telemetry_not_fresh";
-        case ReadinessBlocker::DeviceFault: return "device_fault";
-        case ReadinessBlocker::CleanupPending: return "cleanup_pending";
-        case ReadinessBlocker::RecoveryPending: return "recovery_pending";
-        case ReadinessBlocker::ValidationInactive: return "validation_session_inactive";
-        case ReadinessBlocker::RecoveryUnsupported: return "recovery_automatic_unsupported";
+        case ReadinessBlocker::CommandBusy: return "command_busy";
         case ReadinessBlocker::None:
         default: return "none";
     }

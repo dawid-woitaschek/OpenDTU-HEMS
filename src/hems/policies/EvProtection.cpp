@@ -12,8 +12,9 @@ void EvProtectionPolicy::reset()
     _state = EvProtectionState::Inactive;
 }
 
-void EvProtectionPolicy::update(Model::EvseState const& evse, uint32_t nowMs)
+void EvProtectionPolicy::update(Model::EvseState const& evse, uint32_t nowMs, ControlCapability capability, bool active)
 {
+    _controlEnabled = active && capability.storage;
     _chargingKnown = evse.device.enabled && evse.charging.usable();
     _charging = _chargingKnown && evse.charging.value;
 
@@ -68,6 +69,7 @@ EvProtectionSnapshot EvProtectionPolicy::snapshot(uint32_t nowMs) const
             || _state == EvProtectionState::Waiting) {
         result.proposedConstraints.storage.dischargeAllowed = false;
     }
+    if (_controlEnabled) { result.actionableConstraints = result.proposedConstraints; }
     return result;
 }
 

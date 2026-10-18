@@ -1,0 +1,49 @@
+.hems-energy {
+    --energy-line: #2563eb;
+    --energy-plot: #f8fafc;
+    --period-color: #64748b;
+}
+.hems-energy .period-cheap {
+    --period-color: #059669;
+    --period-text: #047857;
+    --period-bg: #ecfdf5;
+}
+.hems-energy .period-normal {
+    --period-color: #64748b;
+    --period-text: #475569;
+    --period-bg: #f1f5f9;
+}
+.hems-energy .period-expensive {
+    --period-color: #e46050;
+    --period-text: #b42318;
+    --period-bg: #fff1ed;
+}
+.hems-energy .price-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.6rem;
+    border-radius: 2rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--period-text);
+    background: var(--period-bg);
+}
+[data-bs-theme='dark'] .hems-energy {
+    --energy-line: #7db4ff;
+    --energy-plot: #212a35;
+}
+[data-bs-theme='dark'] .hems-energy .period-cheap {
+    --period-color: #34d399;
+    --period-text: #6ee7b7;
+    --period-bg: #173e34;
+}
+[data-bs-theme='dark'] .hems-energy .period-normal {
+    --period-color: #94a3b8;
+    --period-text: #cbd5e1;
+    --period-bg: #303c4c;
+}
+[data-bs-theme='dark'] .hems-energy .period-expensive {
+    --period-color: #fb927e;
+    --period-text: #ffb4a3;
+    --period-bg: #4e2b2a;
+}

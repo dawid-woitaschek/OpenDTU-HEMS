@@ -8,6 +8,8 @@ public:
 
     void setServer();
     void setTimezone();
+
+    bool isTimeSynced() const;
 };
 
 extern NtpSettingsClass NtpSettings;

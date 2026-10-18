@@ -73,6 +73,7 @@ struct Profile {
     IdentityField identityFields[MaxIdentityFields] {};
     char identitySource[MaxText + 1] {};
     uint8_t identityFieldCount = 0;
+    bool recoveryMetadata = false;
     bool releaseReplaySafe = false;
 };
 inline bool hasCapability(Profile const& profile, Capability capability)
@@ -88,10 +89,13 @@ struct Value { bool valid = false; bool boolean = false; double number = 0; Type
 // Allocations are capped including ArduinoJson string allocations and reallocation.
 class BoundedAllocator : public ArduinoJson::Allocator {
 public:
+    explicit BoundedAllocator(size_t maximum = MaxJsonMemory) : _maximum(maximum) {}
     void* allocate(size_t size) override;
     void deallocate(void* pointer) override;
     void* reallocate(void* pointer, size_t size) override;
     size_t used = 0, peak = 0;
+private:
+    size_t _maximum;
 };
 bool parse(char const* json, size_t size, Profile& output, char const*& error);
 void serialize(Profile const& profile, JsonObject root);

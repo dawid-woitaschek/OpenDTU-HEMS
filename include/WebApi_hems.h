@@ -8,13 +8,12 @@ public:
     void init(AsyncWebServer& server);
 
 private:
+    void onOptimizer(AsyncWebServerRequest* request);
+    void initEnergy(AsyncWebServer& server);
+    void onEnergyGet(AsyncWebServerRequest* request);
+    void onEnergyPost(AsyncWebServerRequest* request);
     void onStatus(AsyncWebServerRequest* request);
-    void onValidationStart(AsyncWebServerRequest* request);
-    void onValidationRevoke(AsyncWebServerRequest* request);
-    void onValidationCommand(AsyncWebServerRequest* request);
-    void onValidationStatus(AsyncWebServerRequest* request);
-    void onRecoveryRecord(AsyncWebServerRequest* request);
-    void onRecoveryResolve(AsyncWebServerRequest* request);
+    void onCommand(AsyncWebServerRequest* request);
     void onConfigGet(AsyncWebServerRequest* request);
     void onConfigPost(AsyncWebServerRequest* request);
 };
