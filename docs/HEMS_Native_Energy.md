@@ -257,6 +257,9 @@ on-device validation. WARP3 physical writes remain unvalidated. Marstek V148/V11
 physical signs/scales/acquire/release/watchdog remain unvalidated. EV Protection
 physical end-to-end timing and override/recovery remain unvalidated.
 
+The next milestone adds [explicit storage/economic policies](HEMS_Policies.md) as
+DP constraints/goals, with additive persisted config and zero economic writes.
+
 Before any Active economic optimizer: validate those device behaviors and energy
 providers, refine V1 modeling/precision as required, define dispatch/replanning
 and manual override semantics, and use the existing permission-gated

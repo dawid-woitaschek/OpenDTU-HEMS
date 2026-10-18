@@ -35,6 +35,7 @@ try {
                 requests.at(-1).payload = payload;
                 if (path === '/api/hems/config') Object.assign(fixture.config, payload);
                 if (path === '/api/hems/profiles/evse-binding') Object.assign(fixture.binding, payload);
+                if (path === '/api/hems/optimizer/config') fixture.optimizer.config = payload;
                 if (path === '/api/hems/energy/tariff/config') fixture.tariff.config = payload;
                 if (path === '/api/hems/energy/forecast/config') fixture.forecast.config = payload;
                 return route.fulfill({ json: { ok: true, type: 'success' } });
@@ -81,6 +82,24 @@ try {
         }
         if (width === 360) {
             await page.goto('http://127.0.0.1:5173/hems/settings');
+            const optimizerForm = page.locator('form').filter({ has: page.locator('#optimizer-enabled') });
+            await page.locator('#optimizer-grid-charging').selectOption('false');
+            await page.locator('#optimizer-economic-discharge').selectOption('false');
+            await page.locator('#optimizer-target-enabled').check();
+            await page.locator('#optimizer-target-soc').fill('70');
+            await page.locator('#optimizer-target-deadline').fill('2026-10-26T06:00');
+            await optimizerForm.getByRole('button', { name: 'Save', exact: true }).click();
+            await page.getByText('Saved or queued · Shadow calculation only.', { exact: true }).waitFor();
+            const policySave = requests.findLast(r => r.path === '/api/hems/optimizer/config');
+            assert.equal(policySave.payload.policies.grid_charging_allowed, false);
+            assert.equal(policySave.payload.policies.discharge_allowed, false);
+            assert.equal(policySave.payload.policies.target_soc_pct, 70);
+            assert.equal(policySave.payload.policies.target_deadline, Date.parse('2026-10-26T05:00:00Z') / 1000);
+            await page.reload();
+            await page.locator('#optimizer-target-soc').waitFor();
+            assert.equal(await page.locator('#optimizer-target-soc').inputValue(), '70');
+            assert.equal(await page.locator('#optimizer-target-deadline').inputValue(), '2026-10-26T06:00');
+
             await page.locator('#tariff-vat').fill('19');
             await page.locator('#tariff-grid_micros_per_kwh').fill('12.3456');
             await page.locator('form').filter({ has: page.locator('#tariff-vat') }).getByRole('button', { name: 'Save', exact: true }).click();

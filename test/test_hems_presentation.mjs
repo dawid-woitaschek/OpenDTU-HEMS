@@ -8,6 +8,10 @@ const code = ts.transpileModule(readFileSync(new URL('../webapp/src/utils/hemsPr
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 const h = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
+const policyCode = ts.transpileModule(readFileSync(new URL('../webapp/src/utils/hemsPolicy.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const policy = await import('data:text/javascript;base64,' + Buffer.from(policyCode).toString('base64'));
 const epoch = text => new Date(text).getTime() / 1000;
 const originalZone = process.env.TZ;
 let checks = 0;
@@ -22,6 +26,10 @@ for (const [zone, date, dayHours] of [
 ]) {
     process.env.TZ = zone;
     const now = epoch(date), [start, end] = h.dayBounds(now);
+    assert.equal(policy.utcDeadline(policy.localDeadline(now)), now); // UTC persistence survives browser timezone changes.
+    assert.equal(policy.utcDeadline('2026-02-31T06:00'), 0);
+    assert.equal(policy.utcDeadline(''), 0);
+    assert.equal(policy.utcDeadline('2107-01-01T06:00'), 0);
     assert.equal((end - start) / 3600, dayHours, zone);
     assert.equal(h.dayBounds(now, 1)[0], end);
     assert.equal(new Date(start * 1000).getHours(), 0);
@@ -40,6 +48,8 @@ for (const [zone, date, dayHours] of [
     checks++;
 }
 process.env.TZ = 'Europe/Berlin';
+assert.equal(policy.utcDeadline('2026-03-29T02:30'), 0); // Nonexistent local DST time.
+assert.equal(policy.utcDeadline('2026-10-25T06:00'), epoch('2026-10-25T05:00:00Z'));
 const [start, end] = h.dayBounds(epoch('2026-10-25T12:00:00Z'));
 // Quantile ties, signs, zero and a one-price day: no invented cheap/expensive distinction.
 for (const value of [-1234, 0, 1234]) {

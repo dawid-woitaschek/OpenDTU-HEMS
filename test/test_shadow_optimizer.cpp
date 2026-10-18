@@ -40,8 +40,121 @@ struct Fixture {
         }
     }
 };
+void policyTests()
+{
+    Fixture f; f.spread(); assert(f.run() && f.moves());
+    f.c.policies.gridChargingAllowed = false;
+    assert(f.run() && !f.moves()); // Cannot refill terminal stock from grid.
+    f.in.forecastStatus.planningUsable = f.in.forecastStatus.fresh = true;
+    for (size_t i=0; i<8; ++i) f.forecast.intervals[i].value=3000;
+    assert(f.run() && f.moves() && f.p.pvIncluded);
+    for (size_t i=0; i<f.p.count; ++i) {
+        auto const& slot=f.p.steps[i];
+        if(slot.batteryW>0) assert(slot.gridImportWs==0); // PV must cover load before battery.
+    }
+    f=Fixture(); f.spread(); f.c.policies.dischargeAllowed=false;
+    assert(f.run() && !f.moves());
+    f=Fixture(); f.spread(); f.c.minSoc=40; f.c.maxSoc=60;
+    assert(f.run());
+    for (size_t i=0; i<f.p.count; ++i) assert(f.p.steps[i].endWh>=800 && f.p.steps[i].endWh<=1200);
+
+    // A hard deadline makes the DP choose the least-cost reachable slots, including an exact non-grid target state.
+    f=Fixture(); f.c.policies.targetEnabled=true; f.c.policies.targetSoc=73;
+    f.c.policies.targetDeadline=Now+1875; f.c.policies.dischargeAllowed=false;
+    f.c.chargePermille=f.c.dischargePermille=1000;
+    f.tariff.intervals[1].value=f.tariff.intervals[1].importPrice=50000;
+    assert(f.run() && !strcmp(f.p.targetState,"target_planned"));
+    assert(f.p.steps[0].startWh==f.p.steps[0].endWh);
+    assert(f.p.steps[1].endWh==1460); // All required charge in cheaper interval, not selected outside planner.
+    bool deadline=false;
+    for (size_t i=0; i<f.p.count; ++i) {
+        if(f.p.steps[i].end==Now+1875) { assert(f.p.steps[i].endWh>=1460); deadline=true; }
+    }
+    assert(deadline && f.p.finalWh>=f.p.initialWh);
+    assert(f.p.optimizedNano>f.p.baselineNano); // Intent may cost money; never invent positive savings.
+    JsonDocument report; serializePlan(f.c,f.in,f.p,report.to<JsonObject>());
+    assert(report["target_state"]=="target_planned" && report["device_writes"]==false);
+    assert(report["modeled_savings_nano"].as<int64_t>()<0);
+    f.c.maxChargeW=100; assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable") && f.p.count==0);
+    f.c.maxChargeW=2000; f.c.policies.gridChargingAllowed=false;
+    assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable"));
+    f.in.forecastStatus.planningUsable=f.in.forecastStatus.fresh=true;
+    for(size_t i=0;i<3;++i) f.forecast.intervals[i].value=3000;
+    assert(f.run() && f.p.pvIncluded);
+    for(size_t i=0;i<f.p.count;++i) if(f.p.steps[i].batteryW>0) assert(f.p.steps[i].gridImportWs==0);
+    // Missing, stale and unusable PV never supplies fabricated charging energy.
+    f.in.forecastStatus.fresh=false; assert(!f.run());
+    f.in.forecastStatus.fresh=true; f.forecast.intervals[1].start+=1; assert(!f.run());
+    f.forecast.intervals[1].start-=1; f.in.forecastStatus.planningUsable=false; assert(!f.run());
+    f.in.forecastStatus.planningUsable=true;
+    f.in.currentConstraints.chargeAllowed=false;
+    f.c.policies.targetDeadline=Now+900; assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable"));
+
+    f=Fixture(); f.c.policies.targetEnabled=true; f.c.policies.targetSoc=70; f.c.policies.targetDeadline=Now+7200;
+    f.tariff.count=4;
+    assert(f.run() && f.p.partial && !strcmp(f.p.targetState,"target_horizon_incomplete"));
+    assert(f.p.steps[f.p.count-1].end==Now+3600 && f.p.finalWh>=f.p.initialWh);
+    f.tariff.count=192; f.c.horizonSeconds=900;
+    assert(f.run() && f.p.partial && !strcmp(f.p.partialReason,"target_horizon_incomplete"));
+    f.c.policies.targetDeadline=Now; assert(!f.run() && !strcmp(f.p.blocker,"target_deadline_passed"));
+    f.c.policies.targetDeadline=Now+900; f.c.policies.targetSoc=95; assert(!f.run());
+
+    // Exact numeric economics: equal earlier prices can be UI-normal and still fund expensive future import.
+    f=Fixture(); f.spread(200000,500000); assert(f.run() && f.moves());
+    assert(f.p.steps[7].endWh>f.p.initialWh);
+    f.spread(200000,201000); f.c.chargePermille=f.c.dischargePermille=800; assert(f.run() && !f.moves());
+    f=Fixture(); f.spread(500000,50000); f.in.currentConstraints.dischargeAllowed=false;
+    assert(f.run() && f.p.steps[0].endWh>=f.p.initialWh); // Protection dominates price.
+    f.in.currentConstraints.maxChargePower={true,0}; f.in.currentConstraints.maxDischargePower={true,0};
+    assert(f.run() && f.p.steps[0].endWh==f.p.initialWh);
+
+    // The normalized model has no category input. Decorative categories on bridge JSON cannot alter actions.
+    f=Fixture(); f.c.effectivePrice=false; f.spread(200000,500000); assert(f.run()); auto numericPlan=f.p;
+    JsonDocument classified; classified["schema"]=Energy::schema(Energy::Domain::Tariff);
+    classified["source"]="category fixture"; classified["currency"]="EUR"; classified["generated_at"]=Now;
+    for(unsigned i=0;i<16;++i) {
+        auto row=classified["intervals"].add<JsonObject>(); row["start"]=Now+i*900; row["end"]=Now+(i+1)*900;
+        row["price_micros_per_kwh"]=i<8?200000:500000;
+    }
+    for(auto category : {"cheap","normal","expensive"}) {
+        for(auto row:classified["intervals"].as<JsonArray>()) row["category"]=category;
+        char const* error; assert(Energy::parseSeries(classified.as<JsonVariantConst>(),Energy::Domain::Tariff,f.tariff,error));
+        assert(f.run() && f.p.optimizedNano==numericPlan.optimizedNano && f.p.count==numericPlan.count);
+        for(size_t i=0;i<f.p.count;++i) assert(f.p.steps[i].endWh==numericPlan.steps[i].endWh);
+    }
+    // A negative/cheap price does not mandate charging when the planning ceiling is already reached.
+    f=Fixture(); f.c.baseLoadW=0; f.in.storage.socPct=Model::Signal<double>::fresh(90);
+    for(auto& slot:f.tariff.intervals) slot.value=slot.importPrice=-100000;
+    assert(f.run() && !f.moves());
+    // Feasible target plus maximum lattice and a split deadline stay within the fixed allocation.
+    f=Fixture(); f.c.minSoc=0; f.c.maxSoc=100; f.c.socStepPct=2; f.c.horizonSeconds=172800;
+    f.in.storage.socPct=Model::Signal<double>::fresh(51.1); f.c.policies.targetEnabled=true;
+    f.c.policies.targetSoc=73; f.c.policies.targetDeadline=Now+7201;
+    assert(f.run() && f.p.states==53 && f.p.count==193 && f.p.finalWh>=f.p.initialWh);
+
+    // Additive persistent/API v1 compatibility: old fields keep their exact meanings.
+    f=Fixture();
+    JsonDocument config; serializeConfig(f.c,config.to<JsonObject>()); Config decoded;
+    config.remove("policies"); assert(parseConfig(config.as<JsonVariantConst>(),decoded));
+    assert(decoded.policies.gridChargingAllowed && decoded.policies.dischargeAllowed && !decoded.policies.targetEnabled);
+    assert(decoded.minSoc==f.c.minSoc && decoded.maxSoc==f.c.maxSoc);
+    decoded.policies.gridChargingAllowed=false; decoded.policies.dischargeAllowed=false;
+    decoded.policies.targetEnabled=true; decoded.policies.targetSoc=70; decoded.policies.targetDeadline=Now+7200;
+    serializeConfig(decoded,config.to<JsonObject>()); std::string serialized; serializeJson(config,serialized);
+    JsonDocument reload; assert(!deserializeJson(reload,serialized)); Config reboot;
+    assert(parseConfig(reload.as<JsonVariantConst>(),reboot));
+    assert(!reboot.policies.gridChargingAllowed && !reboot.policies.dischargeAllowed && reboot.policies.targetEnabled);
+    assert(reboot.policies.targetSoc==70 && reboot.policies.targetDeadline==Now+7200);
+    std::cout<<"Policy config bytes="<<serialized.size()<<", config bytes="<<sizeof(Config)<<", max states="<<MaxStates<<'\n';
+    config["policies"]["grid_charging_allowed"]="false"; assert(!parseConfig(config.as<JsonVariantConst>(),reboot));
+    serializeConfig(decoded,config.to<JsonObject>()); config["policies"]["target_soc_pct"]=99; assert(!parseConfig(config.as<JsonVariantConst>(),reboot));
+    serializeConfig(decoded,config.to<JsonObject>()); config["policies"]["target_deadline"]=-1; assert(!parseConfig(config.as<JsonVariantConst>(),reboot));
+    config["policies"]=nullptr; assert(!parseConfig(config.as<JsonVariantConst>(),reboot));
+    std::cout<<"Storage policies: permissions, bounds, exact deadline, infeasibility, coverage, PV, protection and config compatibility passed\n";
+}
 int main()
 {
+    policyTests();
     Fixture f; assert(f.run() && !f.moves() && !f.p.pvIncluded); assert(f.p.baselineNano==f.p.optimizedNano && f.p.baselineNano==800000000);
     f.spread(); assert(f.run() && f.moves() && f.p.optimizedNano<f.p.baselineNano); f.bounds();
     auto first=f.p; assert(f.run()); assert(f.p.optimizedNano==first.optimizedNano);

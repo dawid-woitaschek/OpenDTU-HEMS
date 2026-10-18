@@ -1,6 +1,6 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-18. Integration base for the foundation/productization milestone: `73a84b639436e712fe5380f071526c30f7c539db`; GitHub confirms #22 merged. Foundation/productization branch: `feature/hems-real-control`, [PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) against `integration/hems-next`. The old #18/#20/#21 stack is closed and irrelevant.
+Snapshot: 2026-10-18. Foundation/productization [PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) merged normally into `integration/hems-next` as `3309804f77d1e882e705955827e89b619cb9bfab`. Current functional branch: `feature/hems-policies`, still Shadow-only for economics.
 
 ## Usable control model
 
@@ -60,4 +60,4 @@ Dynamic tariff and optional PV forecast now have bounded normalized models, auth
 
 The Admin EVSE false-save error is fixed: the endpoint returns success consistently, the shared HTTP handler is used, and a failed post-save reload produces a warning alongside saved status. Additional native coverage exercises Disabled/Monitor/Active across every device permission combination, stale/unreachable recovery, actual catalog actuator bounds and Marstek byte fixtures, and exact EV Protection debounce boundaries. EVSE telemetry enable/disable transitions now durably clear the old binding and permission before changing enablement, so an API re-enable/reboot cannot revive hidden HEMS control. The runtime no longer polls an implicit WARP mapping when no profile is bound. Disabled storage also resets its persisted control mode to Monitor only, including API payloads that still contain a hidden HEMS permission. Production EVSE/storage settings stores have native persistence/reload coverage.
 
-Next functional milestone: small explicit user/economic policies feeding the existing optimizer, still Shadow-only. Physical WARP/Marstek/EV Protection validation, native-provider/on-device TLS and optimizer resource validation remain open prerequisites for eventual Active economic dispatch. See [Roadmap](HEMS_Roadmap.md).
+Current functional milestone: explicit grid-charging/economic-discharge permissions and a one-time SoC target feed the existing DP with unchanged reserve/upper bounds, still Shadow-only. See [precise policy semantics](HEMS_Policies.md). Physical WARP/Marstek/EV Protection validation, native-provider/on-device TLS and optimizer resource validation remain open prerequisites for eventual Active economic dispatch. See [Roadmap](HEMS_Roadmap.md).
