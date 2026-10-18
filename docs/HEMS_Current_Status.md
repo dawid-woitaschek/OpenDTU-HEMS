@@ -26,12 +26,11 @@ Active plus Storage HEMS control rejects new discharge commands while allowing c
 
 Four peer views use the existing OpenDTU visual language: Overview (`/hems`),
 Settings (`/hems/settings`), Devices (`/hems/devices`) and Advanced Diagnostics
-(`/hems/diagnostics`). Legacy aliases remain supported. Overview shows fresh
-energy values, effective tariff prices, interactive tariff/PV charts, provider
-readiness and economic Shadow proposals. Settings owns configuration; Devices
-owns endpoints, profiles and expandable manual semantic controls. Detailed
-provider/control/system diagnostics and paginated optimizer rows remain available.
-English, German and French product copy is included. See [UI](HEMS_UI.md).
+(`/hems/diagnostics`). Legacy aliases remain supported.
+
+Overview shows fresh energy values, effective tariff prices, interactive tariff/PV charts and provider readiness. The generated storage plan is now a first-class daily-use surface: the current planned action, the next action change, merged charge/hold/discharge blocks, expected SoC progression, modeled benefit and a compact strategy summary are presented directly instead of requiring users to interpret raw optimizer rows. The schedule remains a presentation of the authoritative optimizer result; it does not create a second rules/control path.
+
+Settings owns configuration. The normal storage-strategy controls group reserve, maximum desired SoC, grid-charging permission, economic-discharge permission and the optional one-time target/deadline together. Battery/model parameters such as capacity, efficiencies, max powers, expected base load, planning horizon, SoC step, price basis and export value remain available under collapsed Advanced settings. Economic dispatch remains a separate explicit default-off opt-in. Devices owns endpoints, profiles and expandable manual semantic controls. Detailed provider/control/system diagnostics and paginated optimizer rows remain available in Advanced Diagnostics. English, German and French product copy is included. See [UI](HEMS_UI.md).
 
 Advanced Diagnostics also provides an on-demand browser-only support snapshot (`opendtu-hems-diagnostics/v1`). It sequentially combines existing firmware, system, HEMS, tariff, forecast and paginated optimizer APIs into one JSON download or clipboard payload. Passwords, tokens, keys, cookies and credential-like values are always redacted; network addresses/hostnames/URLs and PV coordinates remain redacted unless explicitly included. The snapshot is never persisted on LittleFS and adds no backend endpoint, worker or runtime history store.
 
