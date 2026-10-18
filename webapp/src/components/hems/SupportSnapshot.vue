@@ -97,7 +97,7 @@ const texts: Record<string, SnapshotCopy> = {
         description:
             "Crée à la demande un instantané JSON à partir des API de diagnostic existantes. Le fichier est assemblé uniquement dans le navigateur et n'est pas stocké sur l'OpenDTU.",
         privacy:
-            "Les mots de passe, jetons, clés, cookies et identifiants sont toujours supprimés. Les données réseau et de localisation sont masquées par défaut.",
+            'Les mots de passe, jetons, clés, cookies et identifiants sont toujours supprimés. Les données réseau et de localisation sont masquées par défaut.',
         includeNetwork: 'Inclure les adresses réseau, noms d’hôte et URL',
         includeLocation: 'Inclure la localisation PV / les coordonnées',
         download: 'Télécharger le diagnostic',
@@ -105,13 +105,17 @@ const texts: Record<string, SnapshotCopy> = {
         collecting: 'Collecte des diagnostics …',
         downloaded: 'Instantané de diagnostic créé.',
         copied: 'Instantané de diagnostic copié dans le presse-papiers.',
-        copyFailed: "L’accès au presse-papiers n’est pas disponible dans ce contexte. Le téléchargement reste disponible.",
+        copyFailed:
+            'L’accès au presse-papiers n’est pas disponible dans ce contexte. Le téléchargement reste disponible.',
         lastSize: 'Taille du dernier instantané',
     },
 };
 
 const { locale } = useI18n();
-const copy = computed(() => texts[locale.value.split('-')[0]] || texts.en);
+const copy = computed<SnapshotCopy>(() => {
+    const language = locale.value.split('-')[0] || 'en';
+    return texts[language] ?? texts.en!;
+});
 const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
 const router = useRouter();
 const includeNetwork = ref(false);
@@ -129,16 +133,23 @@ const MAC = /^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/i;
 const URL_VALUE = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 function sanitize(value: unknown, key = ''): unknown {
+    if (value && typeof value === 'object') {
+        const object = value as JsonObject;
+        const namedSecret = ['name', 'key', 'header'].some(
+            (field) => typeof object[field] === 'string' && SECRET_KEY.test(String(object[field]))
+        );
+        if (Array.isArray(value)) return value.map((entry) => sanitize(entry));
+        return Object.fromEntries(
+            Object.entries(object).map(([childKey, childValue]) => [
+                childKey,
+                namedSecret && childKey === 'value' ? '[redacted-secret]' : sanitize(childValue, childKey),
+            ])
+        );
+    }
+
     if (SECRET_KEY.test(key)) return '[redacted-secret]';
     if (!includeLocation.value && LOCATION_KEY.test(key)) return '[redacted-location]';
     if (!includeNetwork.value && NETWORK_KEY.test(key)) return '[redacted-network]';
-
-    if (Array.isArray(value)) return value.map((entry) => sanitize(entry));
-    if (value && typeof value === 'object') {
-        return Object.fromEntries(
-            Object.entries(value as JsonObject).map(([childKey, childValue]) => [childKey, sanitize(childValue, childKey)])
-        );
-    }
     if (!includeNetwork.value && typeof value === 'string' && (IPV4.test(value) || MAC.test(value) || URL_VALUE.test(value))) {
         return '[redacted-network]';
     }
@@ -254,7 +265,7 @@ async function download() {
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
-        URL.revokeObjectURL(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
         notice.value = copy.value.downloaded;
     } catch (reason) {
         error.value = message(reason);
