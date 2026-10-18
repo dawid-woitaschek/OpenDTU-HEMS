@@ -13,7 +13,7 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write src/",
-    "test": "node ../test/test_hems_admin.mjs && node ../test/test_tariff_units.mjs && node ../test/test_hems_presentation.mjs"
+    "test": "node ../test/test_hems_admin.mjs && node ../test/test_tariff_units.mjs && node ../test/test_hems_presentation.mjs && node ../test/test_firmware_provenance.mjs"
   },
   "dependencies": {
     "@popperjs/core": "^2.11.8",

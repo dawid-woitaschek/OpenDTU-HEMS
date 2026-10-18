@@ -44,6 +44,8 @@ export interface EnergyFeed {
     config: EnergySettings;
     next_refresh: number;
     source_age_seconds: number | null;
+    source_fresh?: boolean | null;
+    transport_fresh?: boolean;
     transport_age_seconds: number;
     rate_remaining: number;
     attribution?: string;

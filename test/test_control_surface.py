@@ -51,3 +51,18 @@ energy_api = (root / 'src/WebApi_hems_energy.cpp').read_text()
 optimizer_api = energy_api[energy_api.index('void WebApiHemsClass::onOptimizer('):]
 assert optimizer_api.index('checkCredentials(request)') < optimizer_api.index('ShadowOptimizer.serialize(')
 print('Shadow no-write architecture, authenticated optimizer API and verified provider TLS surface passed')
+
+# The economic runtime is exclusively a semantic storage producer. No new
+# transport/register implementation or EVSE economic producer may appear here.
+for path in list((root / 'src/hems/economic').glob('*.cpp')) + list((root / 'include/hems/economic').glob('*.h')):
+    source = path.read_text()
+    for forbidden in ('writeHoldingRegisters', 'RegisterIo', 'Modbus::', 'ControlTarget::Evse', 'setCurrent', 'cheap', 'expensive', 'category'):
+        assert forbidden not in source, (path, forbidden)
+controller = (root / 'src/hems/Controller.cpp').read_text()
+dispatch = controller[controller.index('void Controller::applyEconomic()'):controller.index('void Controller::serializeEconomic(')]
+assert 'submitActuation(decision.command, id)' in dispatch
+assert '_storage.releaseEconomic()' in dispatch
+assert '_warp.' not in dispatch
+assert '/api/hems/optimizer/resume' in energy_api
+assert optimizer_api.index('checkCredentials(request)') < optimizer_api.index('ShadowOptimizer.resume()')
+print('Economic semantic-only storage boundary and authenticated resume passed')

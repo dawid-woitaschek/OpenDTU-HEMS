@@ -2,6 +2,7 @@ import { createI18n } from 'vue-i18n';
 import messages from '@intlify/unplugin-vue-i18n/messages';
 import type { I18nOptions, IntlDateTimeFormat, IntlNumberFormat } from 'vue-i18n';
 import { hemsSupplementMessages } from './hemsMessages';
+import { hemsTariffMessages } from './hemsTariffMessages';
 import { firmwareSupplementMessages } from './firmwareMessages';
 
 export const allLocales = [
@@ -87,6 +88,9 @@ export const i18n = createI18n({
 });
 
 Object.entries(hemsSupplementMessages).forEach(([locale, supplemental]) => {
+    i18n.global.mergeLocaleMessage(locale, supplemental);
+});
+Object.entries(hemsTariffMessages).forEach(([locale, supplemental]) => {
     i18n.global.mergeLocaleMessage(locale, supplemental);
 });
 Object.entries(firmwareSupplementMessages).forEach(([locale, supplemental]) => {

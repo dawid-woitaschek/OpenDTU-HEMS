@@ -430,4 +430,5 @@ int main()
     auto invalid = discharge; invalid.action = static_cast<Actuation::Action>(255);
     assert(!controller.submitManual(invalid, id));
     std::cout << "Control permissions, Active EV protection, transient failure, release, generation and profile reload tests passed\n";
+    return 0;
 }

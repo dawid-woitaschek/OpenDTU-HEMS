@@ -62,24 +62,32 @@ SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& stora
         if (sample.meterAvailable) { result.evse.powerW = { sample.powerW, warpQuality }; }
     }
 
-    result.storage.device.configured = storage.configured;
-    result.storage.device.enabled = storage.enabled;
-    result.storage.device.reachable = storage.reachable;
-    result.storage.device.hasUpdate = storage.hasUpdate;
-    result.storage.device.ageMs = storage.ageMs;
+    result.storage = normalizeStorage(storage);
+
+    return result;
+}
+
+StorageState normalizeStorage(Storage::Snapshot const& storage)
+{
+    StorageState result;
+    result.device.configured = storage.configured;
+    result.device.enabled = storage.enabled;
+    result.device.reachable = storage.reachable;
+    result.device.hasUpdate = storage.hasUpdate;
+    result.device.ageMs = storage.ageMs;
 
     auto storageQuality = quality(storage.valid, storage.stale, storage.hasUpdate);
     auto const& sample = storage.sample;
-    result.storage.socPct = number(sample.socPct, storageQuality);
-    result.storage.acPowerW = number(sample.acPowerW, storageQuality);
-    result.storage.dcPowerW = number(sample.dcPowerW, storageQuality);
-    result.storage.batteryVoltageV = number(sample.batteryVoltageV, storageQuality);
-    result.storage.batteryCurrentA = number(sample.batteryCurrentA, storageQuality);
-    result.storage.temperatureC = number(sample.temperatureC, storageQuality);
-    result.storage.charging = boolSignal(sample.charging, storageQuality);
-    result.storage.discharging = boolSignal(sample.discharging, storageQuality);
-    result.storage.faultActive = boolSignal(sample.faultActive, storageQuality);
-    result.storage.alarmActive = boolSignal(sample.alarmActive, storageQuality);
+    result.socPct = number(sample.socPct, storageQuality);
+    result.acPowerW = number(sample.acPowerW, storageQuality);
+    result.dcPowerW = number(sample.dcPowerW, storageQuality);
+    result.batteryVoltageV = number(sample.batteryVoltageV, storageQuality);
+    result.batteryCurrentA = number(sample.batteryCurrentA, storageQuality);
+    result.temperatureC = number(sample.temperatureC, storageQuality);
+    result.charging = boolSignal(sample.charging, storageQuality);
+    result.discharging = boolSignal(sample.discharging, storageQuality);
+    result.faultActive = boolSignal(sample.faultActive, storageQuality);
+    result.alarmActive = boolSignal(sample.alarmActive, storageQuality);
 
     return result;
 }

@@ -85,7 +85,7 @@ void Provider::configure(StorageConfig const& config, bool monitor)
     if (_controlOwned && !_cleanup.valid) {
         retainCleanupLocked(_config, _profile, _port, _unit);
     }
-    _controlOwned = false;
+    _controlOwned = false; _controlSource = Actuation::Origin::None;
 
     _config = config;
     _profileFingerprint = fingerprint;
@@ -128,6 +128,11 @@ bool Provider::supportsCommand(Actuation::Command const& command) const
 {
     std::lock_guard<std::mutex> lock(_mutex);
     return _profile && Actuation::planCommand(*_profile, command);
+}
+bool Provider::operationInfo(Actuation::Action action, Actuation::OperationInfo& output) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _profile && Actuation::describeOperation(*_profile, ControlTarget::Storage, action, output);
 }
 
 uint32_t Provider::generation() const
@@ -209,6 +214,14 @@ bool Provider::submitCommand(Actuation::Command const& command, uint32_t& id)
         id = 0;
         return false;
     }
+    if (command.origin == Actuation::Origin::Manual) {
+        // Accepted manual control takes responsibility for an economic session.
+        // Economics cannot release that session while the manual command waits.
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_controlOwned && generation == _generation && _controlSource == Actuation::Origin::Economic) {
+            _controlSource = Actuation::Origin::Manual;
+        }
+    }
     xTaskNotifyGive(worker);
     return true;
 }
@@ -220,7 +233,24 @@ void Provider::requestRelease()
     ++_generation;
     _polled = false;
     if (_controlOwned && !_cleanup.valid) { retainCleanupLocked(_config, _profile, _port, _unit); }
-    _controlOwned = false;
+    _controlOwned = false; _controlSource = Actuation::Origin::None;
+}
+
+Actuation::Origin Provider::owner() const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _controlSource;
+}
+bool Provider::releaseEconomic()
+{
+    auto command = _mailbox.snapshot();
+    if (command.state == Actuation::MailboxState::Pending || command.state == Actuation::MailboxState::Running) { return false; }
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_busy || _cleanup.valid || !_controlOwned || _controlSource != Actuation::Origin::Economic) { return false; }
+    ++_generation; _polled = false;
+    retainCleanupLocked(_config, _profile, _port, _unit);
+    _controlOwned = false; _controlSource = Actuation::Origin::None;
+    return _cleanup.valid;
 }
 
 bool Provider::cancelPendingCommand(uint32_t id)
@@ -419,10 +449,15 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         _ownershipUncertain = ownsControl && !success;
         if (generation == _generation) {
             _controlOwned = ownsControl;
+            if (!ownsControl) { _controlSource = Actuation::Origin::None; }
+            else if (result.execution.writeAttempted
+                    && !(envelope.command.action == Actuation::Action::SetTargetSocPct && _controlSource == Actuation::Origin::Protection)) {
+                _controlSource = envelope.command.origin;
+            }
             _polled = false;
         } else if (ownsControl && !_cleanup.valid && profile && port && unit) {
             retainCleanupLocked(config, profile, port, unit);
-            _controlOwned = false;
+            _controlOwned = false; _controlSource = Actuation::Origin::None;
         }
     }
 
@@ -480,7 +515,7 @@ void Provider::processCleanup()
         _cleanup.valid = false;
         _cleanup.profile.reset();
         _cleanupState = success ? Actuation::CleanupState::Succeeded : Actuation::CleanupState::Failed;
-        _controlOwned = false;
+        _controlOwned = false; _controlSource = Actuation::Origin::None;
         _ownershipUncertain = !success;
         _polled = false;
         _actuator.reset();
@@ -490,6 +525,68 @@ void Provider::processCleanup()
     ESP_LOGI(TAG, "Retained control cleanup %s after %" PRIu32 " attempt(s)",
             success ? "succeeded" : "failed",
             attempts);
+}
+
+void Provider::processPoll()
+{
+    bool cleanupWork = false;
+    StorageConfig config;
+    std::shared_ptr<Profiles::Profile const> profile;
+    uint16_t port = 0;
+    uint8_t unit = 0;
+    uint32_t generation = 0;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (!_busy) { return; }
+        cleanupWork = _cleanup.valid && _cleanupState == Actuation::CleanupState::Running;
+        if (!cleanupWork) {
+            if (!_enabled) { _busy = false; return; }
+            config = _config;
+            profile = _profile;
+            port = _port;
+            unit = _unit;
+            generation = _generation;
+        }
+    }
+
+    if (cleanupWork) {
+        processCleanup();
+        return;
+    }
+
+    Sample sample;
+    Modbus::Result result { Modbus::Error::Network };
+    if (profile && NetworkSettings.isConnected()) {
+        result = _client.open(config.Host, port, unit);
+        if (result) {
+            bool current;
+            {
+                std::lock_guard<std::mutex> lock(_mutex);
+                current = _enabled && generation == _generation;
+            }
+            if (current) { result = poll(_client, *profile, sample); }
+        }
+    }
+    _client.close();
+
+    bool available = false;
+    bool changedError = false;
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        _busy = false;
+        if (!_enabled || generation != _generation) { return; }
+        _lastPollMs = millis();
+        auto previous = _state.snapshot(millis());
+        _state.apply(sample, result, millis());
+        available = result && !previous.valid;
+        changedError = !result && (previous.error != result.error || previous.exception != result.exception);
+    }
+    if (available) {
+        ESP_LOGI(TAG, "Read-only storage telemetry available/recovered");
+    } else if (changedError) {
+        ESP_LOGW(TAG, "Read-only storage poll failed: %s (Modbus exception %u)",
+                Modbus::errorName(result.error), result.exception);
+    }
 }
 
 void Provider::worker()
@@ -503,64 +600,7 @@ void Provider::worker()
             continue;
         }
 
-        bool cleanupWork = false;
-        StorageConfig config;
-        std::shared_ptr<Profiles::Profile const> profile;
-        uint16_t port = 0;
-        uint8_t unit = 0;
-        uint32_t generation = 0;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            if (!_busy) { continue; }
-            cleanupWork = _cleanup.valid && _cleanupState == Actuation::CleanupState::Running;
-            if (!cleanupWork) {
-                if (!_enabled) { _busy = false; continue; }
-                config = _config;
-                profile = _profile;
-                port = _port;
-                unit = _unit;
-                generation = _generation;
-            }
-        }
-
-        if (cleanupWork) {
-            processCleanup();
-            continue;
-        }
-
-        Sample sample;
-        Modbus::Result result { Modbus::Error::Network };
-        if (profile && NetworkSettings.isConnected()) {
-            result = _client.open(config.Host, port, unit);
-            if (result) {
-                bool current;
-                {
-                    std::lock_guard<std::mutex> lock(_mutex);
-                    current = _enabled && generation == _generation;
-                }
-                if (current) { result = poll(_client, *profile, sample); }
-            }
-        }
-        _client.close();
-
-        bool available = false;
-        bool changedError = false;
-        {
-            std::lock_guard<std::mutex> lock(_mutex);
-            _busy = false;
-            if (!_enabled || generation != _generation) { continue; }
-            _lastPollMs = millis();
-            auto previous = _state.snapshot(millis());
-            _state.apply(sample, result, millis());
-            available = result && !previous.valid;
-            changedError = !result && (previous.error != result.error || previous.exception != result.exception);
-        }
-        if (available) {
-            ESP_LOGI(TAG, "Read-only storage telemetry available/recovered");
-        } else if (changedError) {
-            ESP_LOGW(TAG, "Read-only storage poll failed: %s (Modbus exception %u)",
-                    Modbus::errorName(result.error), result.exception);
-        }
+        processPoll();
     }
 }
 

@@ -17,7 +17,7 @@ Global modes:
 
 - **Disabled:** no automatic control; preserves existing disabled semantics by stopping HEMS provider polling. Known ownership gets one best-effort release attempt.
 - **Monitor:** telemetry and policy proposals; manual semantic commands for writable targets; no automatic command producer.
-- **Active:** also permits automatic policy commands for writable targets. Manual commands are allowed; the UI explains that automation may override them.
+- **Active:** also permits automatic policy commands for writable targets. Manual storage commands pause opted-in economics until explicit Resume; EV Protection retains priority.
 
 Mode is persisted in the existing HEMS configuration. Legacy enabled settings become Monitor, legacy disabled settings remain Disabled, and invalid mode values fall back to Monitor. Device write permissions retain their existing separate persistence domains and default to Monitor only.
 
@@ -69,16 +69,19 @@ The current mapping follows Tinkerforge `esp32-firmware` revision `05762aabb8213
 
 Marstek Venus E 3.0 V148 / Micro V119: existing curated acquire, charge/discharge power, stop, target SoC and release plans are unchanged. No stable identity is required; `release_replay_safe=false` is accepted for normal commands. No new register is invented in this package.
 
-Marstek lifecycle behavior still needs physical validation on V148. Community reports of force-command watchdog/timeout behavior are **unvalidated for V148**; firmware assumes no automatic release timeout and does not depend on one. Independently resetting/disconnecting the device is an accepted operational recovery path. Check acquire/release, command persistence, power sign/scale and SoC against the actual device this weekend.
+Marstek lifecycle behavior still needs physical validation on V148. Community reports of force-command watchdog/timeout behavior are **unvalidated for V148**; firmware assumes no automatic release timeout and does not depend on one. Independently resetting/disconnecting the device is an accepted operational recovery path. Check acquire/release, command persistence, power sign/scale and SoC against the actual device as a remaining physical validation gate.
 
 Native tests and CI validate software paths, not physical charging/discharging or firmware-specific register behavior.
 
 
 ## Economic policy boundary
 
-Practical [storage/economic policies](HEMS_Policies.md) only constrain Shadow
-planning. They do not restrict explicit manual controls or create a command
-producer. Hardware safety and actionable EV Protection remain authoritative over
-manual discharge. Economic planning cannot override protection or manual actions.
-Future economic dispatch must use this same semantic path and add separately
-tested manual pause/resume precedence; no implicit economic override timer exists.
+Practical [storage/economic policies](HEMS_Policies.md) constrain the read-only DP.
+The separate [economic dispatcher](HEMS_Economic_Dispatch.md) can consume its
+current interval only after explicit default-off opt-in, Active, Storage HEMS
+Control and every current plan/readiness/constraint gate. Manual storage commands
+persist a pause; authenticated explicit Resume requires fresh replanning. Economic
+idle uses semantic Stop, while cleanup Release relinquishes only economic
+ownership. Hardware safety and EV Protection remain authoritative. The same
+provider generation, depth-one mailbox, worker, profile plans and per-write
+semantic executor checks handle every command. No implicit override timer exists.

@@ -25,12 +25,15 @@ public:
     bool controlCapable() const;
     void controlProfileId(char* buffer, size_t capacity) const;
     Actuation::ProfileInfo profileInfo() const;
+    bool operationInfo(Actuation::Action action, Actuation::OperationInfo& output) const;
     bool supportsCommand(Actuation::Command const& command) const;
     bool workerBusy() const;
     uint32_t generation() const;
     void setAuthorization(void* context, Actuation::AuthorizationCallback callback);
     bool submitCommand(Actuation::Command const& command, uint32_t& id);
     void requestRelease();
+    bool releaseEconomic();
+    Actuation::Origin owner() const;
     bool cancelPendingCommand(uint32_t id = 0);
     Actuation::MailboxSnapshot commandSnapshot() const;
     Actuation::CommandResult commandResult() const;
@@ -60,6 +63,8 @@ private:
 
     static void workerEntry(void* context);
     void worker();
+    // Poll scratch must not remain on the command/authorization call stack.
+    __attribute__((noinline)) void processPoll();
     bool ensureWorkerLocked();
     bool commandAuthorized(uint32_t generation, Actuation::Command const& command) const;
     bool cleanupAuthorized(uint32_t token) const;
@@ -86,6 +91,7 @@ private:
     bool _busy = false;
     bool _polled = false;
     bool _controlOwned = false;
+    Actuation::Origin _controlSource = Actuation::Origin::None;
     uint32_t _generation = 0;
     uint32_t _lastPollMs = 0;
     uint32_t _profileFingerprint = 0;

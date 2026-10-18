@@ -1,6 +1,6 @@
 # OpenDTU-HEMS Architecture
 
-> Status: supervisory control model; updated 2026-10-15.
+> Status: supervisory control model; updated 2026-10-18.
 >
 > This document describes the intended design constraints and responsibilities of OpenDTU-HEMS. Individual implementation details may evolve as real hardware integrations are validated, but changes to the core principles should be deliberate and documented.
 
@@ -31,6 +31,12 @@ One worker/client and depth-one mailbox per provider serialize all telemetry, ma
 Recovery/release is best effort and diagnostic. No durable ownership intent, identity/replay eligibility, attestation or temporary session lies in the normal command path. Known old ownership receives a single retained-endpoint release attempt on change; it cannot permanently block a new configuration. Old #22 journal files are ignored and administratively removable.
 
 See [HEMS_CONTROL.md](HEMS_CONTROL.md) for the implemented contract and [HEMS_Roadmap.md](HEMS_Roadmap.md) for the short remaining path to release.
+
+Economic dispatch is a separate, default-off current-interval consumer of the existing
+read-only DP. It uses the existing semantic path, carries plan authority, yields to
+manual control with a reboot-safe pause, and never releases protection ownership.
+See [economic dispatch](HEMS_Economic_Dispatch.md) for gates, validity, replanning
+and failure/cleanup/reboot behavior. No new task, protocol or journal is added.
 
 ## 2. Core design principles
 
@@ -851,7 +857,9 @@ Firmware commit/tag links and the opt-in browser-side GitHub comparison use
 where HEMS commits and the `hems` branch do not exist. This is a branch comparison,
 not an automatic release installer. GitHub rate limits, network failures and
 unpublished local commits can still make version information unavailable. A new
-release/update architecture is outside this milestone.
+release/update architecture is outside this milestone. The later rolling channel
+implementation and full source/image identities are documented in
+[Firmware provenance](Firmware_Provenance.md).
 
 ### PR #3 implementation boundary
 

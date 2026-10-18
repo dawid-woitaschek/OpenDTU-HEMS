@@ -48,6 +48,11 @@ export interface SystemStatus {
     config_version_onbattery: string;
     git_hash: string;
     git_is_hash: boolean;
+    source_commit?: string;
+    tested_merge_commit?: string;
+    git_sha?: string;
+    update_repository?: string;
+    update_channel?: string;
     git_branch: string;
     pioenv: string;
     reset_diagnostics?: ResetDiagnostics;

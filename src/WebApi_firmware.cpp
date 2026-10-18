@@ -130,6 +130,8 @@ void WebApiFirmwareClass::onFirmwareStatus(AsyncWebServerRequest* request)
     root["ota_supported"] = otaSupported();
     root["git_hash"] = __COMPILED_GIT_HASH__;
     root["git_sha"] = __COMPILED_GIT_SHA__;
+    root["source_commit"] = __COMPILED_SOURCE_COMMIT__;
+    root["tested_merge_commit"] = __COMPILED_TESTED_MERGE_COMMIT__;
     root["git_branch"] = __COMPILED_GIT_BRANCH__;
     root["pioenv"] = PIOENV;
     root["update_repository"] = __COMPILED_UPDATE_REPOSITORY__;

@@ -9,6 +9,7 @@
 #include <hems/actuation/Mailbox.h>
 #include <hems/actuation/Readiness.h>
 #include <hems/constraints/Constraints.h>
+#include <hems/economic/Dispatch.h>
 #include <hems/model/State.h>
 #include <hems/policies/EvProtection.h>
 #include <hems/storage/Provider.h>
@@ -41,8 +42,11 @@ public:
     Warp::Snapshot getWarpSnapshot() const;
     Storage::Snapshot getStorageSnapshot() const;
     Model::SystemState getNormalizedState() const;
+    Model::StorageState getStoragePlanningState() const;
     Constraints::ConstraintSet getConstraints() const;
     Policies::EvProtectionSnapshot getEvProtectionShadowSnapshot() const;
+    uint64_t economicContextRevision() const;
+    void serializeEconomic(JsonObject output) const;
 
 private:
     static bool providerAuthorization(void* context, Actuation::Command const& command);
@@ -50,6 +54,11 @@ private:
     bool submit(Actuation::Command command, uint32_t& id);
     bool constraintsPermit(Actuation::Command const& command) const;
     void applyEvProtection();
+    void applyEconomic();
+    bool economicAuthorized(Actuation::Command const& command) const;
+    mutable std::mutex _economicMutex;
+    Economic::Dispatch _economic;
+    uint32_t _economicLastTickMs = 0;
     std::atomic<bool> _evProtectionOwned { false };
     uint32_t _evProtectionGeneration = 0;
     std::atomic<uint32_t> _policyCommandId { 0 };

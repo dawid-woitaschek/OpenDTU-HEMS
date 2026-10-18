@@ -166,6 +166,9 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
     output["source_age_seconds"] = nullptr;
     if (data.sourceTimestampKnown && status.hasData) { output["source_age_seconds"] = status.sourceAgeSeconds; }
     output["source_timestamp_known"] = data.sourceTimestampKnown;
+    output["source_fresh"] = nullptr;
+    if (data.sourceTimestampKnown && status.hasData) { output["source_fresh"] = status.sourceFresh; }
+    output["transport_fresh"] = status.hasData && status.transportFresh;
     output["next_refresh"] = status.nextRefresh;
     auto decision = refreshDecision(domain);
     auto manual = output["manual_refresh"].to<JsonObject>();
@@ -250,6 +253,11 @@ RefreshDecision Service::requestRefresh(Domain domain)
     auto result = refreshDecision(domain);
     if (result) { _pending[static_cast<unsigned>(domain)] = true; }
     return result;
+}
+Status Service::status(Domain domain) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return provider(domain).status(time(nullptr), millis());
 }
 void Service::loop()
 {

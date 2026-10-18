@@ -89,7 +89,7 @@ try {
             await page.locator('#optimizer-target-soc').fill('70');
             await page.locator('#optimizer-target-deadline').fill('2026-10-26T06:00');
             await optimizerForm.getByRole('button', { name: 'Save', exact: true }).click();
-            await page.getByText('Saved or queued · Shadow calculation only.', { exact: true }).waitFor();
+            await page.getByText('Economic settings saved or calculation queued.', { exact: true }).waitFor();
             const policySave = requests.findLast(r => r.path === '/api/hems/optimizer/config');
             assert.equal(policySave.payload.policies.grid_charging_allowed, false);
             assert.equal(policySave.payload.policies.discharge_allowed, false);
@@ -132,7 +132,7 @@ try {
         assert.match(await energyChart.locator('.inspection').innerText(), /12:15/);
         await energyChart.getByRole('button', { name: 'Back to now', exact: true }).click();
         await tariff.locator('.next-period.period-expensive').click();
-        assert.match(await energyChart.locator('.inspection').innerText(), /Expensive/);
+        assert.match(await energyChart.locator('.inspection').innerText(), /High/);
         await energyChart.getByRole('checkbox', { name: 'Market price', exact: true }).check();
         assert.ok(await energyChart.locator('.source-line').getAttribute('d'));
         await energyChart.getByRole('checkbox', { name: 'Market price', exact: true }).uncheck();
@@ -220,7 +220,9 @@ try {
         scenario = 'blocked';
         await page.reload();
         await page.getByText('Waiting for fresh battery SoC.', { exact: true }).waitFor();
-        assert.equal(await page.getByRole('link', { name: 'Review data and battery settings' }).count(), 1);
+        const blockedSettings = page.getByRole('link', { name: 'Economic settings', exact: true });
+        assert.equal(await blockedSettings.count(), 1);
+        assert.equal(await blockedSettings.getAttribute('href'), '/hems/settings');
         // A lost feed request must mark retained values as unverified and suppress summaries.
         scenario = 'normal';
         await page.reload();

@@ -19,6 +19,7 @@ public:
     // Consistent normalized input for later optimizer code; caller owns bounded destination.
     void snapshot(Domain domain, Series& series, Status& status) const;
     uint32_t revision() const;
+    Status status(Domain domain) const;
     // Share the optional low-priority worker with pure background calculations.
     void background(bool (*due)(void*), void (*run)(void*), void* context);
 private:

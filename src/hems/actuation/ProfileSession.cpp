@@ -93,6 +93,9 @@ CommandResult ProfileSession::execute(RegisterIo const& io, Profiles::Profile co
     auto acquired = acquire(io, profile, verifyReadback);
     if (!acquired) { return acquired; }
     auto result = runPlan(io, operationPlan, CommandStage::Operation, verifyReadback);
+    // Retain attempted ownership even if authorization is revoked between a
+    // successful acquire and the first operation write.
+    result.execution.writeAttempted = result.execution.writeAttempted || acquired.execution.writeAttempted;
     // Acquire-less profiles establish ownership on the first operation write.
     if (result.execution.writeAttempted || (result && operationPlan.count)) { _owned = true; }
     return result;

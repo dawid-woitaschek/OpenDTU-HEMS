@@ -6,6 +6,8 @@
 extern const char* __COMPILED_GIT_HASH__;
 extern const char* __COMPILED_GIT_BRANCH__;
 extern const char* __COMPILED_GIT_SHA__;
+extern const char* __COMPILED_SOURCE_COMMIT__;
+extern const char* __COMPILED_TESTED_MERGE_COMMIT__;
 extern const char* __COMPILED_UPDATE_REPOSITORY__;
 extern const char* __COMPILED_UPDATE_CHANNEL__;
 // extern const char *__COMPILED_DATE_TIME_UTC_STR__;

@@ -33,6 +33,28 @@
                         <td>{{ systemStatus.git_branch }}</td>
                     </tr>
                     <tr>
+                        <th>{{ $t('firmwareupgrade.SourceCommit') }}</th>
+                        <td>
+                            <code :title="systemStatus.source_commit">{{
+                                systemStatus.source_commit?.slice(0, 12) || '—'
+                            }}</code>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>{{ $t('firmwareupgrade.TestedMergeCommit') }}</th>
+                        <td>
+                            <code :title="systemStatus.tested_merge_commit || systemStatus.git_sha">{{
+                                (systemStatus.tested_merge_commit || systemStatus.git_sha)?.slice(0, 12) || '—'
+                            }}</code>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>{{ $t('firmwareupgrade.BuildCommit') }}</th>
+                        <td>
+                            <code :title="systemStatus.git_sha">{{ systemStatus.git_sha?.slice(0, 12) || '—' }}</code>
+                        </td>
+                    </tr>
+                    <tr>
                         <th>{{ $t('firmwareinfo.PioEnv') }}</th>
                         <td>{{ systemStatus.pioenv }}</td>
                     </tr>
@@ -50,7 +72,7 @@
                                 />
                                 <label class="form-check-label">
                                     <a
-                                        v-if="modelAllowVersionInfo && systemStatus.update_url !== undefined"
+                                        v-if="modelAllowVersionInfo && systemStatus.update_url"
                                         :href="systemStatus.update_url"
                                         target="_blank"
                                         v-tooltip

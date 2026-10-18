@@ -155,7 +155,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { dayBounds, finite, stepPath, type ChartInterval } from '@/utils/hemsPresentation';
+import { chartScale, dayBounds, finite, stepPath, type ChartInterval } from '@/utils/hemsPresentation';
 import './energy.css';
 const props = defineProps<{
     intervals: ChartInterval[];
@@ -164,6 +164,7 @@ const props = defineProps<{
     unit: string;
     display: (value: number | null | undefined) => string;
     focusAt?: { utc: number };
+    includeZero?: boolean;
 }>();
 const { t, locale } = useI18n();
 const container = ref<HTMLElement>();
@@ -201,22 +202,11 @@ const bands = computed(() => {
 const values = computed(() =>
     visible.value.flatMap((i) => [i.value, ...(showSource.value ? [i.secondary] : [])]).filter(finite)
 );
-const range = computed(() => {
-    const low = Math.min(0, ...values.value),
-        high = Math.max(0, ...values.value);
-    const span = high - low || 1;
-    return [low < 0 ? low - span * 0.08 : 0, high + span * 0.12] as const;
-});
+const scale = computed(() => chartScale(values.value, props.includeZero));
 const x = (utc: number) => left + ((utc - start.value) / (end.value - start.value)) * (width.value - left - right);
-const y = (value: number) => bottom - ((value - range.value[0]) / (range.value[1] - range.value[0])) * (bottom - top);
-const yTicks = computed(() => {
-    const span = range.value[1] - range.value[0];
-    const magnitude = 10 ** Math.floor(Math.log10(span / 4));
-    const step = [1, 2, 5, 10].map((n) => n * magnitude).find((n) => n >= span / 4)!;
-    const ticks = [];
-    for (let value = Math.ceil(range.value[0] / step) * step; value <= range.value[1]; value += step) ticks.push(value);
-    return ticks;
-});
+const y = (value: number) =>
+    bottom - ((value - scale.value.min) / (scale.value.max - scale.value.min)) * (bottom - top);
+const yTicks = computed(() => scale.value.ticks);
 const xTicks = computed(() => {
     const result: number[] = [];
     const step = view.value === 'twoDays' ? (width.value < 480 ? 12 : 6) : width.value < 480 ? 6 : 3;

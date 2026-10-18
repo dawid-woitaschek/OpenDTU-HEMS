@@ -38,6 +38,7 @@
                 <RouterLink to="/hems/devices">{{ t('hemsUi.configureDevices') }}</RouterLink>
             </CardElement>
             <HemsEnergyPanel view="settings" />
+            <HemsPlanningReadinessPanel />
             <HemsOptimizerPanel view="settings" />
         </template>
     </BasePage>
@@ -48,6 +49,7 @@ import { useRouter } from 'vue-router';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
 import HemsNav from '@/components/hems/HemsNav.vue';
+import HemsPlanningReadinessPanel from '@/components/hems/HemsPlanningReadinessPanel.vue';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';

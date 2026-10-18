@@ -40,7 +40,7 @@ const original = { enabled: true, provider: 'energy_charts', url: '', planes: []
     enabled: true, vat_basis_points: 1900, grid_micros_per_kwh: 123400,
     markup_micros_per_kwh: 1234, monthly_micros: 9990000,
 }, refresh_seconds: 3600, max_age_seconds: 3600, horizon_seconds: 86400 };
-const state = compile(component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1] + '\nexport { drafts, save, load, refresh, errors };', {
+const state = compile(component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1] + '\nexport { drafts, feeds, usable, unavailable, save, load, refresh, errors };', {
     vue: { ref: value => ({ value }), computed: fn => ({ get value() { return fn(); } }), reactive: value => value, onMounted() {}, onUnmounted() {}, getCurrentInstance: () => ({ appContext: { config: { globalProperties: {} } } }) },
     'vue-i18n': { useI18n },
     'vue-router': { useRouter: () => ({}) }, '@/utils/tariffUnits': units,
@@ -65,10 +65,17 @@ await state.save('tariff'); // Saving reloaded canonical values must not convert
 assert.deepEqual(persisted, original);
 console.log('Tariff percent, ct/kWh and EUR/month conversions and API save/reload preserve canonical integer values');
 
-for (const [reason, expected] of [['busy', 'queued or running'], ['network_unavailable', 'Waiting for network connectivity'], ['clock_invalid', 'synchronized system time'], ['transport_backoff', 'retry scheduled'], ['provider_backoff', 'Provider requested a retry delay'], ['rate_limited', 'rate limit'], ['not_enabled', 'Disabled'], ['invalid_config', 'configuration']]) {
+state.feeds.tariff = { enabled: true, fresh: true, planning_usable: true };
+for (const [reason, expected] of [['busy', 'queued or running'], ['network_unavailable', 'Waiting for network connectivity'], ['clock_invalid', 'synchronized system time'], ['transport_backoff', 'Waiting before the next provider request'], ['provider_backoff', 'Provider requested a retry delay'], ['rate_limited', 'rate limit'], ['not_enabled', 'Disabled'], ['invalid_config', 'configuration']]) {
     fetcher = async () => new Response(JSON.stringify({ ok: false, reason, retry_after_seconds: 15 }), { status: 409 });
     await state.refresh('tariff');
     assert.ok(state.errors.tariff.includes(expected));
     assert.ok(state.errors.tariff.includes('Retry in 15 seconds'));
+    assert.equal(state.usable('tariff'), true); // a rejected action does not make retained accepted data unavailable
+    assert.equal(state.unavailable.tariff, false);
 }
-console.log('Manual refresh UI presents backend rejection reasons and retry delay');
+fetcher = async () => { throw new Error('API offline'); };
+await state.load('tariff');
+assert.equal(state.unavailable.tariff, true);
+assert.equal(state.usable('tariff'), false);
+console.log('Manual refresh rejection preserves data availability; API failure is separately unverified');

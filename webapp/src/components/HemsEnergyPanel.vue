@@ -23,15 +23,15 @@
                         <span
                             class="feed-state"
                             :class="{
-                                'feed-warning': !['freshData', 'partialData'].includes(
-                                    feedReadiness(feeds[kind]!, !!errors[kind])
+                                'feed-warning': !['freshData', 'partialData', 'coveredData'].includes(
+                                    feedReadiness(feeds[kind]!, unavailable[kind], kind)
                                 ),
                             }"
-                            >{{ t('hemsUi.' + feedReadiness(feeds[kind]!, !!errors[kind])) }}</span
+                            >{{ t('hemsUi.' + feedReadiness(feeds[kind]!, unavailable[kind], kind)) }}</span
                         >
                         <span v-if="feeds[kind]!.planning_usable !== undefined" class="small text-body-secondary">{{
                             t(
-                                feeds[kind]!.planning_usable && !errors[kind]
+                                feeds[kind]!.planning_usable && !unavailable[kind]
                                     ? 'hemsUi.planningUsable'
                                     : 'hemsUi.planningUnavailable'
                             )
@@ -93,6 +93,7 @@
                         v-if="feeds[kind]!.intervals.length"
                         :intervals="chartData(kind)"
                         :now="now"
+                        :include-zero="kind === 'forecast'"
                         :focus-at="kind === 'tariff' ? inspectedPeriod : undefined"
                         :label="
                             t(
@@ -184,6 +185,10 @@
                                         : t('hemsUi.sourceTimeUnknown')
                                 }}
                             </dd>
+                            <dt>{{ t('hemsUi.sourceFreshness') }}</dt>
+                            <dd>{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
+                            <dt>{{ t('hemsUi.transportFreshness') }}</dt>
+                            <dd>{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
                             <dt>{{ t('hemsUi.coverageUntil') }}</dt>
                             <dd>{{ date(feeds[kind]!.horizon_end) }}</dd>
                             <dt>{{ t('hemsUi.nextUpdate') }}</dt>
@@ -390,6 +395,10 @@
                     <dd class="col-sm-8">
                         {{ feeds[kind]!.source_age_seconds ?? '—' }} / {{ feeds[kind]!.transport_age_seconds }}
                     </dd>
+                    <dt class="col-sm-4">{{ t('hemsUi.sourceFreshness') }}</dt>
+                    <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
+                    <dt class="col-sm-4">{{ t('hemsUi.transportFreshness') }}</dt>
+                    <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
                     <dt class="col-sm-4">next_refresh</dt>
                     <dd class="col-sm-8">{{ date(feeds[kind]!.next_refresh) }}</dd>
                 </dl>
@@ -427,6 +436,7 @@ import type {
 import {
     dayBounds,
     feedReadiness,
+    feedFreshness,
     summarize,
     tariffIntervals,
     tariffBasis,
@@ -473,7 +483,7 @@ function summaryComplete(kind: Kind, day: number) {
     return summary(kind, day).complete;
 }
 function usable(kind: Kind) {
-    return feeds[kind]?.enabled && feeds[kind]?.fresh && !errors[kind];
+    return feeds[kind]?.enabled && feeds[kind]?.fresh && !unavailable[kind];
 }
 function energySummary(day: number, remaining = false) {
     const result = summary('forecast', day, remaining);
@@ -540,6 +550,8 @@ const domains: Kind[] = ['tariff', 'forecast'];
 const feeds = reactive<Partial<Record<Kind, Feed>>>({});
 const drafts = reactive<Partial<Record<Kind, Settings>>>({});
 const errors = reactive({ tariff: '', forecast: '' });
+// Action rejection (busy/quota/backoff) does not invalidate a successfully observed feed.
+const unavailable = reactive({ tariff: false, forecast: false });
 const notices = reactive({ tariff: '', forecast: '' });
 const busy = reactive({ tariff: false, forecast: false });
 const settingFields = [
@@ -607,9 +619,11 @@ async function load(kind: Kind, reset = false) {
             else feed.intervals = previous.intervals;
             if (disposed) return;
             feeds[kind] = feed;
+            unavailable[kind] = false;
             if (!drafts[kind] || reset) drafts[kind] = structuredClone(feed.config);
             errors[kind] = '';
         } catch (error) {
+            unavailable[kind] = true;
             errors[kind] = `${t('hemsUi.loadFailed')} ${message(error)}`;
         } finally {
             emit(
