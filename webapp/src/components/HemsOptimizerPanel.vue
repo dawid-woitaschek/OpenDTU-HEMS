@@ -31,7 +31,7 @@
         <p v-if="error" class="alert alert-warning" role="alert">{{ t('hemsUi.loadFailed') }} {{ error }}</p>
         <p v-if="notice" class="alert alert-success" role="status">{{ notice }}</p>
         <template v-if="plan">
-            <div class="border rounded p-3 mb-3 small" v-if="!error">
+            <div class="border rounded p-3 mb-3 small" v-if="!error && props.view !== 'settings'">
                 <strong>{{ t('hemsUi.storagePolicies') }}</strong>
                 <div>
                     {{ t('hemsUi.batteryReserve') }}: {{ plan.config.min_soc_pct }}% · {{ t('hemsUi.maxDesiredSoc') }}:
@@ -153,14 +153,39 @@
                         class="form-check-input me-2"
                     />{{ t('hemsUi.confirmSoc') }}</label
                 >
+
                 <fieldset class="border rounded p-3 mb-3" v-if="draft.policies">
                     <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.storagePolicies') }}</legend>
                     <p class="form-text mt-0">{{ t('hemsUi.policyHint') }}</p>
                     <div class="row g-3">
                         <div class="col-sm-6">
-                            <label for="optimizer-grid-charging" class="form-label">{{
-                                t('hemsUi.gridCharging')
-                            }}</label>
+                            <label for="optimizer-min_soc_pct" class="form-label">{{ t('hemsUi.batteryReserve') }} (%)</label>
+                            <input
+                                id="optimizer-min_soc_pct"
+                                v-model.number="draft.min_soc_pct"
+                                type="number"
+                                class="form-control"
+                                min="0"
+                                :max="Math.min(99, draft.max_soc_pct)"
+                                step="1"
+                                required
+                            />
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="optimizer-max_soc_pct" class="form-label">{{ t('hemsUi.maxDesiredSoc') }} (%)</label>
+                            <input
+                                id="optimizer-max_soc_pct"
+                                v-model.number="draft.max_soc_pct"
+                                type="number"
+                                class="form-control"
+                                :min="Math.max(1, draft.min_soc_pct)"
+                                max="100"
+                                step="1"
+                                required
+                            />
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="optimizer-grid-charging" class="form-label">{{ t('hemsUi.gridCharging') }}</label>
                             <select
                                 id="optimizer-grid-charging"
                                 v-model="draft.policies.grid_charging_allowed"
@@ -171,9 +196,7 @@
                             </select>
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-economic-discharge" class="form-label">{{
-                                t('hemsUi.economicDischarge')
-                            }}</label>
+                            <label for="optimizer-economic-discharge" class="form-label">{{ t('hemsUi.economicDischarge') }}</label>
                             <select
                                 id="optimizer-economic-discharge"
                                 v-model="draft.policies.discharge_allowed"
@@ -194,9 +217,7 @@
                     >
                     <div v-if="draft.policies.target_enabled" class="row g-3">
                         <div class="col-sm-4">
-                            <label for="optimizer-target-soc" class="form-label"
-                                >{{ t('hemsUi.targetAtLeast') }} (%)</label
-                            >
+                            <label for="optimizer-target-soc" class="form-label">{{ t('hemsUi.targetAtLeast') }} (%)</label>
                             <input
                                 id="optimizer-target-soc"
                                 v-model.number="draft.policies.target_soc_pct"
@@ -209,9 +230,7 @@
                             />
                         </div>
                         <div class="col-sm-8">
-                            <label for="optimizer-target-deadline" class="form-label"
-                                >{{ t('hemsUi.targetBy') }} · {{ zone }}</label
-                            >
+                            <label for="optimizer-target-deadline" class="form-label">{{ t('hemsUi.targetBy') }} · {{ zone }}</label>
                             <input
                                 id="optimizer-target-deadline"
                                 :value="localDeadline(draft.policies.target_deadline)"
@@ -224,88 +243,78 @@
                     </div>
                     <p class="form-text mb-0">{{ t('hemsUi.targetHint') }}</p>
                 </fieldset>
-                <label class="form-check-label d-block mb-2">
-                    <input
-                        id="optimizer-dispatch-enabled"
-                        v-model="draft.dispatch_enabled"
-                        type="checkbox"
-                        class="form-check-input me-2"
-                    />
-                    {{ t('hemsUi.enableDispatch') }}
-                </label>
-                <p class="form-text mb-3">{{ t('hemsUi.dispatchOptInHint') }}</p>
-                <div class="row g-3 mb-3">
-                    <div v-for="field in fields.filter((f) => !f.advanced)" :key="field.key" class="col-sm-6">
-                        <label :for="`optimizer-${field.key}`" class="form-label"
-                            >{{ t('hemsUi.' + field.label) }} ({{ field.unit }})</label
-                        >
+
+                <div class="border rounded p-3 mb-3">
+                    <label class="form-check-label d-block mb-2">
                         <input
-                            :id="`optimizer-${field.key}`"
-                            :value="draft[field.key] / field.scale"
-                            type="number"
-                            class="form-control"
-                            :min="field.min"
-                            :max="field.max"
-                            :step="field.step"
-                            required
-                            @input="
-                                draft[field.key] = Math.round(
-                                    Number(($event.target as HTMLInputElement).value) * field.scale
-                                )
-                            "
+                            id="optimizer-dispatch-enabled"
+                            v-model="draft.dispatch_enabled"
+                            type="checkbox"
+                            class="form-check-input me-2"
                         />
-                    </div>
+                        <strong>{{ t('hemsUi.enableDispatch') }}</strong>
+                    </label>
+                    <p class="form-text mb-0">{{ t('hemsUi.dispatchOptInHint') }}</p>
                 </div>
-                <p class="form-text">{{ t('hemsUi.optimizerConfigHint') }}</p>
-                <label for="optimizer-price-basis" class="form-label">{{ t('hemsUi.priceBasis') }}</label>
-                <select id="optimizer-price-basis" v-model="draft.effective_price" class="form-select mb-3">
-                    <option :value="true">{{ t('hemsUi.effectivePrice') }}</option>
-                    <option :value="false">{{ t('hemsUi.sourcePrice') }}</option>
-                </select>
-                <label class="form-check-label d-block mb-2"
-                    ><input
-                        id="optimizer-export"
-                        v-model="draft.export_configured"
-                        type="checkbox"
-                        class="form-check-input me-2"
-                    />{{ t('hemsUi.useExport') }}</label
-                >
-                <label for="optimizer-export-price" class="form-label">{{ t('hemsUi.exportValue') }} (ct/kWh)</label>
-                <input
-                    id="optimizer-export-price"
-                    :value="draft.export_micros_per_kwh / 10000"
-                    type="number"
-                    class="form-control mb-3"
-                    min="-214748.3648"
-                    max="214748.3647"
-                    step="0.0001"
-                    :disabled="!draft.export_configured"
-                    required
-                    @input="
-                        draft.export_micros_per_kwh = Math.round(
-                            Number(($event.target as HTMLInputElement).value) * 10000
-                        )
-                    "
-                />
+
                 <details class="border rounded p-3 mb-3">
                     <summary>{{ t('hemsUi.advancedSettings') }}</summary>
+                    <p class="form-text mt-3">{{ t('hemsUi.optimizerConfigHint') }}</p>
                     <div class="row g-3 mt-1">
-                        <div v-for="field in fields.filter((f) => f.advanced)" :key="field.key" class="col-sm-6">
+                        <div v-for="field in advancedFields" :key="field.key" class="col-sm-6">
                             <label :for="`optimizer-${field.key}`" class="form-label"
                                 >{{ t('hemsUi.' + field.label) }} ({{ field.unit }})</label
-                            ><input
+                            >
+                            <input
                                 :id="`optimizer-${field.key}`"
-                                v-model.number="draft[field.key]"
+                                :value="draft[field.key] / field.scale"
                                 type="number"
                                 class="form-control"
                                 :min="field.min"
                                 :max="field.max"
-                                step="1"
+                                :step="field.step"
                                 required
+                                @input="
+                                    draft[field.key] = Math.round(
+                                        Number(($event.target as HTMLInputElement).value) * field.scale
+                                    )
+                                "
                             />
                         </div>
                     </div>
+                    <hr />
+                    <label for="optimizer-price-basis" class="form-label">{{ t('hemsUi.priceBasis') }}</label>
+                    <select id="optimizer-price-basis" v-model="draft.effective_price" class="form-select mb-3">
+                        <option :value="true">{{ t('hemsUi.effectivePrice') }}</option>
+                        <option :value="false">{{ t('hemsUi.sourcePrice') }}</option>
+                    </select>
+                    <label class="form-check-label d-block mb-2"
+                        ><input
+                            id="optimizer-export"
+                            v-model="draft.export_configured"
+                            type="checkbox"
+                            class="form-check-input me-2"
+                        />{{ t('hemsUi.useExport') }}</label
+                    >
+                    <label for="optimizer-export-price" class="form-label">{{ t('hemsUi.exportValue') }} (ct/kWh)</label>
+                    <input
+                        id="optimizer-export-price"
+                        :value="draft.export_micros_per_kwh / 10000"
+                        type="number"
+                        class="form-control"
+                        min="-214748.3648"
+                        max="214748.3647"
+                        step="0.0001"
+                        :disabled="!draft.export_configured"
+                        required
+                        @input="
+                            draft.export_micros_per_kwh = Math.round(
+                                Number(($event.target as HTMLInputElement).value) * 10000
+                            )
+                        "
+                    />
                 </details>
+
                 <div class="d-flex flex-wrap gap-2">
                     <button class="btn btn-primary" :disabled="busy">{{ t('hemsUi.save') }}</button
                     ><button
@@ -326,20 +335,7 @@
                 <div v-if="plan.schedule.length" class="table-responsive mt-3">
                     <table class="table table-sm">
                         <caption>
-                            {{
-                                t('hemsUi.proposedSchedule')
-                            }}
-                            ·
-                            {{
-                                zone
-                            }}
-                            ·
-                            {{
-                                plan.interval_count
-                            }}
-                            {{
-                                t('hemsUi.intervals')
-                            }}
+                            {{ t('hemsUi.proposedSchedule') }} · {{ zone }} · {{ plan.interval_count }} {{ t('hemsUi.intervals') }}
                         </caption>
                         <thead>
                             <tr>
@@ -471,71 +467,15 @@ type Plan = {
     target_state?: string;
     policy_restrictions?: string[];
 };
-const fields = [
-    {
-        key: 'capacity_wh',
-        label: 'capacity',
-        unit: 'kWh',
-        min: 0,
-        max: 1000,
-        scale: 1000,
-        step: 0.001,
-        advanced: false,
-    },
-    { key: 'min_soc_pct', label: 'batteryReserve', unit: '%', min: 0, max: 99, scale: 1, step: 1, advanced: false },
-    { key: 'max_soc_pct', label: 'maxDesiredSoc', unit: '%', min: 1, max: 100, scale: 1, step: 1, advanced: false },
-    {
-        key: 'charge_permille',
-        label: 'chargeEfficiency',
-        unit: '%',
-        min: 0,
-        max: 100,
-        scale: 10,
-        step: 0.1,
-        advanced: false,
-    },
-    {
-        key: 'discharge_permille',
-        label: 'dischargeEfficiency',
-        unit: '%',
-        min: 0,
-        max: 100,
-        scale: 10,
-        step: 0.1,
-        advanced: false,
-    },
-    { key: 'max_charge_w', label: 'maxCharge', unit: 'W', min: 0, max: 100000, scale: 1, step: 1, advanced: false },
-    {
-        key: 'max_discharge_w',
-        label: 'maxDischarge',
-        unit: 'W',
-        min: 0,
-        max: 100000,
-        scale: 1,
-        step: 1,
-        advanced: false,
-    },
-    {
-        key: 'expected_base_load_w',
-        label: 'baseLoad',
-        unit: 'W',
-        min: 0,
-        max: 100000,
-        scale: 1,
-        step: 1,
-        advanced: false,
-    },
-    {
-        key: 'horizon_seconds',
-        label: 'planHorizon',
-        unit: 's',
-        min: 900,
-        max: 172800,
-        scale: 1,
-        step: 1,
-        advanced: true,
-    },
-    { key: 'soc_step_pct', label: 'socStep', unit: '%', min: 2, max: 10, scale: 1, step: 1, advanced: true },
+const advancedFields = [
+    { key: 'capacity_wh', label: 'capacity', unit: 'kWh', min: 0, max: 1000, scale: 1000, step: 0.001 },
+    { key: 'charge_permille', label: 'chargeEfficiency', unit: '%', min: 0, max: 100, scale: 10, step: 0.1 },
+    { key: 'discharge_permille', label: 'dischargeEfficiency', unit: '%', min: 0, max: 100, scale: 10, step: 0.1 },
+    { key: 'max_charge_w', label: 'maxCharge', unit: 'W', min: 0, max: 100000, scale: 1, step: 1 },
+    { key: 'max_discharge_w', label: 'maxDischarge', unit: 'W', min: 0, max: 100000, scale: 1, step: 1 },
+    { key: 'expected_base_load_w', label: 'baseLoad', unit: 'W', min: 0, max: 100000, scale: 1, step: 1 },
+    { key: 'horizon_seconds', label: 'planHorizon', unit: 's', min: 900, max: 172800, scale: 1, step: 1 },
+    { key: 'soc_step_pct', label: 'socStep', unit: '%', min: 2, max: 10, scale: 1, step: 1 },
 ] as const;
 const offset = ref(0);
 const plan = ref<Plan>();
