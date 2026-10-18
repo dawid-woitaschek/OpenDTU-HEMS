@@ -54,9 +54,17 @@
                         <dd class="col-sm-8">
                             <code>{{ firmwareStatus.git_branch }}</code>
                         </dd>
-                        <dt class="col-sm-4">{{ $t('firmwareupgrade.Commit') }}</dt>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildCommit') }}</dt>
                         <dd class="col-sm-8">
                             <code>{{ shortSha(firmwareStatus.git_sha) }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.SourceCommit') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ shortSha(sourceCommit) }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.TestedMergeCommit') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ shortSha(firmwareStatus.tested_merge_commit || firmwareStatus.git_sha) }}</code>
                         </dd>
                         <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildTarget') }}</dt>
                         <dd class="col-sm-8">
@@ -128,9 +136,17 @@
                             <dd class="col-sm-8">
                                 <code>{{ updateManifest.branch }}</code>
                             </dd>
-                            <dt class="col-sm-4">{{ $t('firmwareupgrade.Commit') }}</dt>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildCommit') }}</dt>
                             <dd class="col-sm-8">
                                 <code>{{ shortSha(updateManifest.commit) }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.SourceCommit') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ shortSha(updateManifest.source_commit || '') }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.TestedMergeCommit') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ shortSha(updateManifest.tested_merge_commit || updateManifest.commit) }}</code>
                             </dd>
                             <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildTarget') }}</dt>
                             <dd class="col-sm-8">
@@ -228,24 +244,14 @@ import SparkMD5 from 'spark-md5';
 import { defineComponent } from 'vue';
 import { waitRestart } from '@/utils/waitRestart';
 
-type FirmwareBuild = {
-    file: string;
-    size: number;
-    md5: string;
-    sha256: string;
-};
+import {
+    exactImageInstalled,
+    installedSourceCommit,
+    validManifest,
+    type FirmwareBuild,
+    type FirmwareManifest,
+} from '@/utils/firmwareProvenance';
 
-type FirmwareManifest = {
-    schema: string;
-    repository: string;
-    channel: string;
-    branch: string;
-    commit: string;
-    published_at: string;
-    builds: Record<string, FirmwareBuild>;
-};
-
-const MANIFEST_SCHEMA = 'opendtu-hems-update/v1';
 const CHANNEL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 export default defineComponent({
@@ -276,12 +282,14 @@ export default defineComponent({
         };
     },
     computed: {
+        sourceCommit(): string {
+            return installedSourceCommit(this.firmwareStatus, this.updateManifest ?? undefined) ?? '';
+        },
         upToDate(): boolean {
-            if (!this.updateManifest || !this.firmwareStatus.git_sha) return false;
             return (
-                this.updateManifest.commit.toLowerCase() === this.firmwareStatus.git_sha.toLowerCase() &&
-                this.updateManifest.branch === this.firmwareStatus.git_branch &&
-                this.selectedChannel === this.firmwareStatus.update_channel
+                !!this.updateManifest &&
+                this.selectedChannel === this.updateManifest.channel &&
+                exactImageInstalled(this.firmwareStatus, this.updateManifest)
             );
         },
     },
@@ -427,19 +435,7 @@ export default defineComponent({
             return `https://raw.githubusercontent.com/${this.firmwareStatus.update_repository}/${branch}/${filename}`;
         },
         validManifest(value: unknown): value is FirmwareManifest {
-            if (!value || typeof value !== 'object') return false;
-            const manifest = value as Partial<FirmwareManifest>;
-            return (
-                manifest.schema === MANIFEST_SCHEMA &&
-                manifest.repository === this.firmwareStatus.update_repository &&
-                manifest.channel === this.selectedChannel &&
-                typeof manifest.branch === 'string' &&
-                typeof manifest.commit === 'string' &&
-                /^[0-9a-f]{40}$/i.test(manifest.commit) &&
-                typeof manifest.published_at === 'string' &&
-                !!manifest.builds &&
-                typeof manifest.builds === 'object'
-            );
+            return validManifest(value, this.firmwareStatus.update_repository, this.selectedChannel);
         },
         validBuild(value: FirmwareBuild | undefined): value is FirmwareBuild {
             if (!value) return false;

@@ -4,8 +4,11 @@
 #
 import json
 import os
+import sys
 
 Import("env")
+sys.path.insert(0, os.path.join(env.subst("$PROJECT_DIR"), "pio-scripts"))
+from firmware_provenance import provenance
 
 try:
     from dulwich import porcelain
@@ -111,12 +114,15 @@ def get_firmware_specifier_build_flag():
     build_version = get_build_version()
     build_branch = get_build_branch()
     build_sha = get_build_sha()
+    identities = provenance(build_sha)
     repository, update_channel = get_update_source(build_branch)
     build_flag = "-D AUTO_GIT_HASH=\\\"" + build_version + "\\\""
     build_flag += " -D AUTO_GIT_BRANCH=\\\"" + build_branch + "\\\""
     build_flag += " -D AUTO_GIT_SHA=\\\"" + build_sha + "\\\""
     build_flag += " -D AUTO_UPDATE_REPOSITORY=\\\"" + repository + "\\\""
     build_flag += " -D AUTO_UPDATE_CHANNEL=\\\"" + update_channel + "\\\""
+    build_flag += " -D AUTO_SOURCE_COMMIT=\\\"" + identities["source_commit"] + "\\\""
+    build_flag += " -D AUTO_TESTED_MERGE_COMMIT=\\\"" + identities["tested_merge_commit"] + "\\\""
     return build_flag
 
 
@@ -138,10 +144,13 @@ def do_main():
             build_version = get_build_version()
             build_branch = get_build_branch()
             build_sha = get_build_sha()
+            identities = provenance(build_sha)
             repository, update_channel = get_update_source(build_branch)
             lines += 'const char *__COMPILED_GIT_HASH__ = "%s";\n' % build_version
             lines += 'const char *__COMPILED_GIT_BRANCH__ = "%s";\n' % build_branch
             lines += 'const char *__COMPILED_GIT_SHA__ = "%s";\n' % build_sha
+            lines += 'const char *__COMPILED_SOURCE_COMMIT__ = "%s";\n' % identities["source_commit"]
+            lines += 'const char *__COMPILED_TESTED_MERGE_COMMIT__ = "%s";\n' % identities["tested_merge_commit"]
             lines += 'const char *__COMPILED_UPDATE_REPOSITORY__ = "%s";\n' % repository
             lines += 'const char *__COMPILED_UPDATE_CHANNEL__ = "%s";\n' % update_channel
 

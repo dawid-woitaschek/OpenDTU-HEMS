@@ -100,6 +100,11 @@ void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
     root["config_version"] = version;
     root["config_version_onbattery"] = CONFIG_VERSION_ONBATTERY;
     root["git_hash"] = __COMPILED_GIT_HASH__;
+    root["source_commit"] = __COMPILED_SOURCE_COMMIT__;
+    root["tested_merge_commit"] = __COMPILED_TESTED_MERGE_COMMIT__;
+    root["git_sha"] = __COMPILED_GIT_SHA__;
+    root["update_repository"] = __COMPILED_UPDATE_REPOSITORY__;
+    root["update_channel"] = __COMPILED_UPDATE_CHANNEL__;
     root["git_branch"] = __COMPILED_GIT_BRANCH__;
     root["pioenv"] = PIOENV;
 

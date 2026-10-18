@@ -857,7 +857,9 @@ Firmware commit/tag links and the opt-in browser-side GitHub comparison use
 where HEMS commits and the `hems` branch do not exist. This is a branch comparison,
 not an automatic release installer. GitHub rate limits, network failures and
 unpublished local commits can still make version information unavailable. A new
-release/update architecture is outside this milestone.
+release/update architecture is outside this milestone. The later rolling channel
+implementation and full source/image identities are documented in
+[Firmware provenance](Firmware_Provenance.md).
 
 ### PR #3 implementation boundary
 

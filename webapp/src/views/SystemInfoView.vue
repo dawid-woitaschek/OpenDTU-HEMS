@@ -44,6 +44,13 @@ import UartAllocations from '@/components/UartAllocations.vue';
 import type { SystemStatus } from '@/types/SystemStatus';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
+import {
+    installedSourceCommit,
+    sourceComparisonBase,
+    sourceHasAdvanced,
+    validManifest,
+} from '@/utils/firmwareProvenance';
+import type { FirmwareManifest } from '@/utils/firmwareProvenance';
 
 export default defineComponent({
     components: {
@@ -61,6 +68,7 @@ export default defineComponent({
             dataLoading: true,
             systemDataList: {} as SystemStatus,
             allowVersionInfo: false,
+            updateCheck: 0,
         };
     },
     created() {
@@ -78,7 +86,8 @@ export default defineComponent({
                     this.getUpdateInfo();
                 });
         },
-        getUpdateInfo() {
+        async getUpdateInfo() {
+            const check = ++this.updateCheck;
             if (this.systemDataList.git_hash === undefined) {
                 return;
             }
@@ -101,33 +110,49 @@ export default defineComponent({
                 return;
             }
 
-            const fetchUrl =
-                'https://api.github.com/repos/dawid-woitaschek/OpenDTU-HEMS/compare/' +
-                encodeURIComponent(this.systemDataList.git_hash) +
-                '...' +
-                encodeURIComponent(this.systemDataList.git_branch);
-
-            fetch(fetchUrl)
-                .then((response) => {
-                    if (response.ok) {
-                        return response.json();
+            const installed = this.systemDataList;
+            installed.update_url = '';
+            try {
+                // Older system/status responses omitted the full SHA; firmware/status already exposed it.
+                if (!installed.git_sha) {
+                    const response = await fetch('/api/firmware/status', { headers: authHeader() });
+                    const firmware = await handleResponse(response, this.$emitter, this.$router);
+                    Object.assign(installed, firmware);
+                }
+                let manifest: FirmwareManifest | undefined;
+                if (!installed.source_commit && installed.update_repository && installed.update_channel) {
+                    try {
+                        const response = await fetch(
+                            `https://raw.githubusercontent.com/${installed.update_repository}/firmware-channel-${installed.update_channel}/manifest.json`,
+                            { cache: 'no-store' }
+                        );
+                        const value: unknown = response.ok ? await response.json() : null;
+                        if (validManifest(value, installed.update_repository, installed.update_channel))
+                            manifest = value;
+                    } catch {
+                        /* Legacy build comparison remains available if the channel is unreachable. */
                     }
-                    throw new Error(this.$t('systeminfo.VersionError'));
-                })
-                .then((data) => {
-                    if (data.total_commits > 0) {
-                        this.systemDataList.update_text = this.$t('systeminfo.VersionNew');
-                        this.systemDataList.update_status = 'text-bg-warning';
-                        this.systemDataList.update_url = data.html_url;
-                    } else {
-                        this.systemDataList.update_text = this.$t('systeminfo.VersionOk');
-                        this.systemDataList.update_status = 'text-bg-success';
-                    }
-                })
-                .catch((error: Error) => {
-                    this.systemDataList.update_text = error.message;
-                    this.systemDataList.update_status = 'text-bg-secondary';
-                });
+                }
+                const base = sourceComparisonBase(installed, manifest);
+                if (!base) throw new Error(this.$t('systeminfo.VersionError'));
+                // Adopt recovered source metadata only when the exact installed image matched its own channel.
+                installed.source_commit = installedSourceCommit(installed, manifest);
+                const repository = installed.update_repository || 'dawid-woitaschek/OpenDTU-HEMS';
+                const response = await fetch(
+                    `https://api.github.com/repos/${repository}/compare/${encodeURIComponent(base)}...${encodeURIComponent(installed.git_branch)}`
+                );
+                if (!response.ok) throw new Error(this.$t('systeminfo.VersionError'));
+                const data = await response.json();
+                if (check !== this.updateCheck || installed !== this.systemDataList || !this.allowVersionInfo) return;
+                const advanced = sourceHasAdvanced(data);
+                installed.update_text = this.$t(advanced ? 'systeminfo.VersionNew' : 'systeminfo.VersionOk');
+                installed.update_status = advanced ? 'text-bg-warning' : 'text-bg-success';
+                installed.update_url = advanced ? data.html_url : '';
+            } catch (error) {
+                if (check !== this.updateCheck || installed !== this.systemDataList || !this.allowVersionInfo) return;
+                installed.update_text = error instanceof Error ? error.message : this.$t('systeminfo.VersionError');
+                installed.update_status = 'text-bg-secondary';
+            }
         },
     },
     watch: {
