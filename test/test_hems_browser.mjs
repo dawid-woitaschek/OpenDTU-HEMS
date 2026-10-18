@@ -132,7 +132,7 @@ try {
         assert.match(await energyChart.locator('.inspection').innerText(), /12:15/);
         await energyChart.getByRole('button', { name: 'Back to now', exact: true }).click();
         await tariff.locator('.next-period.period-expensive').click();
-        assert.match(await energyChart.locator('.inspection').innerText(), /Expensive/);
+        assert.match(await energyChart.locator('.inspection').innerText(), /High/);
         await energyChart.getByRole('checkbox', { name: 'Market price', exact: true }).check();
         assert.ok(await energyChart.locator('.source-line').getAttribute('d'));
         await energyChart.getByRole('checkbox', { name: 'Market price', exact: true }).uncheck();
