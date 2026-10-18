@@ -1,6 +1,6 @@
 # Native energy providers and economic Shadow Optimizer
 
-Software pass: 2026-10-17, Draft PR #23, `feature/hems-real-control` →
+Foundation/productization milestone: PR #23, `feature/hems-real-control` →
 `integration/hems-next`. Device control, permissions and EV Protection retain the
 existing semantic command path. **Economic planning has no device-write path.**
 

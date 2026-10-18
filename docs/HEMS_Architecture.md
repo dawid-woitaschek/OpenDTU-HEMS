@@ -878,3 +878,20 @@ The shared transport gains only bounded FC3 holding-register reads; WARP still
 uses precisely FC2/FC4. Diagnostics decode explicit sample bytes without networking.
 See [HEMS_Modbus_Profiles.md](HEMS_Modbus_Profiles.md) for the normative v1 rules,
 resource bounds, current Tinkerforge research and remaining hardware validation.
+
+
+## Current foundation/productization boundary (PR #23)
+
+The earlier numbered implementation-boundary sections are historical. The current
+implementation includes normalized telemetry/constraints, profile-defined semantic
+control, independent Storage/EVSE permissions, Disabled/Monitor/Active modes and
+Active EV Protection. Manual and automatic control share the bounded permission-
+gated mailbox/worker/planner/executor path; no competing raw-register API exists.
+
+Native tariff/PV providers and the economic DP produce Shadow plans with **zero
+economic device writes**, even in Active. Tariff categories are UI presentation
+only. The product UI has Overview, Settings, Devices and Advanced Diagnostics.
+See [current status](HEMS_Current_Status.md), [control](HEMS_CONTROL.md),
+[native energy/optimizer](HEMS_Native_Energy.md) and [UI](HEMS_UI.md) for current
+semantics and remaining physical validation. Practical user/economic policies are
+the next Shadow milestone; eventual economic dispatch must use the existing path.

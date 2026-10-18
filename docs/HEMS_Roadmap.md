@@ -1,8 +1,8 @@
 # OpenDTU-HEMS development roadmap
 
-Snapshot: 2026-10-17. Integration branch: `integration/hems-next`, live baseline `73a84b639436e712fe5380f071526c30f7c539db` (squash merge of #22).
+Snapshot: 2026-10-18. Integration branch: `integration/hems-next`, live baseline `73a84b639436e712fe5380f071526c30f7c539db` (squash merge of #22).
 
-Current work: `feature/hems-real-control`, [Draft PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) directly against integration. No stacked PRs; do not merge this work automatically. Focused software validation passes; final exact-head CI/channel evidence is maintained in #23. Physical validation remains open.
+Foundation/productization milestone: `feature/hems-real-control`, [PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) against integration. Final software CI and source-head evidence are maintained in #23. This milestone includes the four-view product UI, native energy providers and economic Shadow optimizer. Physical validation remains open and is not claimed by milestone completion.
 
 ## Product model implemented in this package
 
@@ -26,16 +26,17 @@ See [current status](HEMS_Current_Status.md) and [control model](HEMS_CONTROL.md
 2. **Correct actual WARP/Marstek mapping issues** found on hardware. Verify Marstek V148 power/SoC scaling and uncertain command lifecycle/watchdog. No speculative lifecycle architecture prerequisite.
 3. **Dynamic tariff provider:** normalized domain, JSON push/local HTTP adapters, status/API/UI and deterministic tests implemented; native Energy-Charts DE-LU and effective pricing are implemented; live-provider/on-device TLS validation remains. See [Energy data](HEMS_Energy_Data.md).
 4. **Economic optimizer Shadow:** bounded cost-minimizing DP, explicit assumptions, normalized tariff/PV, fresh SoC, EV constraints, API/UI and software tests implemented. Validate on-device resources and real inputs; see [native energy and optimizer](HEMS_Native_Energy.md).
-5. **Optimizer Active:** route validated semantic actions through the same permissions, constraints, worker and planner.
-6. **PV forecast / forecast-aware optimization:** optional normalized forecast domain, JSON push/local HTTP, W/Wh aggregation and API/UI implemented alongside tariff. Forecast.Solar with six independent planes and PV-aware shadow planning are implemented; live full-UTC response/quota validation remains. HEMS works without forecasts.
-7. **Polish, documentation and release.**
+5. **Practical user/economic policies, Shadow-only:** small explicit permissions, reserve/upper planning bounds and target/deadline goals feed the existing economic DP. Exact prices drive decisions; UI tariff categories remain presentation-only. Protection remains authoritative.
+6. **Optimizer Active:** route validated semantic actions through the same permissions, constraints, worker and planner.
+7. **PV forecast / forecast-aware optimization:** optional normalized forecast domain, JSON push/local HTTP, W/Wh aggregation and API/UI implemented alongside tariff. Forecast.Solar with six independent planes and PV-aware shadow planning are implemented; live full-UTC response/quota validation remains. HEMS works without forecasts.
+8. **Polish, documentation and release.**
 
 Identity/recovery work is optional unless physical testing proves a concrete operational need. There is no architectural mega-milestone before useful operation.
 
 ## Verification and resource discipline
 
-Focused native tests and frontend checks run locally. GitHub CI owns the complete firmware matrix and PR firmware-channel publication. Before recommending flashing, verify native tests, frontend build, all HEMS targets including `generic_esp32s3_usb`, exact source/merge-tree correspondence, manifest SHA256/size and normal OTA image. Keep the PR Draft and unmerged.
+Focused native tests and frontend checks run locally. GitHub CI owns the complete firmware matrix and PR firmware-channel publication. Before recommending flashing, verify native tests, frontend build, all HEMS targets including `generic_esp32s3_usb`, exact source/merge-tree correspondence, manifest SHA256/size and normal OTA image. Merge completed software milestones into integration with their validation limits explicit; economic dispatch remains deferred until separately validated and authorized.
 
-Baseline #22 `generic_esp32s3_usb` normal OTA image: **2,735,632 bytes** (published artifact). The exact tested-head final artifact size/delta is maintained in Draft PR #23, linked from Current Status. No heavyweight dependencies, PSRAM requirement or TCP/IP/AsyncTCP task-stack changes.
+Baseline #22 `generic_esp32s3_usb` normal OTA image: **2,735,632 bytes** (published artifact). The exact tested-head final artifact size/delta is maintained in PR #23, linked from Current Status. No heavyweight dependencies, PSRAM requirement or TCP/IP/AsyncTCP task-stack changes.
 
 The separate intermittent inbound-new-connection investigation remains unproven as a HEMS issue. It does not block this product model.
