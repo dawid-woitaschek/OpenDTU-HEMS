@@ -7,6 +7,41 @@
         <p v-if="error" class="alert alert-warning" role="alert">{{ t('hemsUi.loadFailed') }} {{ error }}</p>
         <p v-if="notice" class="alert alert-success" role="status">{{ notice }}</p>
         <template v-if="plan">
+            <div class="border rounded p-3 mb-3 small" v-if="!error">
+                <strong>{{ t('hemsUi.storagePolicies') }}</strong>
+                <div>
+                    {{ t('hemsUi.batteryReserve') }}: {{ plan.config.min_soc_pct }}% · {{ t('hemsUi.maxDesiredSoc') }}:
+                    {{ plan.config.max_soc_pct }}%
+                </div>
+                <div>
+                    {{ t('hemsUi.gridCharging') }}:
+                    {{
+                        t(plan.config.policies?.grid_charging_allowed === false ? 'hemsUi.forbidden' : 'hemsUi.allowed')
+                    }}
+                </div>
+                <div>
+                    {{ t('hemsUi.economicDischarge') }}:
+                    {{ t(plan.config.policies?.discharge_allowed === false ? 'hemsUi.forbidden' : 'hemsUi.allowed') }}
+                </div>
+                <div v-if="plan.config.policies?.target_enabled">
+                    {{
+                        t('hemsUi.targetSummary', {
+                            soc: plan.config.policies.target_soc_pct,
+                            deadline: date(plan.config.policies.target_deadline),
+                        })
+                    }}
+                    <span v-if="plan.target_state && hasResult"> · {{ label(plan.target_state) }}</span>
+                </div>
+                <div v-if="plan.current_charge_limit_w != null">
+                    {{ t('hemsUi.currentChargeLimit') }}: {{ plan.current_charge_limit_w }} W
+                </div>
+                <div v-if="plan.current_discharge_limit_w != null">
+                    {{ t('hemsUi.currentDischargeLimit') }}: {{ plan.current_discharge_limit_w }} W
+                </div>
+                <ul v-if="plan.policy_restrictions?.length" class="mb-0 mt-2 ps-3">
+                    <li v-for="item in plan.policy_restrictions" :key="item">{{ label(item) }}</li>
+                </ul>
+            </div>
             <h2 class="h5">{{ error ? t('hemsUi.unavailable') : label(plan.state) }}</h2>
             <ul v-if="plan.blockers.length" class="small">
                 <li v-for="blocker in plan.blockers" :key="blocker">{{ label(blocker) }}</li>
@@ -94,6 +129,77 @@
                         class="form-check-input me-2"
                     />{{ t('hemsUi.confirmSoc') }}</label
                 >
+                <fieldset class="border rounded p-3 mb-3" v-if="draft.policies">
+                    <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.storagePolicies') }}</legend>
+                    <p class="form-text mt-0">{{ t('hemsUi.policyHint') }}</p>
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <label for="optimizer-grid-charging" class="form-label">{{
+                                t('hemsUi.gridCharging')
+                            }}</label>
+                            <select
+                                id="optimizer-grid-charging"
+                                v-model="draft.policies.grid_charging_allowed"
+                                class="form-select"
+                            >
+                                <option :value="true">{{ t('hemsUi.allowed') }}</option>
+                                <option :value="false">{{ t('hemsUi.forbidden') }}</option>
+                            </select>
+                        </div>
+                        <div class="col-sm-6">
+                            <label for="optimizer-economic-discharge" class="form-label">{{
+                                t('hemsUi.economicDischarge')
+                            }}</label>
+                            <select
+                                id="optimizer-economic-discharge"
+                                v-model="draft.policies.discharge_allowed"
+                                class="form-select"
+                            >
+                                <option :value="true">{{ t('hemsUi.allowed') }}</option>
+                                <option :value="false">{{ t('hemsUi.forbidden') }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label class="form-check-label d-block my-3"
+                        ><input
+                            id="optimizer-target-enabled"
+                            v-model="draft.policies.target_enabled"
+                            type="checkbox"
+                            class="form-check-input me-2"
+                        />{{ t('hemsUi.targetCharge') }}</label
+                    >
+                    <div v-if="draft.policies.target_enabled" class="row g-3">
+                        <div class="col-sm-4">
+                            <label for="optimizer-target-soc" class="form-label"
+                                >{{ t('hemsUi.targetAtLeast') }} (%)</label
+                            >
+                            <input
+                                id="optimizer-target-soc"
+                                v-model.number="draft.policies.target_soc_pct"
+                                type="number"
+                                class="form-control"
+                                :min="draft.min_soc_pct"
+                                :max="draft.max_soc_pct"
+                                step="1"
+                                required
+                            />
+                        </div>
+                        <div class="col-sm-8">
+                            <label for="optimizer-target-deadline" class="form-label"
+                                >{{ t('hemsUi.targetBy') }} · {{ zone }}</label
+                            >
+                            <input
+                                id="optimizer-target-deadline"
+                                :value="localDeadline(draft.policies.target_deadline)"
+                                type="datetime-local"
+                                class="form-control"
+                                required
+                                @input="setDeadline"
+                            />
+                        </div>
+                    </div>
+                    <p class="form-text mb-0">{{ t('hemsUi.targetHint') }}</p>
+                </fieldset>
                 <div class="row g-3 mb-3">
                     <div v-for="field in fields.filter((f) => !f.advanced)" :key="field.key" class="col-sm-6">
                         <label :for="`optimizer-${field.key}`" class="form-label"
@@ -258,9 +364,17 @@ import { authHeader, handleResponse } from '@/utils/authentication';
 import { useI18n } from 'vue-i18n';
 import type { EnergyView } from '@/types/HemsEnergy';
 import { formatPrice } from '@/utils/hemsPresentation';
+import { localDeadline, utcDeadline } from '@/utils/hemsPolicy';
 const props = defineProps<{ view?: EnergyView }>();
 const { t, te, locale } = useI18n();
 const now = ref(Date.now() / 1000);
+type StoragePolicies = {
+    grid_charging_allowed: boolean;
+    discharge_allowed: boolean;
+    target_enabled: boolean;
+    target_soc_pct: number;
+    target_deadline: number;
+};
 type Config = {
     soc_bounds_configured: boolean;
     enabled: boolean;
@@ -277,6 +391,7 @@ type Config = {
     max_discharge_w: number;
     expected_base_load_w: number;
     soc_step_pct: number;
+    policies: StoragePolicies;
 };
 type Step = {
     start: number;
@@ -314,6 +429,10 @@ type Plan = {
     interval_count?: number;
     schedule_offset?: number;
     has_more?: boolean;
+    current_charge_limit_w?: number | null;
+    current_discharge_limit_w?: number | null;
+    target_state?: string;
+    policy_restrictions?: string[];
 };
 const fields = [
     {
@@ -326,8 +445,8 @@ const fields = [
         step: 0.001,
         advanced: false,
     },
-    { key: 'min_soc_pct', label: 'minSoc', unit: '%', min: 0, max: 99, scale: 1, step: 1, advanced: false },
-    { key: 'max_soc_pct', label: 'maxSoc', unit: '%', min: 1, max: 100, scale: 1, step: 1, advanced: false },
+    { key: 'min_soc_pct', label: 'batteryReserve', unit: '%', min: 0, max: 99, scale: 1, step: 1, advanced: false },
+    { key: 'max_soc_pct', label: 'maxDesiredSoc', unit: '%', min: 1, max: 100, scale: 1, step: 1, advanced: false },
     {
         key: 'charge_permille',
         label: 'chargeEfficiency',
@@ -425,7 +544,16 @@ async function load(reset = false) {
         const result = (await api(`?all=1&offset=${offset.value}`)) as Plan;
         if (disposed || generation !== loadGeneration) return;
         plan.value = result;
-        if (!draft.value || reset) draft.value = structuredClone(result.config);
+        if (!draft.value || reset) {
+            draft.value = structuredClone(result.config);
+            draft.value.policies ||= {
+                grid_charging_allowed: true,
+                discharge_allowed: true,
+                target_enabled: false,
+                target_soc_pct: 70,
+                target_deadline: 0,
+            };
+        }
         error.value = '';
     } catch (e) {
         error.value = String(e);
@@ -448,6 +576,12 @@ const upcoming = computed(() =>
     error.value ? [] : (plan.value?.schedule || []).filter((step) => step.end > now.value).slice(0, 3)
 );
 const hasResult = computed(() => !error.value && ['ready', 'partial'].includes(plan.value?.state || ''));
+function setDeadline(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const epoch = utcDeadline(input.value);
+    input.setCustomValidity(epoch ? '' : t('hemsUi.invalidDeadline'));
+    if (draft.value) draft.value.policies.target_deadline = epoch;
+}
 const save = () => perform('/config', draft.value, true);
 const recalculate = () => perform('/recalculate', {});
 onMounted(() => {

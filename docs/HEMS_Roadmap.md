@@ -1,8 +1,14 @@
 # OpenDTU-HEMS development roadmap
 
-Snapshot: 2026-10-18. Integration branch: `integration/hems-next`, live baseline `73a84b639436e712fe5380f071526c30f7c539db` (squash merge of #22).
+Snapshot: 2026-10-18. Integration branch: `integration/hems-next`, foundation merge `3309804f77d1e882e705955827e89b619cb9bfab` (normal merge of #23).
 
-Foundation/productization milestone: `feature/hems-real-control`, [PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) against integration. Final software CI and source-head evidence are maintained in #23. This milestone includes the four-view product UI, native energy providers and economic Shadow optimizer. Physical validation remains open and is not claimed by milestone completion.
+Foundation/productization PR #23 is merged into integration with its original history.
+Its final source head `141f00857581d5664183f3025f9f133bdf2fe971` passed all eight
+HEMS targets, six inherited targets, host/config tests and lint/format checks.
+Physical validation remains open and is not claimed by milestone completion.
+
+Current functional work: `feature/hems-policies`, practical storage/economic
+policies feeding the existing optimizer, **Shadow-only**. See [policy contract](HEMS_Policies.md).
 
 ## Product model implemented in this package
 
@@ -26,7 +32,7 @@ See [current status](HEMS_Current_Status.md) and [control model](HEMS_CONTROL.md
 2. **Correct actual WARP/Marstek mapping issues** found on hardware. Verify Marstek V148 power/SoC scaling and uncertain command lifecycle/watchdog. No speculative lifecycle architecture prerequisite.
 3. **Dynamic tariff provider:** normalized domain, JSON push/local HTTP adapters, status/API/UI and deterministic tests implemented; native Energy-Charts DE-LU and effective pricing are implemented; live-provider/on-device TLS validation remains. See [Energy data](HEMS_Energy_Data.md).
 4. **Economic optimizer Shadow:** bounded cost-minimizing DP, explicit assumptions, normalized tariff/PV, fresh SoC, EV constraints, API/UI and software tests implemented. Validate on-device resources and real inputs; see [native energy and optimizer](HEMS_Native_Energy.md).
-5. **Practical user/economic policies, Shadow-only:** small explicit permissions, reserve/upper planning bounds and target/deadline goals feed the existing economic DP. Exact prices drive decisions; UI tariff categories remain presentation-only. Protection remains authoritative.
+5. **Practical user/economic policies, Shadow-only (software implemented; validation in the current Draft PR):** grid-charging and economic-discharge permissions, existing reserve/upper planning bounds and a one-time target/deadline constrain the DP. Exact prices drive decisions; tariff categories remain presentation-only. Minimum-saving hysteresis and recurring schedules are deferred. See [policies](HEMS_Policies.md).
 6. **Optimizer Active:** route validated semantic actions through the same permissions, constraints, worker and planner.
 7. **PV forecast / forecast-aware optimization:** optional normalized forecast domain, JSON push/local HTTP, W/Wh aggregation and API/UI implemented alongside tariff. Forecast.Solar with six independent planes and PV-aware shadow planning are implemented; live full-UTC response/quota validation remains. HEMS works without forecasts.
 8. **Polish, documentation and release.**

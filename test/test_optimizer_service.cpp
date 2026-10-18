@@ -44,7 +44,22 @@ int main()
     assert(result["blockers"][0]=="storage_soc_not_fresh");
     failCommit=true; config.enabled=false; assert(!Optimizer::ShadowOptimizer.configure(config)); failCommit=false;
     Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true); assert(result["config"]["enabled"]==true);
-    Optimizer::Service reboot; reboot.init(); reboot.serialize(result.to<JsonObject>(),false); assert(result["config"]["enabled"]==true);
+    config.policies.gridChargingAllowed=false; config.policies.dischargeAllowed=false;
+    config.policies.targetEnabled=true; config.policies.targetSoc=70; config.policies.targetDeadline=Now+7200;
+    assert(Optimizer::ShadowOptimizer.configure(config));
+    Optimizer::Service reboot; reboot.init(); reboot.serialize(result.to<JsonObject>(),false); assert(result["config"]["enabled"]==false);
+    assert(result["config"]["policies"]["grid_charging_allowed"]==false);
+    assert(result["config"]["policies"]["discharge_allowed"]==false);
+    assert(result["config"]["policies"]["target_enabled"]==true);
+    assert(result["config"]["policies"]["target_deadline"]==Now+7200);
+    // Reboot an actual legacy file without the additive policy object.
+    JsonDocument legacy; legacy["version"]=1; Optimizer::serializeConfig(config,legacy["config"].to<JsonObject>());
+    legacy["config"].remove("policies"); std::string bytes; serializeJson(legacy,bytes);
+    testFiles["/hems-optimizer.json"]=std::make_shared<std::string>(bytes);
+    Optimizer::Service legacyReboot; legacyReboot.init(); legacyReboot.serialize(result.to<JsonObject>(),false);
+    assert(result["config"]["policies"]["grid_charging_allowed"]==true);
+    assert(result["config"]["policies"]["target_enabled"]==false);
+    assert(result["config"]["min_soc_pct"]==20 && result["config"]["max_soc_pct"]==90);
     assert(Optimizer::ShadowOptimizer.configure(config)); assert(!Optimizer::ShadowOptimizer.requestRecalculate());
     for(auto t:tasks) delete t;
     std::cout<<"Production shared-worker optimizer settings, read-only integration, stale-input suppression, recalculation and persistence passed\n";

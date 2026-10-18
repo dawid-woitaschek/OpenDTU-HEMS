@@ -107,3 +107,17 @@ Screenshots go to `work/screenshots` (override `HEMS_SCREENSHOTS`). Fixtures int
 all API requests and include a DST fall-back day, six PV planes, effective/source
 prices, battery/EV state and a Shadow schedule. No real devices/providers or commands
 are involved. Browser tooling is optional and adds no firmware/runtime dependency.
+
+### Storage/economic policies
+
+`test_shadow_optimizer` and `test_optimizer_service` now also cover the
+[Shadow policy contract](../docs/HEMS_Policies.md): legacy config defaults,
+atomic persistence/reboot, permissions, bounds, exact dated targets,
+infeasibility/coverage, PV substitution, numeric-price/category independence,
+current protection/power constraints and terminal stock. The production service
+still links to a controller exposing only read-only methods.
+
+`test_hems_presentation.mjs` exercises one-time local/UTC conversion, DST gaps and
+locale parity. The optional browser fixture saves and reloads policy permissions
+and a dated target on mobile; all intercepted traffic still asserts zero device
+commands. Socket/loopback tests require the environment's network permission.

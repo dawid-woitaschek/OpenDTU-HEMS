@@ -539,20 +539,24 @@ This policy is implemented and validated in Shadow mode before Active mode exist
 
 Multiple rules may request conflicting behavior. The system therefore needs deterministic priorities.
 
-Initial conceptual order:
+Current deterministic order (the earlier manual-before-protection concept is superseded by the implemented control semantics):
 
-```text
-1. device safety / faults
-2. hard hardware limits
-3. manual override
-4. EV protection
-5. minimum reserve
-6. tariff optimizer
-7. PV optimization
-8. normal operation
-```
+1. Device/BMS safety and hard hardware limits.
+2. EV Protection and authoritative current control constraints.
+3. Explicit authorized manual semantic actions.
+4. Economic user policies → optimizer → Shadow plan (zero economic writes).
 
-The UI should show the winning policy and, where practical, suppressed lower-priority decisions.
+Active EV Protection rejects protected discharge even when manually requested.
+Manual and automatic actions share one permission-gated semantic actuator path.
+The optimizer applies current protection constraints to the first slot; future EV
+state remains unknown and would have to be checked again at eventual dispatch.
+No economic producer can override manual commands in this milestone. An explicit
+manual pause/resume model is required before later Active economic dispatch.
+
+Policy configuration defines what is allowed/desired; pure policy evaluation
+produces constraints and deadline goals. The existing DP decides when/how to meet
+them using exact prices, usable PV, SoC, powers and losses. Tariff classification
+is presentation-only. See [precise policy contract](HEMS_Policies.md).
 
 ## 20. Tariff model
 
@@ -893,5 +897,5 @@ economic device writes**, even in Active. Tariff categories are UI presentation
 only. The product UI has Overview, Settings, Devices and Advanced Diagnostics.
 See [current status](HEMS_Current_Status.md), [control](HEMS_CONTROL.md),
 [native energy/optimizer](HEMS_Native_Energy.md) and [UI](HEMS_UI.md) for current
-semantics and remaining physical validation. Practical user/economic policies are
-the next Shadow milestone; eventual economic dispatch must use the existing path.
+semantics and remaining physical validation. Practical user/economic policies feed the DP in the next Shadow milestone
+(see [policy contract](HEMS_Policies.md)); eventual economic dispatch must use the existing path.

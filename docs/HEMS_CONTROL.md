@@ -72,3 +72,13 @@ Marstek Venus E 3.0 V148 / Micro V119: existing curated acquire, charge/discharg
 Marstek lifecycle behavior still needs physical validation on V148. Community reports of force-command watchdog/timeout behavior are **unvalidated for V148**; firmware assumes no automatic release timeout and does not depend on one. Independently resetting/disconnecting the device is an accepted operational recovery path. Check acquire/release, command persistence, power sign/scale and SoC against the actual device this weekend.
 
 Native tests and CI validate software paths, not physical charging/discharging or firmware-specific register behavior.
+
+
+## Economic policy boundary
+
+Practical [storage/economic policies](HEMS_Policies.md) only constrain Shadow
+planning. They do not restrict explicit manual controls or create a command
+producer. Hardware safety and actionable EV Protection remain authoritative over
+manual discharge. Economic planning cannot override protection or manual actions.
+Future economic dispatch must use this same semantic path and add separately
+tested manual pause/resume precedence; no implicit economic override timer exists.

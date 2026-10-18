@@ -90,7 +90,8 @@ Blocked plans retain their concrete prerequisites and a settings link.
 
 Remaining product work includes physical WARP/Marstek/control/EV Protection
 validation, refinement of economic assumptions and Shadow planning, eventual
-permission-gated economic dispatch and practical reserve/window/discharge policies.
+permission-gated economic dispatch. The next [policy milestone](HEMS_Policies.md)
+adds battery permissions and a one-time target/deadline to Shadow planning.
 This UI refinement adds no actuation behavior or hardware-validation claims.
 
 ## Chart choice and measured comparison
