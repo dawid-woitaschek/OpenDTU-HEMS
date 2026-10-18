@@ -78,7 +78,7 @@
             </CardElement>
         </template>
         <HemsEnergyPanel view="overview" @health="providerIssue = $event" />
-        <HemsOptimizerPanel view="overview" />
+        <HemsStorageSchedulePanel />
     </BasePage>
 </template>
 <script setup lang="ts">
@@ -90,7 +90,7 @@ import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
 import HemsNav from '@/components/hems/HemsNav.vue';
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
-import HemsOptimizerPanel from '@/components/HemsOptimizerPanel.vue';
+import HemsStorageSchedulePanel from '@/components/hems/HemsStorageSchedulePanel.vue';
 import type { HemsStatus, HemsSignal } from '@/types/HemsStatus';
 import { signalValue } from '@/utils/hemsPresentation';
 import { authHeader, handleResponse } from '@/utils/authentication';
