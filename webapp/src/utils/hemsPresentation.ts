@@ -77,9 +77,10 @@ export function feedReadiness(
     if (feed.partial_horizon === true || !feed.horizon_complete) return 'partialData';
     return 'freshData';
 }
-// HEMS-relative daily classification. Inverse duration-weighted empirical CDF at .2/.8.
-// Strict comparisons preserve ties; equal/zero/negative days can be entirely normal.
-// This is deliberately NOT the official Energy-Charts Strompreisampel (no <=0 override).
+// HEMS-relative daily presentation classification. Use duration-weighted p10/p50/p90 to obtain a robust
+// price range, then classify the lower/middle/upper thirds of that RANGE. This deliberately does not
+// force a fixed fraction of the day into cheap/expensive buckets. Nearly flat days remain entirely normal.
+// Categories are display-only and are never optimizer or dispatch inputs.
 export function classifyTariff(intervals: ChartInterval[]): ChartInterval[] {
     const pieces = splitLocalDays(intervals);
     const days = new Map<number, ChartInterval[]>();
@@ -90,7 +91,7 @@ export function classifyTariff(intervals: ChartInterval[]): ChartInterval[] {
         values.push(piece);
         days.set(key, values);
     }
-    const bounds = new Map<number, [number, number]>();
+    const bounds = new Map<number, [number, number] | null>();
     for (const [key, values] of days) {
         const sorted = [...values].sort((a, b) => a.value! - b.value!);
         const duration = sorted.reduce((sum, i) => sum + i.end - i.start, 0);
@@ -102,11 +103,23 @@ export function classifyTariff(intervals: ChartInterval[]): ChartInterval[] {
             }
             return sorted[sorted.length - 1]!.value!;
         };
-        bounds.set(key, [quantile(0.2), quantile(0.8)]);
+        const low = quantile(0.1),
+            middle = quantile(0.5),
+            high = quantile(0.9),
+            span = high - low,
+            scale = Math.max(Math.abs(low), Math.abs(middle), Math.abs(high), 1);
+        // A day whose robust p10-p90 range is less than 5% of its price scale has no meaningful
+        // visual low/high distinction. This is dimensionless, so it also behaves sensibly for non-EUR feeds.
+        if (!(span > 0) || span / scale < 0.05) {
+            bounds.set(key, null);
+            continue;
+        }
+        bounds.set(key, [low + span / 3, high - span / 3]);
     }
     return pieces.map((i) => {
         const threshold = bounds.get(dayBounds(i.start)[0]);
-        if (!finite(i.value) || !threshold) return i;
+        if (!finite(i.value)) return i;
+        if (!threshold) return { ...i, category: 'normal' };
         return { ...i, category: i.value < threshold[0] ? 'cheap' : i.value > threshold[1] ? 'expensive' : 'normal' };
     });
 }
