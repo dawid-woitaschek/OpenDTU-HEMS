@@ -63,6 +63,20 @@ export function tariffIntervals(feed?: EnergyFeed): ChartInterval[] {
         secondary: effective ? (i.price_micros_per_kwh ?? null) : null,
     }));
 }
+// Keep data availability separate from refresh failures: retained data can still be usable.
+// Planning permission comes from planning_usable in the API, never from this display state.
+export function feedReadiness(
+    feed: EnergyFeed,
+    unavailable = false
+): 'disabled' | 'noData' | 'unverifiedData' | 'outdated' | 'currentGap' | 'partialData' | 'freshData' {
+    if (!feed.enabled) return 'disabled';
+    if (feed.valid === false || !feed.intervals.length) return 'noData';
+    if (unavailable) return 'unverifiedData';
+    if (!feed.fresh) return 'outdated';
+    if (feed.current_covered === false || feed.state === 'missing_current_interval') return 'currentGap';
+    if (feed.partial_horizon === true || !feed.horizon_complete) return 'partialData';
+    return 'freshData';
+}
 // HEMS-relative daily classification. Inverse duration-weighted empirical CDF at .2/.8.
 // Strict comparisons preserve ties; equal/zero/negative days can be entirely normal.
 // This is deliberately NOT the official Energy-Charts Strompreisampel (no <=0 override).

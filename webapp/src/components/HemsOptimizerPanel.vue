@@ -11,11 +11,18 @@
             <ul v-if="plan.blockers.length" class="small">
                 <li v-for="blocker in plan.blockers" :key="blocker">{{ label(blocker) }}</li>
             </ul>
+            <RouterLink
+                v-if="plan.blockers.length && props.view === 'overview'"
+                to="/hems/settings"
+                class="small d-inline-block mb-3"
+                >{{ t('hemsUi.reviewPrerequisites') }}</RouterLink
+            >
             <template v-if="hasResult">
                 <div class="row g-3 mb-3">
                     <div class="col-sm-6">
                         <div class="small text-body-secondary">{{ t('hemsUi.modeledSavings') }}</div>
                         <div class="fs-4 fw-semibold">{{ money(plan.modeled_savings_nano) }}</div>
+                        <div class="small text-body-secondary">{{ t('hemsUi.savingsHorizon') }}</div>
                     </div>
                     <div class="col-sm-6">
                         <div class="small text-body-secondary">{{ t('hemsUi.modeledSoc') }}</div>
@@ -25,6 +32,18 @@
                 <p class="small text-body-secondary">
                     {{ date(plan.horizon_start) }} – {{ date(plan.horizon_end) }} · {{ label(plan.price_basis || '') }}
                 </p>
+                <div
+                    v-if="plan.state === 'partial' || plan.warnings?.length"
+                    class="rounded bg-body-tertiary p-3 mb-3 small"
+                    role="status"
+                >
+                    <strong>{{ t('hemsUi.planLimits') }}</strong>
+                    <p v-if="plan.state === 'partial'" class="mt-1 mb-1">{{ t('hemsUi.partialPlanHint') }}</p>
+                    <ul v-if="plan.warnings?.length" class="mb-0 mt-1 ps-3">
+                        <li v-for="warning in plan.warnings" :key="warning">{{ label(warning) }}</li>
+                    </ul>
+                </div>
+                <p v-if="props.view === 'overview'" class="small fw-semibold">{{ t('hemsUi.upcomingProposals') }}</p>
                 <div v-if="props.view === 'overview'" class="row g-2">
                     <div v-for="step in upcoming" :key="step.start" class="col-md-4">
                         <div class="border rounded p-3 h-100">
@@ -45,7 +64,7 @@
                 <details class="mt-3 small">
                     <summary>{{ t('hemsUi.assumptions') }}</summary>
                     <ul class="mt-2">
-                        <li v-for="item in [...(plan.assumptions || []), ...(plan.warnings || [])]" :key="item">
+                        <li v-for="item in plan.assumptions || []" :key="item">
                             {{ label(item) }}
                         </li>
                     </ul>
@@ -54,6 +73,9 @@
                         {{ t('hemsUi.optimizedCost') }}: {{ money(plan.optimized_cost_nano) }}
                     </p>
                 </details>
+                <RouterLink v-if="props.view === 'overview'" to="/hems/diagnostics" class="small d-inline-block mt-3">{{
+                    t('hemsUi.fullSchedule')
+                }}</RouterLink>
             </template>
             <form v-if="draft && props.view === 'settings'" class="mt-4" @submit.prevent="save">
                 <label class="form-check-label d-block mb-3"

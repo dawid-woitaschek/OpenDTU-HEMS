@@ -11,8 +11,8 @@ await mkdir(screenshotDir, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
 const errors = [], requests = [];
 try {
-    for (const width of [360, 768, 1440]) {
-        const context = await browser.newContext({ viewport: { width, height: 1000 }, timezoneId: 'Europe/Berlin', locale: 'en', hasTouch: width === 360 });
+    for (const width of [320, 360, 768, 1440]) {
+        const context = await browser.newContext({ viewport: { width, height: 1000 }, timezoneId: 'Europe/Berlin', locale: 'en', hasTouch: width <= 360 });
         const page = await context.newPage();
         page.on('pageerror', e => errors.push(e.message));
         await page.clock.install({ time: fixtureNow * 1000 });
@@ -39,18 +39,37 @@ try {
                 if (path === '/api/hems/energy/forecast/config') fixture.forecast.config = payload;
                 return route.fulfill({ json: { ok: true, type: 'success' } });
             }
+            if (scenario === 'feedOffline' && path.includes('/energy/forecast')) return route.abort();
+            if (scenario === 'empty' && path.includes('/energy/forecast')) {
+                body.intervals = []; body.valid = false; body.fresh = false; body.current_covered = false; body.planning_usable = false; body.state = 'unavailable';
+            }
+            if (scenario === 'partial' && path.includes('/energy/forecast')) {
+                body.intervals = body.intervals.filter(i => i.start !== fixtureNow + 1800);
+                body.horizon_complete = false; body.partial_horizon = true; body.state = 'partial';
+            }
+            if (scenario === 'partial' && path.startsWith('/api/hems/optimizer')) {
+                body = structuredClone(body); body.state = 'partial'; body.warnings = ['pv_horizon_incomplete'];
+            }
+            if (scenario === 'blocked' && path.startsWith('/api/hems/optimizer')) {
+                body = structuredClone(body); body.state = 'not_ready'; body.blockers = ['storage_soc_not_fresh', 'tariff_not_usable']; body.schedule = [];
+            }
+            if (scenario === 'todayOnly' && path.includes('/energy/tariff')) {
+                body.intervals = body.intervals.filter(i => i.start < Date.parse('2026-10-25T23:00:00Z') / 1000);
+                body.horizon_complete = false; body.partial_horizon = true;
+            }
             if (scenario === 'rateLimit' && path.includes('/energy/forecast')) {
                 body.last_error = 'provider_rate_limited';
                 body.manual_refresh = { allowed: false, reason: 'rate_limited', retry_after_seconds: 600 };
             }
-            if (scenario === 'stale' && path.includes('/energy/forecast')) { body.fresh = false; body.state = 'stale'; }
+            if (scenario === 'stale' && path.includes('/energy/forecast')) { body.fresh = false; body.state = 'stale'; body.planning_usable = false; }
             if (scenario === 'gap' && path.includes('/energy/tariff')) {
                 body.intervals = body.intervals.filter(i => i.start !== fixtureNow && i.start !== fixtureNow + 900);
+                body.current_covered = false; body.planning_usable = false; body.horizon_complete = false; body.state = 'missing_current_interval';
             }
             return route.fulfill({ json: body });
         });
         for (const path of ['/hems', '/hems/settings', '/hems/devices', '/hems/diagnostics']) {
-            await page.goto('http://127.0.0.1:5173' + path);
+            await page.goto('http://127.0.0.1:5173' + path, { timeout: 60000 });
             await page.locator('nav[aria-label="HEMS navigation"]').waitFor();
             if (path === '/hems') {
                 await page.locator('.energy-chart').first().waitFor();
@@ -81,6 +100,27 @@ try {
             assert.equal(fixture.config.storage.control_mode, 'hems');
         }
         await page.goto('http://127.0.0.1:5173/hems');
+        const tariff = page.locator('.hems-energy.card').first();
+        const energyChart = tariff.locator('.energy-chart');
+        const ranges = energyChart.getByRole('group', { name: 'Chart range' });
+        await ranges.getByRole('button', { name: 'Today', exact: true }).waitFor();
+        assert.equal(await ranges.getByRole('button', { name: 'Today', exact: true }).getAttribute('aria-pressed'), 'true');
+        assert.ok(await energyChart.locator('.classification-band').count() > 0);
+        assert.equal(await energyChart.locator('.classification-band').first().getAttribute('height'), '190');
+        await ranges.getByRole('button', { name: 'Tomorrow', exact: true }).click();
+        assert.match(await energyChart.locator('.inspection').innerText(), /Oct 26/);
+        await energyChart.getByRole('button', { name: 'Next interval', exact: true }).click();
+        assert.match(await energyChart.locator('.inspection').innerText(), /12:15/);
+        await energyChart.getByRole('button', { name: 'Back to now', exact: true }).click();
+        await tariff.locator('.next-period.period-expensive').click();
+        assert.match(await energyChart.locator('.inspection').innerText(), /Expensive/);
+        await energyChart.getByRole('checkbox', { name: 'Market price', exact: true }).check();
+        assert.ok(await energyChart.locator('.source-line').getAttribute('d'));
+        await energyChart.getByRole('checkbox', { name: 'Market price', exact: true }).uncheck();
+        await ranges.getByRole('button', { name: '2 days', exact: true }).click();
+        assert.equal(await energyChart.locator('.day-line').count(), 2);
+        await energyChart.getByRole('button', { name: 'Back to now', exact: true }).click();
+        await tariff.screenshot({ style: '.navbar { visibility: hidden !important; }', path: `${screenshotDir}/${width}-tariff.png` });
         const chart = page.locator('.chart-surface').first();
         await chart.waitFor();
         await chart.focus();
@@ -90,8 +130,39 @@ try {
         if (width === 360) await page.touchscreen.tap(box.x + box.width * .6, box.y + box.height / 2);
         else await page.mouse.move(box.x + box.width * .6, box.y + box.height / 2);
         assert.match(await page.locator('.inspection').first().innerText(), /Oct/);
+        if (width === 360) {
+            await chart.focus();
+            await page.keyboard.press('Home');
+            for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowRight');
+            assert.match(await energyChart.locator('.inspection').innerText(), /GMT\+2/);
+            for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowRight');
+            assert.match(await energyChart.locator('.inspection').innerText(), /GMT\+1/);
+            await page.keyboard.press('End');
+            assert.equal(await energyChart.getByRole('button', { name: 'Next interval', exact: true }).isDisabled(), true);
+        }
+        for (const theme of ['light', 'dark']) {
+            await page.evaluate(theme => document.documentElement.setAttribute('data-bs-theme', theme), theme);
+            const contrasts = await energyChart.evaluate(el => {
+                const luminance = value => {
+                    const rgb = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+                    return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
+                };
+                return ['cheap', 'normal', 'expensive'].map(category => {
+                    const probe = document.createElement('span');
+                    probe.className = `price-badge period-${category}`;
+                    el.append(probe);
+                    const colors = getComputedStyle(probe), a = luminance(colors.color), b = luminance(colors.backgroundColor);
+                    probe.remove();
+                    return (Math.max(a, b) + .05) / (Math.min(a, b) + .05);
+                });
+            });
+            assert.ok(contrasts.every(ratio => ratio >= 4.5), `${theme} badge contrast ${contrasts}`);
+        }
         await page.evaluate(() => document.documentElement.setAttribute('data-bs-theme', 'dark'));
         await page.screenshot({ path: `${screenshotDir}/${width}-dark.png`, fullPage: true });
+        await tariff.screenshot({ style: '.navbar { visibility: hidden !important; }', path: `${screenshotDir}/${width}-tariff-dark.png` });
+        assert.ok((await energyChart.getByRole('button', { name: 'Next interval', exact: true }).boundingBox()).width >= 44);
+        assert.ok((await energyChart.getByRole('button', { name: 'Next interval', exact: true }).boundingBox()).height >= 44);
         scenario = 'rateLimit';
         await page.reload();
         await page.getByText('Provider rate limit reached.', { exact: false }).waitFor();
@@ -99,7 +170,7 @@ try {
         assert.match(await page.locator('body').innerText(), /Retry in 600 seconds/);
         scenario = 'stale';
         await page.reload();
-        await page.getByText('Data is outdated', { exact: false }).waitFor();
+        await page.getByText('Data is outdated', { exact: false }).first().waitFor();
         // A retained curve remains inspectable, but current/summary numbers are unavailable.
         const solar = page.locator('.card').filter({ hasText: 'Remaining today' });
         assert.equal(await solar.locator('.fs-2').innerText(), '—');
@@ -108,6 +179,37 @@ try {
         await page.locator('.energy-chart').first().waitFor();
         const gaps = await page.locator('.primary-line').first().getAttribute('d');
         assert.ok((gaps.match(/M/g) || []).length >= 2);
+        assert.match(await page.locator('.hems-energy.card').first().innerText(), /Current interval missing/);
+        assert.match(await page.locator('.hems-energy.card').first().innerText(), /Not available for planning/);
+        scenario = 'empty';
+        await page.reload();
+        await page.getByText('No data yet', { exact: true }).first().waitFor();
+        const forecast = page.locator('.hems-energy.card').nth(1);
+        assert.equal(await forecast.locator('.energy-chart').count(), 0);
+        assert.equal(await forecast.locator('.fs-2').innerText(), '—');
+        scenario = 'partial';
+        await page.reload();
+        await page.getByText('Partial horizon', { exact: true }).waitFor();
+        assert.match(await forecast.innerText(), /Available for planning/);
+        assert.equal(await forecast.locator('.fs-2').innerText(), '—');
+        await page.getByText('PV forecast does not cover the full horizon.', { exact: true }).waitFor();
+        scenario = 'todayOnly';
+        await page.reload();
+        await page.locator('.energy-chart').first().getByRole('button', { name: 'Tomorrow', exact: true }).click();
+        await page.getByText('No data available for this day yet.', { exact: false }).waitFor();
+        assert.equal(await page.locator('.energy-chart').first().getByRole('button', { name: 'Next interval', exact: true }).isDisabled(), true);
+        scenario = 'blocked';
+        await page.reload();
+        await page.getByText('Waiting for fresh battery SoC.', { exact: true }).waitFor();
+        assert.equal(await page.getByRole('link', { name: 'Review data and battery settings' }).count(), 1);
+        // A lost feed request must mark retained values as unverified and suppress summaries.
+        scenario = 'normal';
+        await page.reload();
+        await forecast.locator('.energy-chart').waitFor();
+        scenario = 'feedOffline';
+        await page.clock.runFor(15000);
+        await page.getByText('Last known data · connection lost', { exact: true }).waitFor();
+        assert.equal(await forecast.locator('.fs-2').innerText(), '—');
         scenario = 'offline';
         await page.getByRole('button', { name: 'Reload' }).click();
         await page.getByText('Status connection lost').first().waitFor();
@@ -115,5 +217,5 @@ try {
     }
     assert.deepEqual(errors, []);
     assert.equal(requests.some(r => r.path === '/api/hems/command'), false, 'Viewing must not submit device commands');
-    console.log('Browser passed: four HEMS routes at 360/768/1440px, no horizontal overflow or runtime errors, canonical tariff/PV saves and Monitor mode, dark mode, keyboard/touch inspection, rate limits, stale data, gaps, lost status, and zero device commands.');
+    console.log('Browser passed: four HEMS routes at 320/360/768/1440px, no horizontal overflow or runtime errors, canonical tariff/PV saves and Monitor mode, dark mode, day ranges, category jumps, source overlay, DST inspection, keyboard/touch controls, accessible badge contrast, rate limits, empty/stale/partial/gap/missing-day states, optimizer blockers, lost feed/status, and zero device commands.');
 } finally { await browser.close(); }

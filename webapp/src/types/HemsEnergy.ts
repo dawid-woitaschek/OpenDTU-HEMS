@@ -52,6 +52,10 @@ export interface EnergyFeed {
     source: string;
     state: string;
     fresh: boolean;
+    valid?: boolean;
+    current_covered?: boolean;
+    planning_usable?: boolean;
+    partial_horizon?: boolean;
     enabled: boolean;
     fetched_at: number | null;
     generated_at: number | null;

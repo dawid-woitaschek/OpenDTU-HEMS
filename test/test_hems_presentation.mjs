@@ -85,6 +85,18 @@ assert.equal(h.signalValue({ quality: 'stale', value: 100 }), null);
 assert.equal(h.signalValue({ quality: 'unknown', value: 100 }), null);
 assert.equal(h.signalValue({ quality: 'fresh', value: 100 }, true), null);
 for (const [identifier, expected] of Object.entries({ provider_rate_limited: 'rateLimited', rate_limited: 'rateLimited', network_unavailable: 'waitingNetwork', clock_invalid: 'waitingTime', waiting_for_time: 'waitingTime', transport_backoff: 'transportBackoff', provider_backoff: 'providerBackoff', stale: 'outdated', missing_current_interval: 'partial', future_unknown_error: 'updateFailed' })) assert.equal(h.providerMessage(identifier), expected);
+// Refresh status is independent of availability; retrying does not invalidate retained data.
+const feed = { enabled: true, fresh: true, valid: true, current_covered: true, planning_usable: true, horizon_complete: true, intervals: [{ start, end, power_w: 0 }] };
+assert.equal(h.feedReadiness(feed), 'freshData');
+assert.equal(h.feedReadiness(feed, true), 'unverifiedData');
+assert.equal(h.feedReadiness({ ...feed, enabled: false }), 'disabled');
+assert.equal(h.feedReadiness({ ...feed, intervals: [] }), 'noData');
+assert.equal(h.feedReadiness({ ...feed, valid: false }), 'noData');
+assert.equal(h.feedReadiness({ ...feed, fresh: false }), 'outdated');
+assert.equal(h.feedReadiness({ ...feed, current_covered: false }), 'currentGap');
+assert.equal(h.feedReadiness({ ...feed, horizon_complete: false, partial_horizon: true }), 'partialData');
+assert.equal(h.feedReadiness({ ...feed, last_error: 'provider_rate_limited', manual_refresh: { allowed: false, retry_after_seconds: 600 } }), 'freshData');
+assert.equal(h.feedReadiness({ ...feed, fresh: false, last_error: 'provider_rate_limited' }), 'outdated');
 // Supported locales must have the same product keys and interpolation parameters.
 const messages = ['en', 'de', 'fr'].map(l => JSON.parse(readFileSync(new URL(`../webapp/src/locales/${l}.json`, import.meta.url), 'utf8')).hemsUi);
 const paths = (o, prefix = '') => Object.entries(o).flatMap(([key, value]) => typeof value === 'object' ? paths(value, prefix + key + '.') : [prefix + key]).sort();

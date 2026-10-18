@@ -46,17 +46,64 @@ provider's south=0°, east=−90°, west=+90° azimuth convention. Persisted e6 
 watts, enabled flags, order and six-plane limit are unchanged. Edited/reordered
 planes are not assigned the previous plane's provider status before saving.
 
+## Tariff and forecast refinement
+
+The daily view uses a clear hierarchy: data status, key numbers, chart, update
+status, then expandable details. The two supporting day summaries share a row on
+phones; the current price or remaining solar energy has its own full-width card.
+Configured PV planes are expandable, with an edit link to the existing responsive
+six-plane editor. Source timestamps, coverage end, next update attempt and monthly
+base fee remain in details; complete provider/plane diagnostics remain in Advanced
+Diagnostics. Receipt time is shown separately from source generation time, and an
+unknown source timestamp stays unknown.
+
+The custom SVG remains appropriate for the bounded 256-interval API. No runtime
+dependency is added. Cheap and expensive intervals now form merged, low-opacity
+background bands behind a distinct blue price line. Normal is neutral; missing
+intervals still break the curve and are never bridged or treated as zero. A shared
+emerald/slate/coral palette supplies light/dark badges and legend colors. Labels
+carry the meaning alongside color; the legend says the comparison is per day.
+The classification algorithm and all optimizer economics are unchanged.
+
+Today is the initial chart range, with Tomorrow and 2 days available explicitly.
+Compact 24-hour ticks avoid AM/PM collisions on narrow screens. Inspection keeps
+local dates and UTC offsets, including both occurrences of a repeated DST hour.
+Touch, horizontal pointer drag, arrow keys, Home/End, 44px previous/next buttons
+and Back to now are supported. Next cheap/expensive cards focus the matching chart
+interval when it falls within today/tomorrow; summaries beyond that chart range
+remain visible without a misleading jump action.
+
+The frontend exposes existing `planning_usable`, `current_covered` and horizon
+fields rather than inferring planning readiness from refresh errors. No data,
+outdated data, a missing current interval, a partial horizon and a failed status
+connection are distinct. A provider retry delay can coexist with fresh retained
+data and planning availability. Retry delay and automatic update messaging remain
+visible without discarding retained curves. Forecast totals require complete
+coverage, including the remaining-today window.
+
+Shadow estimates state their planning period explicitly, without suggesting a
+monthly saving. Actual backend warnings and partial-plan limits appear next to
+the estimate; assumptions, costs and the paginated full schedule remain available.
+The UI states that economic planning sends no device commands even in Active mode;
+existing policies such as EV Protection and device permissions are separate.
+Blocked plans retain their concrete prerequisites and a settings link.
+
+Remaining product work includes physical WARP/Marstek/control/EV Protection
+validation, refinement of economic assumptions and Shadow planning, eventual
+permission-gated economic dispatch and practical reserve/window/discharge policies.
+This UI refinement adds no actuation behavior or hardware-validation claims.
+
 ## Chart choice and measured comparison
 
-Evaluated uPlot first, including Tinkerforge's direct use. Chose a shared custom
-SVG interval chart because each API series is bounded at 256 intervals and these
+The initial product UI evaluated uPlot, including Tinkerforge's direct use. The shared
+custom SVG interval chart was chosen because each API series is bounded at 256 intervals and these
 views need step intervals rather than large history plots. There is no new runtime
 dependency or Vue chart wrapper.
 
-| Concern | uPlot 1.6.32 | Implemented SVG |
+| Concern (initial product UI at `7d0392fa`) | uPlot 1.6.32 | Initial SVG |
 | --- | --- | --- |
 | Minified / gzip payload | 51,081 / 21,991 B JS; 1,857 / 758 B CSS, before wrapper/plugins | Isolated production chart including its used helpers: 7,272 B JS + 1,411 B CSS; 3,130 + 513 B gzip (level 9) (Vue/i18n external) |
-| Maintenance | Established axes/canvas engine; custom integration still needed | One 293-line Vue component plus tested step-path/calendar helpers |
+| Maintenance | Established axes/canvas engine; custom integration still needed | One Vue component plus tested step-path/calendar helpers |
 | Responsive | Resize integration required | ResizeObserver, scheduled width updates, native SVG |
 | Touch / inspection | Cursor/touch configuration/plugins | Pointer inspection, horizontal drag, keyboard arrows and live inspection caption; vertical page scrolling preserved |
 | Dark mode | Explicit canvas styles/redraw | Bootstrap CSS variables; no theme redraw lifecycle |
@@ -146,9 +193,12 @@ CI job runs these tests.
 `test/fixtures/hems.mjs` supplies deterministic API responses on a 25-hour day.
 The optional `test/test_hems_browser.mjs` uses isolated Playwright and system
 Chromium against Vite; it intercepts every API request and never uses hardware or
-live energy providers. It covers all four routes at 360/768/1440px, light/dark,
-overflow, runtime errors, pointer/touch/keyboard, rate limits, stale/gap/offline,
-canonical tariff/PV saves, Monitor mode persistence and absence of device commands.
+live energy providers. It covers all four routes at 320/360/768/1440px, light/dark,
+overflow, runtime errors, range switching, category jumps, source overlay, DST
+inspection, pointer/touch/keyboard, 44px controls, all three badge contrast ratios
+(at least 4.5:1 in both themes), empty/stale/partial/gap/missing-day/offline states,
+optimizer blockers, canonical tariff/PV saves, Monitor persistence and absence of
+device commands.
 See [test instructions](../test/README.md).
 
 Current API limits: aggregate PV only; no measured historical PV; optimizer schedules
@@ -161,10 +211,12 @@ Later UX debt: replace some raw nested diagnostic JSON with focused read-only
 subsections, localize the inherited technical manual-control/profile text, and add
 per-plane/atomic optimizer visualization when supported by real API data.
 
-## Productization resource and local validation result
+## Initial productization resource and local validation result (`7d0392fa`)
 
 Same selected branch/worktree, identical backend and reference target
-`generic_esp32s3_usb`; before UI is PR head `80c14071`, after is this productization.
+`generic_esp32s3_usb`; before UI is PR head `80c14071`, after is `7d0392fa`.
+These are historical baseline results; the tariff/forecast refinement is measured
+separately below.
 
 | Resource | Before | After | Delta |
 | --- | ---: | ---: | ---: |
@@ -188,3 +240,25 @@ firmware-channel configuration, full repository cpplint and the reference firmwa
 build. Deterministic Chromium checks passed across all four routes and all three
 widths, including canonical form payloads. Remote full-project CI is required on
 the pushed head; its final result and exact head are reported with the PR update.
+
+
+## Tariff/forecast refinement resources and validation
+
+Compared with remote PR head `7d0392fa760f5dc7a1796dd20e665cf1fbbe4f5f`, using
+production `yarn build` in the same environment:
+
+| Resource | Before | After | Delta |
+| --- | ---: | ---: | ---: |
+| App JS, minified, including injected CSS/locales | 1,306,940 B | 1,326,510 B | +19,570 B (+1.50%) |
+| Served app JS gzip | 312,072 B | 316,851 B | +4,779 B (+1.53%) |
+
+No new runtime dependency, backend change, API change, static/RTC allocation,
+worker, platform, partition or PSRAM requirement. The gzip delta is the measured
+embedded web-asset growth; final linked sketch/OTA size is left to firmware CI,
+not presented as a local firmware measurement. No local firmware rebuild was
+performed for this frontend-only refinement.
+
+Local checks: production build/type checking, frontend tests, lint, full source
+format check, all 31 host executables, production JSON configuration compatibility,
+firmware-channel check and semantic/no-write/TLS surface guard. Rendered checks
+use the synthetic fixtures described above; physical validation remains pending.

@@ -3,7 +3,8 @@
         v-for="kind in domains"
         :key="kind"
         :text="t('hemsUi.' + kind)"
-        textVariant="text-bg-primary"
+        :textVariant="props.view === 'overview' ? 'energy-heading' : 'text-bg-primary'"
+        class="hems-energy"
         add-space
     >
         <p v-if="errors[kind]" class="alert alert-warning" role="alert">{{ errors[kind] }}</p>
@@ -16,13 +17,28 @@
                     <span v-if="feeds[kind]!.intervals.length && feeds[kind]!.last_error">{{
                         t('hemsUi.retainedData')
                     }}</span>
-                    <span v-if="feeds[kind]!.manual_refresh?.retry_after_seconds">{{
-                        t('hemsUi.retryIn', { seconds: feeds[kind]!.manual_refresh!.retry_after_seconds })
-                    }}</span>
                 </div>
                 <template v-if="props.view === 'overview'">
-                    <div class="row g-3 mb-3">
-                        <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3" role="status">
+                        <span
+                            class="feed-state"
+                            :class="{
+                                'feed-warning': !['freshData', 'partialData'].includes(
+                                    feedReadiness(feeds[kind]!, !!errors[kind])
+                                ),
+                            }"
+                            >{{ t('hemsUi.' + feedReadiness(feeds[kind]!, !!errors[kind])) }}</span
+                        >
+                        <span v-if="feeds[kind]!.planning_usable !== undefined" class="small text-body-secondary">{{
+                            t(
+                                feeds[kind]!.planning_usable && !errors[kind]
+                                    ? 'hemsUi.planningUsable'
+                                    : 'hemsUi.planningUnavailable'
+                            )
+                        }}</span>
+                    </div>
+                    <div class="energy-summary mb-3">
+                        <div class="energy-metric energy-metric-main">
                             <div class="small text-body-secondary">
                                 {{ t(kind === 'tariff' ? 'hemsUi.effectiveNow' : 'hemsUi.remainingToday') }}
                             </div>
@@ -36,11 +52,14 @@
                             <div class="small text-body-secondary" v-if="kind === 'tariff'">
                                 {{ t('hemsUi.sourcePrice') }}: {{ currentPrice('price_micros_per_kwh') }}
                             </div>
-                            <span v-if="kind === 'tariff' && currentCategory()" class="small">{{
-                                t('hemsUi.' + currentCategory())
-                            }}</span>
+                            <span
+                                v-if="kind === 'tariff' && currentCategory()"
+                                class="price-badge mt-1"
+                                :class="`period-${currentCategory()}`"
+                                >{{ t('hemsUi.' + currentCategory()) }}</span
+                            >
                         </div>
-                        <div v-for="day in [0, 1]" :key="day" class="col-6 col-lg-4">
+                        <div v-for="day in [0, 1]" :key="day" class="energy-metric">
                             <div class="small text-body-secondary">
                                 {{ t(day ? 'hemsUi.tomorrow' : 'hemsUi.today') }} ·
                                 {{ t(kind === 'tariff' ? 'hemsUi.average' : 'hemsUi.forecastTotal') }}
@@ -53,15 +72,28 @@
                             </div>
                         </div>
                     </div>
-                    <div v-if="kind === 'tariff'" class="d-flex flex-wrap gap-3 small mb-3">
-                        <span v-for="category in ['cheap', 'expensive'] as const" :key="category"
-                            ><strong>{{ t('hemsUi.next' + category) }}:</strong> {{ periodText(category) }}</span
+                    <div v-if="kind === 'tariff'" class="next-periods mb-3">
+                        <button
+                            v-for="category in ['cheap', 'expensive'] as const"
+                            :key="category"
+                            type="button"
+                            class="next-period"
+                            :class="`period-${category}`"
+                            :disabled="!periodInspectable(category)"
+                            @click="inspectedPeriod = { utc: period(category)!.start }"
                         >
+                            <span class="price-badge">{{ t('hemsUi.next' + category) }}</span>
+                            <span class="d-block mt-2 fw-medium"
+                                >{{ periodText(category)
+                                }}<span v-if="periodInspectable(category)" aria-hidden="true"> →</span></span
+                            >
+                        </button>
                     </div>
                     <EnergyChart
                         v-if="feeds[kind]!.intervals.length"
                         :intervals="chartData(kind)"
                         :now="now"
+                        :focus-at="kind === 'tariff' ? inspectedPeriod : undefined"
                         :label="
                             t(
                                 kind === 'tariff'
@@ -80,23 +112,37 @@
                         "
                         :display="(value) => chartValue(kind, value)"
                     />
-                    <p v-else class="text-body-secondary">{{ t('hemsUi.waitingData') }}</p>
-                    <details v-if="kind === 'tariff'" class="small mt-3">
-                        <summary>{{ t('hemsUi.classification') }}</summary>
-                        <p class="text-body-secondary mt-2 mb-0">{{ t('hemsUi.classificationHint') }}</p>
-                    </details>
-                    <div
-                        v-if="kind === 'forecast' && feeds[kind]!.config.planes.length"
-                        class="d-flex flex-wrap gap-2 mt-3"
-                    >
-                        <span
-                            v-for="(plane, index) in feeds[kind]!.config.planes"
-                            :key="index"
-                            class="border rounded px-2 py-1 small"
-                            >{{ plane.name }} · {{ plane.peak_w / 1000 }} kWp ·
-                            {{ plane.enabled ? t('hemsUi.enabled') : t('hemsUi.disabled') }}</span
-                        >
+                    <div v-else class="energy-empty p-4 rounded text-center">
+                        <strong class="d-block mb-1">{{ t('hemsUi.noData') }}</strong>
+                        <span class="small text-body-secondary">{{ t('hemsUi.emptyEnergyHint') }}</span>
                     </div>
+                    <details
+                        v-if="kind === 'forecast' && feeds[kind]!.config.planes.length"
+                        class="energy-details mt-3"
+                    >
+                        <summary>
+                            {{ t('hemsUi.pvPlanes') }} ·
+                            {{ feeds[kind]!.config.planes.filter((p) => p.enabled).length }}/{{
+                                feeds[kind]!.config.planes.length
+                            }}
+                            {{ t('hemsUi.enabled') }}
+                        </summary>
+                        <div class="plane-summaries mt-3">
+                            <span
+                                v-for="(plane, index) in feeds[kind]!.config.planes"
+                                :key="index"
+                                class="plane-summary small"
+                                ><strong>{{ plane.name }}</strong
+                                ><span class="text-body-secondary"
+                                    >{{ (plane.peak_w / 1000).toLocaleString(locale) }} kWp ·
+                                    {{ plane.enabled ? t('hemsUi.enabled') : t('hemsUi.disabled') }}</span
+                                ></span
+                            >
+                        </div>
+                        <RouterLink to="/hems/settings" class="small d-inline-block mt-2">{{
+                            t('hemsUi.editPlanes')
+                        }}</RouterLink>
+                    </details>
                     <p
                         v-if="kind === 'tariff' && tariffBasis(feeds.tariff) === 'source'"
                         class="small text-body-secondary mt-2"
@@ -106,6 +152,54 @@
                     <p v-if="kind === 'forecast'" class="small text-body-secondary mt-2">
                         {{ t('hemsUi.forecastHint') }}
                     </p>
+                    <div class="feed-update mt-3 pt-3">
+                        <div class="small text-body-secondary">
+                            <div>{{ t('hemsUi.receivedAt') }}: {{ date(feeds[kind]!.fetched_at) }}</div>
+                            <div v-if="feeds[kind]!.manual_refresh?.retry_after_seconds" class="mt-1" role="status">
+                                {{ t('hemsUi.retryIn', { seconds: feeds[kind]!.manual_refresh!.retry_after_seconds }) }}
+                                {{ t('hemsUi.autoRetry') }}
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            class="btn btn-outline-secondary btn-sm"
+                            :disabled="
+                                busy[kind] ||
+                                feeds[kind]!.provider === 'normalized_push' ||
+                                feeds[kind]!.manual_refresh?.allowed === false
+                            "
+                            @click="refresh(kind)"
+                        >
+                            {{ t('hemsUi.refresh') }}
+                        </button>
+                    </div>
+                    <details class="energy-details mt-3">
+                        <summary>{{ t('hemsUi.energyDetails') }}</summary>
+                        <dl class="small mt-3 mb-2">
+                            <dt>{{ t('hemsUi.sourceUpdated') }}</dt>
+                            <dd>
+                                {{
+                                    feeds[kind]!.generated_at && feeds[kind]!.source_age_seconds !== null
+                                        ? date(feeds[kind]!.generated_at)
+                                        : t('hemsUi.sourceTimeUnknown')
+                                }}
+                            </dd>
+                            <dt>{{ t('hemsUi.coverageUntil') }}</dt>
+                            <dd>{{ date(feeds[kind]!.horizon_end) }}</dd>
+                            <dt>{{ t('hemsUi.nextUpdate') }}</dt>
+                            <dd>{{ date(feeds[kind]!.next_refresh) }}</dd>
+                            <template v-if="kind === 'tariff' && feeds[kind]!.config.pricing.enabled">
+                                <dt>{{ t('hemsUi.monthly_micros') }}</dt>
+                                <dd>{{ monthlyFee() }}</dd>
+                            </template>
+                        </dl>
+                        <p v-if="kind === 'tariff'" class="small text-body-secondary">
+                            {{ t('hemsUi.classificationHint') }}
+                        </p>
+                        <RouterLink to="/hems/diagnostics" class="small">{{
+                            t('hemsUi.providerDiagnosticsLink')
+                        }}</RouterLink>
+                    </details>
                 </template>
             </template>
             <p class="small text-body-secondary mt-3">
@@ -305,6 +399,13 @@
                 </details>
             </template>
         </template>
+        <p v-else-if="!errors[kind]" class="text-body-secondary" role="status">{{ t('hemsUi.loadingEnergy') }}</p>
+        <RouterLink
+            v-if="props.view === 'overview' && feeds[kind]?.enabled === false"
+            to="/hems/settings"
+            class="small"
+            >{{ t('hemsUi.configureEnergy') }}</RouterLink
+        >
     </CardElement>
 </template>
 
@@ -325,6 +426,7 @@ import type {
 } from '@/types/HemsEnergy';
 import {
     dayBounds,
+    feedReadiness,
     summarize,
     tariffIntervals,
     tariffBasis,
@@ -339,6 +441,7 @@ const props = defineProps<{ view?: EnergyView }>();
 const emit = defineEmits<{ health: [issue: boolean] }>();
 const { t, locale } = useI18n();
 const now = ref(Date.now() / 1000);
+const inspectedPeriod = ref<{ utc: number }>();
 function selectProvider(kind: Kind) {
     const draft = drafts[kind];
     if (!draft) return;
@@ -385,7 +488,7 @@ function dailyPrice(day: number) {
 }
 function currentPrice(key: 'price_micros_per_kwh' | 'import_price_micros_per_kwh') {
     const interval = feeds.tariff?.intervals.find((i) => i.start <= now.value && now.value < i.end);
-    return usable('tariff') ? price(interval?.[key], feeds.tariff?.currency) : '—';
+    return usable('tariff') ? formatPrice(interval?.[key], feeds.tariff?.currency, locale.value, 2) : '—';
 }
 function currentCategory() {
     return usable('tariff')
@@ -407,14 +510,30 @@ function chartValue(kind: Kind, value: number | null | undefined) {
     if (kind === 'forecast') return `${value.toLocaleString(locale.value, { maximumFractionDigits: 0 })} W`;
     return price(value * (feeds.tariff?.currency === 'EUR' ? 10000 : 1e6), feeds.tariff?.currency);
 }
+function period(category: TariffClass) {
+    return usable('tariff') ? nextPeriod(classified.value, category, now.value) : null;
+}
+function periodInspectable(category: TariffClass) {
+    const next = period(category);
+    return !!next && next.start < dayBounds(now.value, 1)[1];
+}
 function periodText(category: TariffClass) {
-    const period = usable('tariff') ? nextPeriod(classified.value, category, now.value) : null;
-    return period ? `${date(period.start)} – ${date(period.end)}` : t('hemsUi.noneInData');
+    if (!usable('tariff')) return t('hemsUi.unavailable');
+    const next = period(category);
+    if (!next) return t('hemsUi.noneInData');
+    const short = (utc: number) =>
+        new Date(utc * 1000).toLocaleString(locale.value, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    return `${short(next.start)} – ${short(next.end)}`;
+}
+function monthlyFee() {
+    const amount = (feeds.tariff?.config.pricing.monthly_micros || 0) / 1e6;
+    return `${amount.toLocaleString(locale.value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${feeds.tariff?.currency || 'EUR'}/${t('hemsUi.month')}`;
 }
 function health(kind: Kind) {
     const feed = feeds[kind];
     if (!feed?.enabled) return '';
     if (feed.last_error) return stateText(feed.last_error);
+    if (props.view === 'overview' && ['noData', 'outdated', 'currentGap'].includes(feedReadiness(feed))) return '';
     return ['ready', 'partial'].includes(feed.state) ? '' : stateText(feed.state);
 }
 const domains: Kind[] = ['tariff', 'forecast'];
@@ -563,6 +682,112 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
+.hems-energy :deep(.energy-heading) {
+    background: var(--bs-tertiary-bg);
+    font-weight: 600;
+    padding-block: 1rem;
+}
+.energy-summary {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 1rem;
+}
+.energy-metric {
+    min-width: 0;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    background: var(--bs-tertiary-bg);
+}
+.energy-metric-main {
+    background: var(--energy-plot);
+}
+.next-periods {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+.next-period {
+    text-align: start;
+    color: var(--bs-body-color);
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-inline-start: 3px solid var(--period-color);
+    border-radius: 0.65rem;
+    padding: 0.85rem;
+    font-size: 0.875rem;
+}
+.next-period:disabled {
+    cursor: default;
+}
+.next-period:not(:disabled):hover {
+    background: var(--bs-tertiary-bg);
+}
+.feed-state {
+    background: var(--bs-tertiary-bg);
+    border-radius: 2rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.feed-warning {
+    color: var(--bs-warning-text-emphasis);
+    background: var(--bs-warning-bg-subtle);
+}
+.feed-update {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border-top: 1px solid var(--bs-border-color);
+}
+.feed-update button {
+    flex-shrink: 0;
+    min-height: 44px;
+}
+.energy-details summary {
+    font-size: 0.875rem;
+    padding-block: 0.5rem;
+}
+.energy-details dd {
+    overflow-wrap: anywhere;
+    color: var(--bs-secondary-color);
+}
+.energy-empty {
+    background: var(--bs-tertiary-bg);
+}
+.plane-summaries {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.5rem;
+}
+.plane-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    border-radius: 0.5rem;
+    background: var(--bs-tertiary-bg);
+    padding: 0.65rem;
+    overflow-wrap: anywhere;
+}
+@media (max-width: 575px) {
+    .energy-summary {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+    .energy-metric {
+        padding: 0.75rem;
+    }
+    .energy-metric-main {
+        grid-column: 1 / -1;
+    }
+    .next-periods {
+        grid-template-columns: 1fr;
+    }
+    .feed-update {
+        flex-wrap: wrap;
+    }
+}
+
 .diagnostic-json {
     max-height: 36rem;
     overflow: auto;
