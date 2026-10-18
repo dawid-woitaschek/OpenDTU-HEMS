@@ -33,6 +33,8 @@ owns endpoints, profiles and expandable manual semantic controls. Detailed
 provider/control/system diagnostics and paginated optimizer rows remain available.
 English, German and French product copy is included. See [UI](HEMS_UI.md).
 
+Advanced Diagnostics also provides an on-demand browser-only support snapshot (`opendtu-hems-diagnostics/v1`). It sequentially combines existing firmware, system, HEMS, tariff, forecast and paginated optimizer APIs into one JSON download or clipboard payload. Passwords, tokens, keys, cookies and credential-like values are always redacted; network addresses/hostnames/URLs and PV coordinates remain redacted unless explicitly included. The snapshot is never persisted on LittleFS and adds no backend endpoint, worker or runtime history store.
+
 Tariff cheap/normal/expensive categories are presentation-only. The bounded DP
 optimizer uses exact numeric prices, explicit efficiencies, power/SoC bounds,
 optional usable PV and terminal reserve. The DP performs no device writes. A separate default-off dispatcher can issue
