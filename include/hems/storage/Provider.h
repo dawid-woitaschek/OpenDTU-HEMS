@@ -31,6 +31,8 @@ public:
     void setAuthorization(void* context, Actuation::AuthorizationCallback callback);
     bool submitCommand(Actuation::Command const& command, uint32_t& id);
     void requestRelease();
+    bool releaseEconomic();
+    Actuation::Origin owner() const;
     bool cancelPendingCommand(uint32_t id = 0);
     Actuation::MailboxSnapshot commandSnapshot() const;
     Actuation::CommandResult commandResult() const;
@@ -86,6 +88,7 @@ private:
     bool _busy = false;
     bool _polled = false;
     bool _controlOwned = false;
+    Actuation::Origin _controlSource = Actuation::Origin::None;
     uint32_t _generation = 0;
     uint32_t _lastPollMs = 0;
     uint32_t _profileFingerprint = 0;

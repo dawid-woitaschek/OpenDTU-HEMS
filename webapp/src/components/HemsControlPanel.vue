@@ -1,7 +1,11 @@
 <template>
     <p v-if="error" class="alert alert-danger" role="alert">{{ error }}</p>
     <p v-if="status?.state === 'Active'" class="alert alert-info">
-        Automation is Active and may override manual commands. Use Monitor for hardware testing.
+        {{ t('hemsUi.manualPriorityHint') }}
+    </p>
+    <p v-if="status?.economic_dispatch?.paused_manual" class="alert alert-info" role="status">
+        {{ t('hemsUi.dispatchStates.paused_manual') }}
+        <RouterLink to="/hems">{{ t('hemsUi.resumeEconomic') }}</RouterLink>
     </p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <template v-if="status">
@@ -198,6 +202,8 @@ import CardElement from '@/components/CardElement.vue';
 import type { HemsStatus, HemsOperation } from '@/types/HemsStatus';
 import { authHeader } from '@/utils/authentication';
 import { controlText } from '@/hemsControl';
+import { useI18n } from 'vue-i18n';
+const { t } = useI18n();
 type Target = 'storage' | 'evse';
 const targets: Target[] = ['storage', 'evse'];
 const status = ref<HemsStatus>(),

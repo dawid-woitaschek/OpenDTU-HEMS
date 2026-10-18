@@ -65,6 +65,10 @@ bool parseConfig(JsonVariantConst j, Config& out)
             || !number(j, "max_charge_w", 0, 100000) || !number(j, "max_discharge_w", 0, 100000)
             || !number(j, "expected_base_load_w", 0, 100000) || !number(j, "soc_step_pct", 2, 10)) { return false; }
     Config c; c.socBoundsConfigured = j["soc_bounds_configured"]; c.enabled = j["enabled"]; c.effectivePrice = j["effective_price"]; c.exportConfigured = j["export_configured"];
+    if (!j["dispatch_enabled"].isUnbound()) {
+        if (!j["dispatch_enabled"].is<bool>()) { return false; }
+        c.dispatchEnabled = j["dispatch_enabled"];
+    }
     c.exportMicros = j["export_micros_per_kwh"]; c.horizonSeconds = j["horizon_seconds"]; c.capacityWh = j["capacity_wh"];
     c.minSoc = j["min_soc_pct"]; c.maxSoc = j["max_soc_pct"]; c.chargePermille = j["charge_permille"];
     c.dischargePermille = j["discharge_permille"]; c.maxChargeW = j["max_charge_w"]; c.maxDischargeW = j["max_discharge_w"];
@@ -86,6 +90,7 @@ bool parseConfig(JsonVariantConst j, Config& out)
 void serializeConfig(Config const& c, JsonObject j)
 {
     j["soc_bounds_configured"] = c.socBoundsConfigured; j["enabled"] = c.enabled; j["effective_price"] = c.effectivePrice; j["export_configured"] = c.exportConfigured;
+    j["dispatch_enabled"] = c.dispatchEnabled;
     j["export_micros_per_kwh"] = c.exportMicros; j["horizon_seconds"] = c.horizonSeconds; j["capacity_wh"] = c.capacityWh;
     j["min_soc_pct"] = c.minSoc; j["max_soc_pct"] = c.maxSoc; j["charge_permille"] = c.chargePermille;
     j["discharge_permille"] = c.dischargePermille; j["max_charge_w"] = c.maxChargeW; j["max_discharge_w"] = c.maxDischargeW;

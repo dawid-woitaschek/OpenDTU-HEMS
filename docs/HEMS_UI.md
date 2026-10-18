@@ -24,9 +24,11 @@ curves remain inspectable with the failure/outdated message alongside them.
 The overview describes actual EV Protection enforcement separately from a Shadow
 restriction. Disabled stops HEMS control; Monitor forbids automatic writes but
 allows manual semantic controls for categories with HEMS Control permission;
-Active permits policy writes only for permitted categories. No authorization,
-protocol, control, optimizer, retry, TLS, profile or Modbus backend was changed.
-The economic optimizer always carries SHADOW and no-device-writes labels.
+Active permits policy writes only for permitted categories. Economic dispatch
+additionally requires the explicit default-off opt-in. Shadow planning, dispatch
+state, global mode and Storage permission are separate labels. Manual control
+pauses economics durably; explicit Resume and cleanup/blocked/waiting states are
+visible. See [economic dispatch](HEMS_Economic_Dispatch.md).
 
 Tariff numbers use **backend-supplied effective import prices**. The frontend only
 converts integer micro-currency units for display; it does not recompute VAT or

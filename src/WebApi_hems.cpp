@@ -151,6 +151,8 @@ void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarg
     mailbox["completed_ms"] = commandResult.completedMs;
     mailbox["age_ms"] = commandResult.completedMs ? millis() - commandResult.completedMs : 0;
     mailbox["automatic"] = command.command.automatic;
+    mailbox["source"] = Hems::Actuation::originName(command.command.origin);
+    mailbox["plan_revision"] = command.command.authority;
     mailbox["state"] = Hems::Actuation::mailboxStateName(command.state);
     mailbox["id"] = nullptr;
     mailbox["generation"] = nullptr;
@@ -332,6 +334,7 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     auto capability = HemsController.controlCapability();
     actuation["storage_control_enabled"] = capability.storage;
     actuation["evse_control_enabled"] = capability.evse;
+    HemsController.serializeEconomic(root["economic_dispatch"].to<JsonObject>());
     serializeActuationTarget(actuation["evse"].to<JsonObject>(), Hems::ControlTarget::Evse);
     serializeActuationTarget(actuation["storage"].to<JsonObject>(), Hems::ControlTarget::Storage);
 

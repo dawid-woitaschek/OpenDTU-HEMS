@@ -1,9 +1,33 @@
 <template>
     <CardElement :text="t('hemsUi.optimizer')" textVariant="text-bg-primary" add-space>
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-            <span class="badge text-bg-secondary">SHADOW</span><strong>{{ t('hemsUi.shadowOnly') }}</strong>
+            <span class="badge text-bg-secondary">{{ t('hemsUi.planning') }}</span>
+            <strong>{{ t(plan?.dispatch?.enabled ? 'hemsUi.dispatchEnabled' : 'hemsUi.shadowOnly') }}</strong>
         </div>
-        <p class="small text-body-secondary">{{ t('hemsUi.shadowHint') }}</p>
+        <p class="small text-body-secondary">{{ t('hemsUi.dispatchHint') }}</p>
+        <div v-if="plan?.dispatch && !error" class="border rounded p-3 mb-3" role="status">
+            <div class="fw-semibold">{{ dispatchLabel(plan.dispatch.state) }}</div>
+            <div class="small text-body-secondary mt-1">
+                {{ t('hemsUi.globalMode') }}: {{ t('hems.' + plan.dispatch.global_mode) }} ·
+                {{ t('hemsUi.storagePermission') }}:
+                {{ t(plan.dispatch.storage_permission ? 'hemsUi.hemsControl' : 'hemsUi.monitorOnly') }}
+            </div>
+            <p
+                v-if="plan.dispatch.cleanup_pending || plan.dispatch.cleanup_state === 'failed'"
+                class="small text-warning-emphasis mt-2 mb-0"
+            >
+                {{ t(plan.dispatch.cleanup_state === 'failed' ? 'hemsUi.cleanupFailed' : 'hemsUi.cleanupPending') }}
+            </p>
+            <button
+                v-if="plan.dispatch.paused_manual"
+                type="button"
+                class="btn btn-outline-primary mt-2"
+                :disabled="busy || !plan.config.enabled || !plan.config.dispatch_enabled"
+                @click="resume"
+            >
+                {{ t('hemsUi.resumeEconomic') }}
+            </button>
+        </div>
         <p v-if="error" class="alert alert-warning" role="alert">{{ t('hemsUi.loadFailed') }} {{ error }}</p>
         <p v-if="notice" class="alert alert-success" role="status">{{ notice }}</p>
         <template v-if="plan">
@@ -200,6 +224,16 @@
                     </div>
                     <p class="form-text mb-0">{{ t('hemsUi.targetHint') }}</p>
                 </fieldset>
+                <label class="form-check-label d-block mb-2">
+                    <input
+                        id="optimizer-dispatch-enabled"
+                        v-model="draft.dispatch_enabled"
+                        type="checkbox"
+                        class="form-check-input me-2"
+                    />
+                    {{ t('hemsUi.enableDispatch') }}
+                </label>
+                <p class="form-text mb-3">{{ t('hemsUi.dispatchOptInHint') }}</p>
                 <div class="row g-3 mb-3">
                     <div v-for="field in fields.filter((f) => !f.advanced)" :key="field.key" class="col-sm-6">
                         <label :for="`optimizer-${field.key}`" class="form-label"
@@ -363,6 +397,7 @@ import CardElement from '@/components/CardElement.vue';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { useI18n } from 'vue-i18n';
 import type { EnergyView } from '@/types/HemsEnergy';
+import type { EconomicDispatch } from '@/types/HemsStatus';
 import { formatPrice } from '@/utils/hemsPresentation';
 import { localDeadline, utcDeadline } from '@/utils/hemsPolicy';
 const props = defineProps<{ view?: EnergyView }>();
@@ -378,6 +413,7 @@ type StoragePolicies = {
 type Config = {
     soc_bounds_configured: boolean;
     enabled: boolean;
+    dispatch_enabled: boolean;
     effective_price: boolean;
     export_configured: boolean;
     export_micros_per_kwh: number;
@@ -407,6 +443,7 @@ type Step = {
     grid_export_wh: number;
 };
 type Plan = {
+    dispatch?: EconomicDispatch;
     config: Config;
     state: string;
     blockers: string[];
@@ -511,6 +548,8 @@ const router = useRouter();
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const label = (s: string) =>
     te('hemsUi.optimizerStates.' + s) ? t('hemsUi.optimizerStates.' + s) : t('hemsUi.optimizerUnavailable');
+const dispatchLabel = (s: string) =>
+    te('hemsUi.dispatchStates.' + s) ? t('hemsUi.dispatchStates.' + s) : t('hemsUi.dispatchStates.plan_unavailable');
 const date = (s?: number) =>
     s
         ? new Date(s * 1000).toLocaleString(locale.value, {
@@ -546,6 +585,7 @@ async function load(reset = false) {
         plan.value = result;
         if (!draft.value || reset) {
             draft.value = structuredClone(result.config);
+            draft.value.dispatch_enabled ??= false;
             draft.value.policies ||= {
                 grid_charging_allowed: true,
                 discharge_allowed: true,
@@ -564,7 +604,7 @@ async function perform(suffix: string, data: unknown, reset = false) {
     notice.value = '';
     try {
         await api(suffix, data);
-        notice.value = t('hemsUi.shadowSaved');
+        notice.value = t('hemsUi.economicSaved');
         await load(reset);
     } catch (e) {
         error.value = String(e);
@@ -584,6 +624,7 @@ function setDeadline(event: Event) {
 }
 const save = () => perform('/config', draft.value, true);
 const recalculate = () => perform('/recalculate', {});
+const resume = () => perform('/resume', {});
 onMounted(() => {
     void load();
     timer = setInterval(() => {

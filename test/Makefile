@@ -40,6 +40,13 @@ ARDUINOJSON ?= ../.pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 
 all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_PROVIDER_CLEANUP) $(TEST_CONTROL_READINESS) $(TEST_ACTUATION_MAILBOX) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE) $(TEST_OPTIMIZER_SERVICE) $(TEST_TRANSPORT) $(TEST_NATIVE_ENERGY) $(TEST_SHADOW) $(TEST_ENERGY) $(TEST_ENERGY_SERVICE) $(TEST_ENERGY_RETRY) $(TEST_RUNTIME_DIAGNOSTICS) $(TEST_RESTART_HELPER) $(TEST_SETTINGS_STORES)
 
+all: test_economic_dispatch test_economic_integration
+$(TEST_PROVIDER_CLEANUP): ../src/hems/economic/Dispatch.cpp economic_disabled.cpp
+test_economic_dispatch: test_economic_dispatch.cpp ../src/hems/economic/Dispatch.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
+test_economic_integration: test_economic_integration.cpp test_provider_cleanup.cpp $(wildcard ../src/hems/*/*.cpp) ../src/hems/Controller.cpp
+	$(CXX) $(CXXFLAGS) -Ieconomic_stubs -Ienergy_stubs -Iprovider_stubs -Iwarp_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $< ../src/hems/Controller.cpp ../src/hems/economic/Dispatch.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/actuation/Readiness.cpp ../src/hems/policies/EvProtection.cpp ../src/hems/model/Normalize.cpp ../src/hems/storage/Provider.cpp ../src/hems/warp/Provider.cpp ../src/hems/storage/State.cpp ../src/hems/warp/State.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/evse/Telemetry.cpp ../src/hems/warp/ProfileAdapter.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/actuation/Mailbox.cpp ../src/hems/actuation/Capabilities.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp ../src/hems/modbus/Protocol.cpp
+
 $(TEST_OVERSCALING): test_overscaling.cpp ../src/OverscalingCalculator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $< ../src/OverscalingCalculator.cpp
 
@@ -131,6 +138,8 @@ $(TEST_SETTINGS_STORES): test_settings_stores.cpp ../src/hems/evse/SettingsStore
 	$(CXX) $(CXXFLAGS) -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $^
 
 test: all
+	./test_economic_dispatch
+	./test_economic_integration
 	python3 test_control_surface.py
 	@echo "Running overscaling tests..."
 	./$(TEST_OVERSCALING)

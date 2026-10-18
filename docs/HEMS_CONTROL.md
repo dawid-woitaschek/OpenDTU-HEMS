@@ -17,7 +17,7 @@ Global modes:
 
 - **Disabled:** no automatic control; preserves existing disabled semantics by stopping HEMS provider polling. Known ownership gets one best-effort release attempt.
 - **Monitor:** telemetry and policy proposals; manual semantic commands for writable targets; no automatic command producer.
-- **Active:** also permits automatic policy commands for writable targets. Manual commands are allowed; the UI explains that automation may override them.
+- **Active:** also permits automatic policy commands for writable targets. Manual storage commands pause opted-in economics until explicit Resume; EV Protection retains priority.
 
 Mode is persisted in the existing HEMS configuration. Legacy enabled settings become Monitor, legacy disabled settings remain Disabled, and invalid mode values fall back to Monitor. Device write permissions retain their existing separate persistence domains and default to Monitor only.
 
@@ -76,9 +76,9 @@ Native tests and CI validate software paths, not physical charging/discharging o
 
 ## Economic policy boundary
 
-Practical [storage/economic policies](HEMS_Policies.md) only constrain Shadow
-planning. They do not restrict explicit manual controls or create a command
+Practical [storage/economic policies](HEMS_Policies.md) constrain the read-only optimizer.
+Opt-in [economic storage dispatch](HEMS_Economic_Dispatch.md) consumes only its valid current interval. They do not restrict explicit manual controls or create a command
 producer. Hardware safety and actionable EV Protection remain authoritative over
 manual discharge. Economic planning cannot override protection or manual actions.
-Future economic dispatch must use this same semantic path and add separately
-tested manual pause/resume precedence; no implicit economic override timer exists.
+Economic dispatch uses this same semantic path with durable manual pause and explicit
+authenticated Resume; no implicit economic override timer exists.

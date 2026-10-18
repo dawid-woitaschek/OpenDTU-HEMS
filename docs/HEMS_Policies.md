@@ -1,7 +1,8 @@
-# Storage/economic policies — Shadow only
+# Storage/economic policies
 
 User configuration → policy evaluation (constraints/goals) → existing economic DP
-→ Shadow plan. **Zero economic device writes**, including in Active mode. This is
+→ read-only plan. The policy model and DP perform **zero device writes**. Separate
+[opt-in economic dispatch](HEMS_Economic_Dispatch.md) implements runtime control. This is
 a small explicit battery policy model, without rule tables, scripting or price
 category triggers. Cheap/normal/expensive remain frontend presentation only.
 
@@ -87,8 +88,8 @@ Deterministic current order:
    including explicit manual discharge in Active when the constraint is actionable.
 3. Authorized manual semantic commands use the existing readiness, permission,
    generation, mailbox/worker and executor path.
-4. Economic policies constrain the Shadow optimizer only. They cannot write,
-   cancel or supersede any manual or protection command.
+4. Economic policies constrain the read-only optimizer. Opt-in economic dispatch
+   remains below manual control and EV Protection, with live per-write checks.
 
 The optimizer consumes both proposed EV Protection and effective current
 constraints. As before, these restrict the first/current slot; future EV charging
@@ -96,11 +97,9 @@ is unknown. A later plan interval is never permission to override protection
 when that interval arrives. Active EV Protection may supersede manual operation
 under its existing documented conditions; this milestone does not change that.
 
-No economic write producer exists, so there is no manual/economic command race
-and no new override timer. Before eventual Active economic dispatch, define and
-test explicit manual pause/resume precedence, dispatch/replanning validity and
-failures, and recheck all live permissions/protection/capabilities immediately
-before each bounded semantic write. Use the existing actuator path exclusively.
+The policy model remains read-only. The separate runtime implements explicit
+manual pause/resume, plan revision checks, bounded replanning and retries through
+the existing semantic actuator; see the [dispatch contract](HEMS_Economic_Dispatch.md).
 
 ## Persistence and API
 

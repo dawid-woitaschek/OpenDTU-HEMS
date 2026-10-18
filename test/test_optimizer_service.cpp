@@ -39,7 +39,7 @@ int main()
     assert(result["tariff_source"] == "service fixture" && result["currency"] == "EUR");
     storage.socPct=Model::Signal<double>::stale(50); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="stale_inputs" && result["schedule"].size()==0);
-    assert(Optimizer::ShadowOptimizer.requestRecalculate()); scheduler.execute(); workers();
+    assert(Optimizer::ShadowOptimizer.requestRecalculate()); testNow += 5000; scheduler.execute(); workers();
     Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true); assert(result["state"]=="not_ready");
     assert(result["blockers"][0]=="storage_soc_not_fresh");
     failCommit=true; config.enabled=false; assert(!Optimizer::ShadowOptimizer.configure(config)); failCommit=false;

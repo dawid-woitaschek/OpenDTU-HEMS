@@ -89,7 +89,7 @@ try {
             await page.locator('#optimizer-target-soc').fill('70');
             await page.locator('#optimizer-target-deadline').fill('2026-10-26T06:00');
             await optimizerForm.getByRole('button', { name: 'Save', exact: true }).click();
-            await page.getByText('Saved or queued · Shadow calculation only.', { exact: true }).waitFor();
+            await page.getByText('Economic settings saved or calculation queued.', { exact: true }).waitFor();
             const policySave = requests.findLast(r => r.path === '/api/hems/optimizer/config');
             assert.equal(policySave.payload.policies.grid_charging_allowed, false);
             assert.equal(policySave.payload.policies.discharge_allowed, false);

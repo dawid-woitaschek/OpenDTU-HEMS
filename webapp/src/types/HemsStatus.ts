@@ -1,3 +1,13 @@
+export interface EconomicDispatch {
+    enabled: boolean;
+    paused_manual: boolean;
+    state: string;
+    global_mode: 'Disabled' | 'Monitor' | 'Active';
+    storage_permission: boolean;
+    cleanup_pending: boolean;
+    cleanup_state: string;
+}
+
 export interface HemsOperation {
     action: string;
     has_input: boolean;
@@ -78,6 +88,7 @@ export interface HemsActuationTarget {
 }
 
 export interface HemsStatus {
+    economic_dispatch?: EconomicDispatch;
     state: 'Disabled' | 'Monitor' | 'Active';
     uptime_ms: number;
     decision: 'None';

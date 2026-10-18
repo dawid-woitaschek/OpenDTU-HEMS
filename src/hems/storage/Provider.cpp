@@ -85,7 +85,7 @@ void Provider::configure(StorageConfig const& config, bool monitor)
     if (_controlOwned && !_cleanup.valid) {
         retainCleanupLocked(_config, _profile, _port, _unit);
     }
-    _controlOwned = false;
+    _controlOwned = false; _controlSource = Actuation::Origin::None;
 
     _config = config;
     _profileFingerprint = fingerprint;
@@ -209,6 +209,12 @@ bool Provider::submitCommand(Actuation::Command const& command, uint32_t& id)
         id = 0;
         return false;
     }
+    if (command.origin == Actuation::Origin::Manual) {
+        // Accepted manual control takes responsibility for any existing session.
+        // Economics cannot release that session while the manual command waits.
+        std::lock_guard<std::mutex> lock(_mutex);
+        if (_controlOwned && generation == _generation) { _controlSource = Actuation::Origin::Manual; }
+    }
     xTaskNotifyGive(worker);
     return true;
 }
@@ -220,7 +226,24 @@ void Provider::requestRelease()
     ++_generation;
     _polled = false;
     if (_controlOwned && !_cleanup.valid) { retainCleanupLocked(_config, _profile, _port, _unit); }
-    _controlOwned = false;
+    _controlOwned = false; _controlSource = Actuation::Origin::None;
+}
+
+Actuation::Origin Provider::owner() const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _controlSource;
+}
+bool Provider::releaseEconomic()
+{
+    auto command = _mailbox.snapshot();
+    if (command.state == Actuation::MailboxState::Pending || command.state == Actuation::MailboxState::Running) { return false; }
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_busy || _cleanup.valid || !_controlOwned || _controlSource != Actuation::Origin::Economic) { return false; }
+    ++_generation; _polled = false;
+    retainCleanupLocked(_config, _profile, _port, _unit);
+    _controlOwned = false; _controlSource = Actuation::Origin::None;
+    return _cleanup.valid;
 }
 
 bool Provider::cancelPendingCommand(uint32_t id)
@@ -419,10 +442,12 @@ void Provider::processCommand(Actuation::Envelope const& envelope)
         _ownershipUncertain = ownsControl && !success;
         if (generation == _generation) {
             _controlOwned = ownsControl;
+            if (!ownsControl) { _controlSource = Actuation::Origin::None; }
+            else if (result.execution.writeAttempted) { _controlSource = envelope.command.origin; }
             _polled = false;
         } else if (ownsControl && !_cleanup.valid && profile && port && unit) {
             retainCleanupLocked(config, profile, port, unit);
-            _controlOwned = false;
+            _controlOwned = false; _controlSource = Actuation::Origin::None;
         }
     }
 
@@ -480,7 +505,7 @@ void Provider::processCleanup()
         _cleanup.valid = false;
         _cleanup.profile.reset();
         _cleanupState = success ? Actuation::CleanupState::Succeeded : Actuation::CleanupState::Failed;
-        _controlOwned = false;
+        _controlOwned = false; _controlSource = Actuation::Origin::None;
         _ownershipUncertain = !success;
         _polled = false;
         _actuator.reset();

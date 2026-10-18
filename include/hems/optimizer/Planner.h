@@ -9,6 +9,7 @@ constexpr size_t MaxSteps = 256, MaxStates = 54;
 struct Config {
     bool socBoundsConfigured = false;
     bool enabled = false, effectivePrice = true, exportConfigured = false;
+    bool dispatchEnabled = false; // Additive explicit opt-in; legacy installations never write.
     uint32_t horizonSeconds = 86400, capacityWh = 0, maxChargeW = 0, maxDischargeW = 0, baseLoadW = 0;
     uint16_t minSoc = 0, maxSoc = 100, chargePermille = 0, dischargePermille = 0, socStepPct = 5;
     int32_t exportMicros = 0;
@@ -23,6 +24,7 @@ struct Inputs {
     Model::StorageState storage;
     Constraints::StorageConstraints currentConstraints;
     uint32_t now = 0;
+    uint64_t controlRevision = 0;
 };
 struct Step {
     uint32_t start = 0, end = 0, startWh = 0, endWh = 0;

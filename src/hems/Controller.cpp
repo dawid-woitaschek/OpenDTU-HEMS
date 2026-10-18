@@ -6,6 +6,8 @@
 #include <hems/model/Sources.h>
 #include <Arduino.h>
 #include <Configuration.h>
+#include <hems/optimizer/Service.h>
+#include <ctime>
 
 Hems::Controller HemsController;
 
@@ -15,7 +17,8 @@ bool Controller::providerAuthorization(void* context, Actuation::Command const& 
 {
     if (!context) { return false; }
     auto& controller = *static_cast<Controller*>(context);
-    return controller.readiness(command.target, command.automatic, false).allowed() && controller.constraintsPermit(command);
+    return controller.readiness(command.target, command.automatic, false).allowed() && controller.constraintsPermit(command)
+        && (command.origin != Actuation::Origin::Economic || controller.economicAuthorized(command));
 }
 
 void Controller::init(Scheduler& scheduler)
@@ -36,6 +39,9 @@ void Controller::init(Scheduler& scheduler)
             _evProtectionPolicy.update(normalized.evse, millis(), controlCapability(), getMode() == Mode::Active);
         }
         applyEvProtection();
+        if (millis() - _economicLastTickMs >= 1000) {
+            _economicLastTickMs = millis(); applyEconomic();
+        }
     });
     _loopTask.setInterval(100);
     _loopTask.setIterations(TASK_FOREVER);
@@ -147,12 +153,19 @@ Actuation::ProfileInfo Controller::getProfileInfo(ControlTarget target) const
 bool Controller::submitManual(Actuation::Command command, uint32_t& id)
 {
     command.automatic = false;
+    command.origin = Actuation::Origin::Manual; command.authority = 0; id = 0;
+    if (command.target == ControlTarget::Storage) {
+        if (!Actuation::validCommand(command) || !readiness(command.target, false).allowed()
+                || !constraintsPermit(command) || !_storage.supportsCommand(command)) { return false; }
+        if (!Optimizer::ShadowOptimizer.pauseForManual()) { return false; }
+    }
     return submit(command, id);
 }
 
 bool Controller::submitActuation(Actuation::Command command, uint32_t& id)
 {
     command.automatic = true;
+    if (command.origin == Actuation::Origin::Manual) { command.origin = Actuation::Origin::Protection; }
     return submit(command, id);
 }
 
@@ -168,8 +181,15 @@ bool Controller::submit(Actuation::Command command, uint32_t& id)
 bool Controller::constraintsPermit(Actuation::Command const& command) const
 {
     // Rechecked by the worker immediately before every bounded write too.
-    return command.target != ControlTarget::Storage || command.action != Actuation::Action::SetDischargePowerW
-        || command.value <= 0 || getConstraints().storage.dischargeAllowed;
+    if (command.target != ControlTarget::Storage || command.value <= 0) { return true; }
+    auto constraints = getConstraints().storage;
+    if (command.action == Actuation::Action::SetDischargePowerW) {
+        return constraints.dischargeAllowed && (!constraints.maxDischargePower.active || command.value <= constraints.maxDischargePower.valueW);
+    }
+    if (command.action == Actuation::Action::SetChargePowerW) {
+        return constraints.chargeAllowed && (!constraints.maxChargePower.active || command.value <= constraints.maxChargePower.valueW);
+    }
+    return true;
 }
 
 void Controller::applyEvProtection()
@@ -199,6 +219,7 @@ void Controller::applyEvProtection()
         // A later manual operating command supersedes the protection stop.
         _evProtectionOwned = false;
     }
+    if (_storage.owner() != Actuation::Origin::Protection) { _evProtectionOwned = false; }
     bool block = !getConstraints().storage.dischargeAllowed;
     auto storage = _storage.snapshot();
     bool observedDischarge = storage.valid && !storage.stale
@@ -219,6 +240,79 @@ void Controller::applyEvProtection()
         _policyCommandId = id;
         if (!block) { _evProtectionOwned = false; } // Best-effort release, once.
     }
+}
+
+uint64_t Controller::economicContextRevision() const
+{
+    return (static_cast<uint64_t>(_storage.generation()) << 8) | static_cast<uint8_t>(getMode());
+}
+bool Controller::economicAuthorized(Actuation::Command const& command) const
+{
+    auto plan = Optimizer::ShadowOptimizer.dispatchPlan();
+    if (!command.automatic || command.target != ControlTarget::Storage || !plan.config.dispatchEnabled
+            || plan.paused || !plan.valid || command.authority != plan.revision) { return false; }
+    auto owner = _storage.owner();
+    if ((_evProtectionOwned || owner == Actuation::Origin::Protection) && plan.batteryW <= 0) { return false; }
+    Economic::Context input; input.plan = plan; input.storage = getNormalizedState().storage;
+    input.constraints = getConstraints().storage;
+    if (plan.batteryW < 0 && !input.constraints.dischargeAllowed) { return false; }
+    auto profile = _storage.profileInfo(); input.profile = &profile;
+    Actuation::Command desired;
+    return Economic::mapCommand(input, desired) && desired.action == command.action
+        && desired.hasValue == command.hasValue && (!desired.hasValue || desired.value == command.value);
+}
+void Controller::applyEconomic()
+{
+    Economic::Context input;
+    input.plan = Optimizer::ShadowOptimizer.dispatchPlan();
+    input.mode = getMode(); input.permission = controlPermissionGranted(ControlTarget::Storage);
+    input.storage = getNormalizedState().storage; input.constraints = getConstraints().storage;
+    auto telemetry = _storage.snapshot();
+    input.successfulPolls = telemetry.successfulPolls;
+    input.cleanupReady = telemetry.reachable && telemetry.valid && !telemetry.stale;
+    input.ready = readiness(ControlTarget::Storage, true).allowed();
+    auto profile = _storage.profileInfo(); input.profile = &profile;
+    input.providerGeneration = _storage.generation(); input.owner = _storage.owner();
+    input.protectionOwned = _evProtectionOwned;
+    input.mailbox = _storage.commandSnapshot();
+    input.now = time(nullptr); input.nowMs = millis();
+    std::lock_guard<std::mutex> lock(_economicMutex);
+    auto decision = _economic.update(input);
+    if (decision.replan) { Optimizer::ShadowOptimizer.invalidate("economic_command_failed"); }
+    if (decision.cancel) {
+        Optimizer::ShadowOptimizer.invalidate("economic_work_revoked");
+        _storage.cancelPendingCommand(input.mailbox.id);
+    }
+    if (decision.cleanup) { _storage.releaseEconomic(); }
+    if (decision.submit) {
+        uint32_t id;
+        if (submitActuation(decision.command, id)) { _economic.accepted(decision.command, id, input.nowMs); }
+    }
+}
+void Controller::serializeEconomic(JsonObject output) const
+{
+    auto plan = Optimizer::ShadowOptimizer.dispatchPlan();
+    std::lock_guard<std::mutex> lock(_economicMutex);
+    auto state = _economic.snapshot();
+    output["enabled"] = plan.config.dispatchEnabled; output["paused_manual"] = plan.paused;
+    output["global_mode"] = modeName(getMode()); output["storage_permission"] = controlPermissionGranted(ControlTarget::Storage);
+    output["state"] = !plan.config.dispatchEnabled ? "disabled" : plan.paused ? "paused_manual" : state.state;
+    output["owner"] = Actuation::originName(_storage.owner());
+    output["plan_revision"] = plan.revision; output["energy_revision"] = plan.energyRevision;
+    output["plan_valid"] = plan.valid; output["plan_reason"] = plan.reason;
+    output["slot_start"] = plan.start; output["slot_end"] = plan.end;
+    output["planned_battery_w"] = plan.batteryW;
+    output["desired_action"] = Actuation::actionName(state.desired.action);
+    output["desired_power_w"] = state.desired.hasValue ? state.desired.value : 0;
+    output["last_action"] = Actuation::actionName(state.last.action);
+    output["last_power_w"] = state.last.hasValue ? state.last.value : 0;
+    output["command_id"] = state.commandId; output["confirmed"] = state.confirmed;
+    output["failures"] = state.failures; output["provider_generation"] = _storage.generation();
+    auto cleanup = _storage.cleanupSnapshot();
+    output["cleanup_state"] = Actuation::cleanupStateName(cleanup.state);
+    output["cleanup_pending"] = cleanup.retainedContext;
+    output["command_result"] = Actuation::mailboxStateName(_storage.commandSnapshot().state);
+    output["command_error"] = Actuation::commandErrorName(_storage.commandResult().error);
 }
 
 bool Controller::cancelPendingActuation(ControlTarget target, uint32_t id)

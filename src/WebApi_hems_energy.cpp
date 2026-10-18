@@ -5,6 +5,7 @@
 #include <hems/energy/Service.h>
 #include <hems/optimizer/Service.h>
 #include <hems/profiles/Profile.h>
+#include <hems/Controller.h>
 
 namespace {
 Hems::Energy::Domain domain(AsyncWebServerRequest* request)
@@ -15,7 +16,7 @@ Hems::Energy::Domain domain(AsyncWebServerRequest* request)
 void WebApiHemsClass::initEnergy(AsyncWebServer& server)
 {
     server.on("/api/hems/optimizer", HTTP_GET, [this](AsyncWebServerRequest* r) { onOptimizer(r); });
-    for (auto path : { "/api/hems/optimizer/config", "/api/hems/optimizer/recalculate" }) {
+    for (auto path : { "/api/hems/optimizer/config", "/api/hems/optimizer/recalculate", "/api/hems/optimizer/resume" }) {
         server.on(path, HTTP_POST, [this](AsyncWebServerRequest* r) { onOptimizer(r); });
     }
     for (auto path : { "/api/hems/energy/tariff", "/api/hems/energy/forecast" }) {
@@ -82,10 +83,14 @@ void WebApiHemsClass::onOptimizer(AsyncWebServerRequest* request)
     if (!WebApi.checkCredentials(request)) { return; }
     using Hems::Optimizer::ShadowOptimizer;
     auto* response = new AsyncJsonResponse(); auto output = response->getRoot().to<JsonObject>();
-    if (request->method() == HTTP_GET) { ShadowOptimizer.serialize(output, request->hasParam("all"), request->hasParam("offset") ? std::min(256, std::max(0, static_cast<int>(request->getParam("offset")->value().toInt()))) : 0); }
+    if (request->method() == HTTP_GET) {
+        ShadowOptimizer.serialize(output, request->hasParam("all"), request->hasParam("offset") ? std::min(256, std::max(0, static_cast<int>(request->getParam("offset")->value().toInt()))) : 0);
+        HemsController.serializeEconomic(output["dispatch"].to<JsonObject>());
+    }
     else {
         bool ok = false; int code = 400;
-        if (request->url().endsWith("/recalculate")) { ok = ShadowOptimizer.requestRecalculate(); code = ok ? 202 : 409; }
+        if (request->url().endsWith("/resume")) { ok = ShadowOptimizer.resume(); code = ok ? 200 : 409; }
+        else if (request->url().endsWith("/recalculate")) { ok = ShadowOptimizer.requestRecalculate(); code = ok ? 202 : 409; }
         else if (request->hasParam("data", true) && request->getParam("data", true)->value().length() <= 2048) {
             Hems::Profiles::BoundedAllocator allocator(4096); JsonDocument doc(&allocator);
             Hems::Optimizer::Config config;
@@ -95,7 +100,7 @@ void WebApiHemsClass::onOptimizer(AsyncWebServerRequest* request)
             }
         }
         output["ok"] = ok; output["type"] = ok ? "success" : "warning";
-        output["message"] = ok ? "Shadow calculation configured or queued. No device writes." : "Invalid settings, disabled optimizer, or persistence failure.";
+        output["message"] = ok ? "Economic planning settings saved or calculation queued. Dispatch requires explicit opt-in and all live control gates." : "Invalid settings, disabled optimizer, or persistence failure.";
         response->setCode(code);
     }
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);

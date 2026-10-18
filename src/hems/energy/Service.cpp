@@ -251,6 +251,11 @@ RefreshDecision Service::requestRefresh(Domain domain)
     if (result) { _pending[static_cast<unsigned>(domain)] = true; }
     return result;
 }
+Status Service::status(Domain domain) const
+{
+    std::lock_guard<std::mutex> lock(_mutex);
+    return provider(domain).status(time(nullptr), millis());
+}
 void Service::loop()
 {
     bool needed = _backgroundDue && _backgroundDue(_backgroundContext);
