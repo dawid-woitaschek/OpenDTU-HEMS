@@ -220,7 +220,9 @@ try {
         scenario = 'blocked';
         await page.reload();
         await page.getByText('Waiting for fresh battery SoC.', { exact: true }).waitFor();
-        assert.equal(await page.getByRole('link', { name: 'Review data and battery settings' }).count(), 1);
+        const blockedSettings = page.getByRole('link', { name: 'Economic settings', exact: true });
+        assert.equal(await blockedSettings.count(), 1);
+        assert.equal(await blockedSettings.getAttribute('href'), '/hems/settings');
         // A lost feed request must mark retained values as unverified and suppress summaries.
         scenario = 'normal';
         await page.reload();
