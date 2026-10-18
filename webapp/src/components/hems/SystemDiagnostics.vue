@@ -1,4 +1,5 @@
 <template>
+    <SupportSnapshot />
     <CardElement :text="$t('hemsUi.systemDiagnostics')" textVariant="text-bg-primary" add-space>
         <RouterLink to="/info/system">{{ $t('hemsUi.systemStatus') }}</RouterLink>
         <p v-if="error" class="alert alert-warning mt-2" role="alert">{{ $t('hemsUi.loadFailed') }}</p>
@@ -12,6 +13,7 @@
 import { getCurrentInstance, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CardElement from '@/components/CardElement.vue';
+import SupportSnapshot from '@/components/hems/SupportSnapshot.vue';
 import { authHeader, handleResponse } from '@/utils/authentication';
 const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
 const router = useRouter();
