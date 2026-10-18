@@ -43,14 +43,14 @@ try {
         assert.match(await page.locator('body').innerText(), /Shadow only · dispatch disabled/);
         await page.locator('#optimizer-dispatch-enabled').check();
         await page.locator('form').filter({ has: page.locator('#optimizer-enabled') }).getByRole('button', { name: 'Save', exact: true }).click();
-        await page.getByText('Waiting for Active HEMS mode', { exact: true }).waitFor();
+        await page.getByText('Waiting for Active HEMS mode', { exact: true }).first().waitFor();
         assert.equal(posts.find(p => p.path.endsWith('/optimizer/config')).data.dispatch_enabled, true);
         assert.equal(posts.some(p => p.path === '/api/hems/command'), false, 'Opt-in in Monitor sends no device command');
         fixture.optimizer.dispatch.global_mode = fixture.status.state = 'Active';
         fixture.optimizer.dispatch.state = 'waiting_permission'; fixture.optimizer.dispatch.storage_permission = false;
-        await page.reload(); await page.getByText('Waiting for Storage HEMS Control permission', { exact: true }).waitFor();
+        await page.reload(); await page.getByText('Waiting for Storage HEMS Control permission', { exact: true }).first().waitFor();
         fixture.optimizer.dispatch.storage_permission = true; fixture.optimizer.dispatch.state = 'blocked_protection';
-        await page.reload(); await page.getByText('Blocked by EV Protection', { exact: true }).waitFor();
+        await page.reload(); await page.getByText('Blocked by EV Protection', { exact: true }).first().waitFor();
         fixture.optimizer.dispatch.state = 'charging';
         await page.goto('http://127.0.0.1:5173/hems/devices');
         const manualDetails = page.locator('details').filter({ has: page.getByText('Manual controls', { exact: true }) }).first();
@@ -66,7 +66,7 @@ try {
         await page.goto('http://127.0.0.1:5173/hems');
         await page.getByRole('button', { name: 'Resume economic automation', exact: true }).waitFor();
         await page.reload(); await page.getByRole('button', { name: 'Resume economic automation', exact: true }).click();
-        await page.getByText('Waiting for Active HEMS mode', { exact: true }).waitFor();
+        await page.getByText('Waiting for Active HEMS mode', { exact: true }).first().waitFor();
         assert.equal(posts.filter(p => p.path === '/api/hems/command').length, 1, 'Only the explicitly requested manual command is sent');
         assert.equal(posts.filter(p => p.path.endsWith('/optimizer/resume')).length, 1);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `dispatch UI overflow at ${width}`);
