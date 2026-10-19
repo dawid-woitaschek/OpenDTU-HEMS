@@ -12,8 +12,8 @@ import path from 'path'
 // example 'vite.user.ts': export const proxy_target = '192.168.16.107'
 let proxy_target;
 try {
-    // eslint-disable-next-line
-    proxy_target = require('./vite.user.ts').proxy_target;
+    const userConfig = './vite.user.ts';
+    proxy_target = (await import(userConfig)).proxy_target;
 } catch {
     proxy_target = '192.168.20.110';
 }
@@ -36,7 +36,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '~bootstrap': path.resolve(__dirname, 'node_modules/bootstrap'),
+      '~bootstrap': path.resolve(import.meta.dirname, 'node_modules/bootstrap'),
     }
   },
   build: {

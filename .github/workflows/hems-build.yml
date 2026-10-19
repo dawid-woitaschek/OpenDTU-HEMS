@@ -63,7 +63,7 @@ jobs:
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade platformio setuptools
+          pip install -r pio-scripts/requirements.txt
 
       - name: Enable Corepack
         working-directory: webapp
@@ -72,7 +72,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
           cache: yarn
           cache-dependency-path: webapp/yarn.lock
 
@@ -137,7 +137,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
       - name: Install UI and isolated browser test dependencies
         run: |
           corepack enable
