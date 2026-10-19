@@ -90,12 +90,11 @@
                                 type="text"
                                 maxlength="64"
                                 placeholder="hems-next / hems / pr-19"
-                                :disabled="manifestLoading || remoteUpdating"
+                                :disabled="remoteUpdating"
                                 @keyup.enter="checkRemoteUpdate"
                             />
                             <div class="form-text">
-                                Kanal direkt wechseln, z. B. <code>hems-next</code>, <code>hems</code> oder einen
-                                temporären PR-Kanal wie <code>pr-20</code>.
+                                {{ $t('firmwareupgrade.ChannelHint') }}
                             </div>
                         </div>
                         <div class="col-lg-4 d-grid">
@@ -248,6 +247,7 @@ import {
     exactImageInstalled,
     installedSourceCommit,
     validManifest,
+    type FirmwareLookupState,
     type FirmwareBuild,
     type FirmwareManifest,
 } from '@/utils/firmwareProvenance';
@@ -275,20 +275,33 @@ export default defineComponent({
             selectedChannel: '',
             updateManifest: null as FirmwareManifest | null,
             remoteBuild: null as FirmwareBuild | null,
-            manifestLoading: false,
+            lookupState: 'idle' as FirmwareLookupState,
+            lookupGeneration: 0,
             manifestError: '',
             remoteUpdating: false,
             remoteStatus: '',
         };
     },
+    watch: {
+        selectedChannel: {
+            handler() {
+                this.invalidateLookup();
+            },
+            flush: 'sync',
+        },
+    },
     computed: {
+        manifestLoading(): boolean {
+            return this.lookupState === 'loading';
+        },
         sourceCommit(): string {
             return installedSourceCommit(this.firmwareStatus, this.updateManifest ?? undefined) ?? '';
         },
         upToDate(): boolean {
             return (
+                this.lookupState === 'found/current' &&
                 !!this.updateManifest &&
-                this.selectedChannel === this.updateManifest.channel &&
+                this.selectedChannel.trim() === this.updateManifest.channel &&
                 exactImageInstalled(this.firmwareStatus, this.updateManifest)
             );
         },
@@ -426,16 +439,13 @@ export default defineComponent({
         validChannelId(value: string): boolean {
             return value.length > 0 && value.length <= 64 && CHANNEL_ID_PATTERN.test(value);
         },
-        manifestUrl(): string {
-            const branch = `firmware-channel-${this.selectedChannel}`;
+        manifestUrl(channel: string): string {
+            const branch = `firmware-channel-${channel}`;
             return `https://raw.githubusercontent.com/${this.firmwareStatus.update_repository}/${branch}/manifest.json`;
         },
-        firmwareUrl(filename: string): string {
-            const branch = `firmware-channel-${this.selectedChannel}`;
+        firmwareUrl(filename: string, channel: string): string {
+            const branch = `firmware-channel-${channel}`;
             return `https://raw.githubusercontent.com/${this.firmwareStatus.update_repository}/${branch}/${filename}`;
-        },
-        validManifest(value: unknown): value is FirmwareManifest {
-            return validManifest(value, this.firmwareStatus.update_repository, this.selectedChannel);
         },
         validBuild(value: FirmwareBuild | undefined): value is FirmwareBuild {
             if (!value) return false;
@@ -449,67 +459,95 @@ export default defineComponent({
                 !this.isFactoryFirmwareFile(value.file)
             );
         },
-        async checkRemoteUpdate() {
+        invalidateLookup() {
+            ++this.lookupGeneration;
             this.updateManifest = null;
             this.remoteBuild = null;
             this.manifestError = '';
-            if (!this.selectedChannel) return;
-            if (!this.validChannelId(this.selectedChannel)) {
-                this.manifestError = this.$t('firmwareupgrade.ManifestInvalid') as string;
+            this.lookupState = 'idle';
+        },
+        async checkRemoteUpdate() {
+            this.invalidateLookup();
+            const channel = this.selectedChannel.trim();
+            const generation = this.lookupGeneration;
+            const repository = this.firmwareStatus.update_repository;
+            const current = () => generation === this.lookupGeneration && channel === this.selectedChannel.trim();
+            if (!channel) return;
+            if (!this.validChannelId(channel)) {
+                this.lookupState = 'invalid';
+                this.manifestError = this.$t('firmwareupgrade.ChannelInvalid') as string;
                 return;
             }
-
-            this.manifestLoading = true;
+            this.lookupState = 'loading';
             try {
-                const response = await fetch(this.manifestUrl(), { cache: 'no-store' });
-                if (!response.ok) {
-                    if (response.status === 404)
-                        throw new Error(this.$t('firmwareupgrade.ChannelNotPublished') as string);
-                    throw new Error(this.$t('firmwareupgrade.UpdateCheckFailed') as string);
+                const response = await fetch(this.manifestUrl(channel), { cache: 'no-store' });
+                if (!current()) return;
+                if (response.status === 404) {
+                    this.lookupState = 'not_found';
+                    this.manifestError = this.$t('firmwareupgrade.ChannelNotPublished') as string;
+                    return;
                 }
-                const manifest = (await response.json()) as unknown;
-                if (!this.validManifest(manifest)) {
-                    throw new Error(this.$t('firmwareupgrade.ManifestInvalid') as string);
+                if (!response.ok) throw new Error(this.$t('firmwareupgrade.UpdateCheckFailed') as string);
+                const manifest: unknown = await response.json();
+                if (!current()) return;
+                if (!validManifest(manifest, repository, channel)) {
+                    this.lookupState = 'invalid';
+                    this.manifestError = this.$t('firmwareupgrade.ManifestInvalid') as string;
+                    return;
                 }
                 const build = manifest.builds[this.firmwareStatus.pioenv];
                 if (!this.validBuild(build)) {
-                    throw new Error(this.$t('firmwareupgrade.BuildTargetMissing') as string);
+                    this.lookupState = 'invalid';
+                    this.manifestError = this.$t('firmwareupgrade.BuildTargetMissing') as string;
+                    return;
                 }
                 this.updateManifest = manifest;
                 this.remoteBuild = build;
+                // Hash inequality and publication dates do not prove source ancestry.
+                this.lookupState = exactImageInstalled(this.firmwareStatus, manifest)
+                    ? 'found/current'
+                    : 'found/different';
             } catch (error) {
+                if (!current()) return;
+                this.lookupState = 'error';
                 this.manifestError =
                     error instanceof Error ? error.message : (this.$t('firmwareupgrade.UpdateCheckFailed') as string);
-            } finally {
-                this.manifestLoading = false;
             }
         },
         async installRemote() {
-            if (!this.remoteBuild) return;
+            if (
+                this.lookupState !== 'found/different' ||
+                !this.remoteBuild ||
+                !this.updateManifest ||
+                this.updateManifest.channel !== this.selectedChannel.trim()
+            )
+                return;
+            const build = this.remoteBuild;
+            const channel = this.updateManifest.channel;
 
             this.OTAError = '';
             this.OTASuccess = false;
             this.remoteUpdating = true;
             try {
                 this.remoteStatus = this.$t('firmwareupgrade.DownloadingFirmware') as string;
-                const response = await fetch(this.firmwareUrl(this.remoteBuild.file), { cache: 'no-store' });
+                const response = await fetch(this.firmwareUrl(build.file, channel), { cache: 'no-store' });
                 if (!response.ok) throw new Error(this.$t('firmwareupgrade.RemoteDownloadFailed') as string);
                 const blob = await response.blob();
-                if (blob.size !== this.remoteBuild.size) {
+                if (blob.size !== build.size) {
                     throw new Error(this.$t('firmwareupgrade.IntegrityCheckFailed') as string);
                 }
 
                 this.remoteStatus = this.$t('firmwareupgrade.VerifyingFirmware') as string;
                 const md5 = await this.fileMD5(blob);
-                if (md5.toLowerCase() !== this.remoteBuild.md5.toLowerCase()) {
+                if (md5.toLowerCase() !== build.md5.toLowerCase()) {
                     throw new Error(this.$t('firmwareupgrade.IntegrityCheckFailed') as string);
                 }
                 const sha256 = await this.fileSHA256(blob);
-                if (sha256 !== null && sha256.toLowerCase() !== this.remoteBuild.sha256.toLowerCase()) {
+                if (sha256 !== null && sha256.toLowerCase() !== build.sha256.toLowerCase()) {
                     throw new Error(this.$t('firmwareupgrade.IntegrityCheckFailed') as string);
                 }
 
-                const file = new File([blob], this.remoteBuild.file, { type: 'application/octet-stream' });
+                const file = new File([blob], build.file, { type: 'application/octet-stream' });
                 this.remoteUpdating = false;
                 this.remoteStatus = '';
                 this.uploadFirmware(file, md5);
@@ -536,6 +574,9 @@ export default defineComponent({
                     this.OTAError = this.$t('firmwareupgrade.UpdateCheckFailed') as string;
                 });
         },
+    },
+    beforeUnmount() {
+        this.invalidateLookup();
     },
     mounted() {
         if (!isLoggedIn()) {

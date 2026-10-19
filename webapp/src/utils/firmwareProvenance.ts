@@ -1,3 +1,14 @@
+export type FirmwareLookupState =
+    | 'idle'
+    | 'loading'
+    | 'found/current'
+    | 'found/different'
+    | 'found/newer'
+    | 'found/older'
+    | 'not_found'
+    | 'invalid'
+    | 'error';
+
 export interface FirmwareBuild {
     file: string;
     size: number;

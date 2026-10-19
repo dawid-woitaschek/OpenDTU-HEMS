@@ -10,6 +10,8 @@ export const firmwareSupplementMessages = {
             TestedMergeCommit: 'Tested merge commit',
             BuildCommit: 'Image/build commit',
             BuildTarget: 'Build target',
+            ChannelHint: 'Use hems-next, hems, or a temporary pull request channel such as pr-25.',
+            ChannelInvalid: 'Enter a valid update channel using letters, digits, dots, underscores or hyphens.',
             UpdateChannel: 'Update channel',
             Published: 'Published',
             NoUpdateChannel:
@@ -19,7 +21,7 @@ export const firmwareSupplementMessages = {
             ManifestInvalid: 'The published firmware manifest is invalid.',
             BuildTargetMissing: 'The update channel does not contain a firmware image for this build target.',
             FirmwareCurrent: 'The installed firmware is already the current image in this update channel.',
-            FirmwareAvailable: 'A newer or different firmware image is available for this update channel.',
+            FirmwareAvailable: 'A different firmware image is available for this update channel.',
             InstallLatest: 'Download and install firmware',
             DownloadingFirmware: 'Downloading firmware from the repository…',
             VerifyingFirmware: 'Verifying firmware image…',
@@ -42,6 +44,9 @@ export const firmwareSupplementMessages = {
             TestedMergeCommit: 'Getesteter Merge-Commit',
             BuildCommit: 'Image-/Build-Commit',
             BuildTarget: 'Build-Target',
+            ChannelHint: 'Verwende hems-next, hems oder einen temporären Pull-Request-Kanal wie pr-25.',
+            ChannelInvalid:
+                'Gib einen gültigen Update-Kanal aus Buchstaben, Ziffern, Punkten, Unterstrichen oder Bindestrichen ein.',
             UpdateChannel: 'Update-Kanal',
             Published: 'Veröffentlicht',
             NoUpdateChannel:
@@ -51,7 +56,7 @@ export const firmwareSupplementMessages = {
             ManifestInvalid: 'Das veröffentlichte Firmware-Manifest ist ungültig.',
             BuildTargetMissing: 'Der Update-Kanal enthält kein Firmware-Image für dieses Build-Target.',
             FirmwareCurrent: 'Die installierte Firmware entspricht bereits dem aktuellen Image dieses Update-Kanals.',
-            FirmwareAvailable: 'Für diesen Update-Kanal ist ein neueres oder anderes Firmware-Image verfügbar.',
+            FirmwareAvailable: 'Für diesen Update-Kanal ist ein anderes Firmware-Image verfügbar.',
             InstallLatest: 'Firmware herunterladen und installieren',
             DownloadingFirmware: 'Firmware wird aus dem Repository geladen…',
             VerifyingFirmware: 'Firmware-Image wird geprüft…',
@@ -73,6 +78,9 @@ export const firmwareSupplementMessages = {
             TestedMergeCommit: 'Commit de fusion testé',
             BuildCommit: 'Commit de l’image / du build',
             BuildTarget: 'Cible de build',
+            ChannelHint: 'Utilisez hems-next, hems ou un canal temporaire de pull request comme pr-25.',
+            ChannelInvalid:
+                'Saisissez un canal valide composé de lettres, chiffres, points, tirets bas ou traits d’union.',
             UpdateChannel: 'Canal de mise à jour',
             Published: 'Publié',
             NoUpdateChannel:
@@ -82,7 +90,7 @@ export const firmwareSupplementMessages = {
             ManifestInvalid: 'Le manifeste de firmware publié est invalide.',
             BuildTargetMissing: 'Le canal ne contient pas d’image firmware pour cette cible de build.',
             FirmwareCurrent: 'Le firmware installé correspond déjà à l’image actuelle de ce canal.',
-            FirmwareAvailable: 'Une image firmware plus récente ou différente est disponible pour ce canal.',
+            FirmwareAvailable: 'Une image firmware différente est disponible pour ce canal.',
             InstallLatest: 'Télécharger et installer le firmware',
             DownloadingFirmware: 'Téléchargement du firmware depuis le dépôt…',
             VerifyingFirmware: 'Vérification de l’image firmware…',
