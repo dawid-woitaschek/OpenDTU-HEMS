@@ -104,7 +104,13 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     if (http->getSize() > static_cast<int>(MaxPayload)) { error = "provider_payload_too_large"; http->end(); return false; }
     // Filter out unrelated fields before allocation. Neither cap reserves a payload buffer.
     JsonDocument filter;
-    if (source == Source::EnergyCharts) { filter["unix_seconds"] = true; filter["price"] = true; filter["unit"] = true; }
+    if (source == Source::EnergyCharts) {
+        filter["schema_version"] = true; filter["endpoint"] = true; filter["bidding_zone"] = true;
+        filter["timezone"] = true; filter["interval_minutes"] = true; filter["unit"] = true;
+        filter["generated_at"] = true; filter["deprecated"] = true;
+        auto series = filter["series"].add<JsonObject>(); series["id"] = true; series["unit"] = true;
+        auto data = filter["data"].add<JsonObject>(); data["timestamp"] = true; data["values"] = true;
+    }
     else {
         filter["result"]["watt_hours_period"] = true; filter["message"]["code"] = true;
         filter["message"]["type"] = true; filter["message"]["info"]["time_utc"] = true;
