@@ -36,9 +36,10 @@ adapter are added in this pass.
 
 The public [Energy-Charts API and OpenAPI contract](https://api.energy-charts.info/)
 were inspected on 2026-10-17, including its current `/price?bzn=DE-LU` response:
-`unix_seconds`, nullable `price`, `unit`, and `license_info`. The v1 endpoint remains
-supported by the current v2 documentation and supplies UTC interval starts, avoiding
-local-time ambiguity. Germany/Luxembourg is the deliberate bounded region in V1.
+`unix_seconds`, nullable `price`, `unit`, and `license_info`. This describes the implemented legacy adapter, not approval to retain v1. The
+current-contract migration remains mandatory; see [Modernization audit](Modernization_Audit.md)
+for upstream-access blockers and outstanding contract verification. This adapter supplies
+UTC interval starts, avoiding local-time ambiguity. Germany/Luxembourg is the deliberate bounded region in V1.
 The provider queries the complete German local today and tomorrow, using CET/CEST
 calendar boundaries (23/25-hour days). It handles hourly and quarter-hour series,
 negative values, unpublished/null prices and gaps. An interval's duration is the
@@ -91,7 +92,7 @@ The firmware must fail closed when its clock or trust anchors are unsuitable.
 
 HTTP connect/body timeouts are 5 seconds, TLS handshake timeout 10 seconds, and
 body parsing has a 15-second deadline. HTTP 429/503 honors numeric Retry-After
-with a conservative floor; date-form Retry-After falls back to that floor.
+with a conservative floor; date-form Retry-After is converted against synchronized UTC and preserves longer holds.
 Responses are limited to 40,000 bytes and JSON allocation to 49,152 bytes. Filtering
 removes unrelated provider fields before allocation. Truncated Content-Length,
 trailing non-JSON data, unsupported origins, redirects, malformed/oversized JSON,
@@ -267,3 +268,15 @@ providers, refine V1 modeling/precision as required, define dispatch/replanning
 and manual override semantics, and use the existing permission-gated
 provider → mailbox/worker → planner → executor path. This pass implements none of
 those economic writes.
+
+## Per-plane refresh diagnostics
+
+Each `plane_status` now includes its configured `index`, `name`, `enabled`, current
+refresh `state`, `attempted_at`, last successful `fetched_at`, HTTP status, stable
+error code and bounded DNS/TLS/memory diagnostics. A refresh clears previous-cycle
+transport errors for unattempted planes while retaining last-success times. An
+early failure/hold leaves later planes `not_attempted`; it does not pretend that
+they succeeded or repeat their old failure as a new result. Aggregate failures are
+attached to the plane being combined. The overview names failing planes directly.
+A required-plane failure still rejects the entire new aggregate and retains only
+the previously accepted aggregate with its visible error/freshness state.

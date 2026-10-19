@@ -10,20 +10,20 @@ OpenDTU-OnBattery is an ESP32-based firmware project that provides solar inverte
 Install dependencies in this exact order:
 
 ```bash
-# Install Node.js 24 (REQUIRED - do not use older versions)
-curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+# Install Node.js 26 (REQUIRED - do not use older versions)
+curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
 sudo apt-get install nodejs -y
 
-# Verify Node.js 24 installation
+# Verify Node.js 26 installation
 export PATH=/usr/bin:$PATH
-node --version  # Should show v24.x.x
+node --version  # Should show v26.x.x
 
 # Enable corepack for yarn
 sudo corepack enable
 
 # Install Python dependencies
 python3 -m pip install --upgrade pip
-pip install --upgrade platformio setuptools
+pip install -r pio-scripts/requirements.txt
 
 # Install C++ linting
 pip install cpplint
@@ -56,7 +56,7 @@ pio run -e generic_esp32s3_usb   # NEVER CANCEL - requires 60+ minute timeout
 
 ### Network Requirements and Limitations
 **CRITICAL**: Firmware builds require internet access for:
-- ESP32 platform downloads (espressif32@6.10.0)
+- ESP32 platform downloads (espressif32@6.13.0)
 - Library dependencies
 - Build tools
 
@@ -153,15 +153,21 @@ The project uses these automated workflows:
 - **yarnlint.yml**: JavaScript/TypeScript linting
 - **yarnprettier.yml**: Code formatting validation
 
-### No Unit Tests
-**Important**: This project currently has no unit tests. The `test/` directory exists but is empty except for documentation.
+### Automated Tests
+
+Native regression tests cover HEMS providers, profiles, control safety and firmware
+contracts. Run `make -C test test ARDUINOJSON=../work/ArduinoJson/src` after obtaining
+the pinned ArduinoJson dependency as in `.github/workflows/test.yml`.
+`yarn --cwd webapp test` runs frontend unit tests. Rendered browser regressions are
+listed in `test/README.md`; they use deterministic API fixtures and never contact
+physical devices.
 
 ## Common Issues and Troubleshooting
 
 ### Build Failures
 1. **"HTTPClientError" during pio run**: Ensure unrestricted internet access is available for ESP32 platform downloads. Network firewalls or restrictions will cause firmware builds to fail. Contact repository administrators to configure network access if builds fail with network errors.
 2. **"yarn: command not found"**: Run `sudo corepack enable`
-3. **"Node version too old"**: Ensure Node.js 24 is installed and in PATH
+3. **"Node version too old"**: Ensure Node.js 26 is installed and in PATH
 4. **"webapp_dist not found"**: Run `yarn build` in webapp directory first
 
 ### Development Workflow

@@ -19,6 +19,7 @@ try {
         await page.addInitScript(() => { localStorage.setItem('locale', 'en'); });
         const fixture = createHemsFixture();
         let scenario = 'normal';
+        await page.route('https://raw.githubusercontent.com/**/device-profile-catalog/catalog.json', route => route.fulfill({ status: 404, body: '' }));
         await page.route('**/api/**', async route => {
             const url = new URL(route.request().url()), path = url.pathname;
             requests.push({ path, method: route.request().method() });
@@ -61,6 +62,11 @@ try {
             if (scenario === 'rateLimit' && path.includes('/energy/forecast')) {
                 body.last_error = 'provider_rate_limited';
                 body.manual_refresh = { allowed: false, reason: 'rate_limited', retry_after_seconds: 600 };
+            }
+            if (scenario === 'planeFailure' && path.includes('/energy/forecast')) {
+                body.last_error = 'provider_connect_failed';
+                body.plane_status = [{ index: 0, name: 'West', fetched_at: fixtureNow, last_error: null },
+                    { index: 1, name: 'East', fetched_at: fixtureNow - 7200, last_error: 'provider_connect_failed', http_status: -1 }];
             }
             if (scenario === 'stale' && path.includes('/energy/forecast')) { body.fresh = false; body.state = 'stale'; body.planning_usable = false; }
             if (scenario === 'gap' && path.includes('/energy/tariff')) {
@@ -187,6 +193,12 @@ try {
         await page.getByText('Provider rate limit reached.', { exact: false }).waitFor();
         assert.match(await page.locator('body').innerText(), /Existing data is retained/);
         assert.match(await page.locator('body').innerText(), /Retry in 600 seconds/);
+        scenario = 'planeFailure';
+        await page.reload();
+        const failedPlane = page.locator('.hems-energy.card').nth(1).locator('li').filter({ hasText: 'East:' });
+        await failedPlane.waitFor();
+        assert.match(await failedPlane.innerText(), /provider_connect_failed/);
+        assert.equal(await page.locator('.hems-energy.card').nth(1).locator('li').filter({ hasText: 'West:' }).count(), 0);
         scenario = 'stale';
         await page.reload();
         await page.getByText('Data is outdated', { exact: false }).first().waitFor();

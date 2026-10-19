@@ -74,7 +74,7 @@ int main()
     testNow += 3600000; httpAvailable = true; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !status.error);
     settings = {}; settings.enabled = true; settings.source = Source::ForecastSolar; settings.planeCount = 2;
-    for (size_t i = 0; i < 2; ++i) { settings.planes[i].enabled = true; strcpy(settings.planes[i].name, "configured plane"); settings.planes[i].peakW = 1000; }
+    for (size_t i = 0; i < 2; ++i) { settings.planes[i].enabled = true; strcpy(settings.planes[i].name, i ? "East" : "West"); settings.planes[i].peakW = 1000; }
     assert(service.configure(Domain::Forecast, settings));
     doc.clear(); doc["message"]["code"] = 0; doc["message"]["type"] = "success";
     time_t now = time(nullptr); struct tm utc {}; gmtime_r(&now, &utc); char key[32]; strftime(key, sizeof(key), "%Y-%m-%dT%H:%M:%S+00:00", &utc);
@@ -85,12 +85,13 @@ int main()
     for (unsigned count : {1U, 2U, 6U}) {
         settings.planeCount = count;
         for (auto& plane : settings.planes) { plane.enabled = true; strcpy(plane.name, "PV"); plane.peakW = 1000; }
-        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; testNow += 15000;
+        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; delays.clear(); testNow += 15000;
         scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
         assert(data.count == 4 && data.intervals[0].value == int(count * 1000) && status.planningUsable);
         assert(solarRequests == count && tasks.size() == 1);
+        assert(delays.size() == count - 1); for (auto delay : delays) { assert(delay >= 5000); }
     }
-    settings.planeCount = 2; assert(service.configure(Domain::Forecast, settings));
+    settings.planeCount = 2; strcpy(settings.planes[0].name, "West"); strcpy(settings.planes[1].name, "East"); assert(service.configure(Domain::Forecast, settings));
     solarRequests = 0; testNow += 15000; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(data.intervals[0].value == 2000);
     auto accepted = data; auto fetchedAt = status.fetchedAt;
@@ -101,6 +102,8 @@ int main()
     for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
     api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
     assert(api["plane_status"][0]["http_status"] == 200 && api["plane_status"][1]["http_status"] == -1);
+    assert(api["plane_status"][1]["name"] == "East");
+    assert(api["plane_status"][1]["state"] == "failed" && api["plane_status"][1]["attempted_at"].as<uint32_t>() > 0);
     failSolarRequest = 0;
     // A server hold on HTTP 200 also stops the remaining planes and retains the
     // complete previously accepted site. It cannot be bypassed manually.
@@ -111,6 +114,9 @@ int main()
     for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
     auto held = service.requestRefresh(Domain::Forecast);
     assert(!held && !strcmp(held.reason, "provider_backoff") && held.retryAfterSeconds == 900);
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    assert(api["plane_status"][1]["state"] == "not_attempted");
+    assert(api["plane_status"][1]["last_error"].isNull() && api["plane_status"][1]["http_status"] == 0);
     nativeRetrySeconds = 0;
     testNow += 7200000; solarRequests = 0; solarRemaining = 0;
     testNow += 15000; scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);

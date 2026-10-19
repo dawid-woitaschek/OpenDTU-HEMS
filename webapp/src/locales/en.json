@@ -64,8 +64,6 @@
         }
     },
     "menu": {
-        "HemsSettings": "HEMS Settings",
-        "HemsInfo": "HEMS Information",
         "LiveView": "Live View",
         "Settings": "Settings",
         "NetworkSettings": "Network",
@@ -1711,7 +1709,6 @@
             "insufficient_memory": "Insufficient memory for calculation.",
             "too_many_soc_states": "Increase the SoC planning step."
         },
-        "deviceProfiles": "Advanced · device profiles",
         "modeSummaryDisabled": "HEMS control is disabled.",
         "modeSummaryMonitor": "Automatic writes are off. Manual controls require HEMS Control permission.",
         "modeSummaryActive": "Automatic policies may write only to categories with HEMS Control permission.",

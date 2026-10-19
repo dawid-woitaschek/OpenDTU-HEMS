@@ -18,6 +18,33 @@
                         t('hemsUi.retainedData')
                     }}</span>
                 </div>
+                <ul
+                    v-if="kind === 'forecast' && feeds[kind]!.plane_status?.some((p) => p.last_error)"
+                    class="alert alert-warning list-unstyled"
+                    role="alert"
+                >
+                    <template v-for="(plane, index) in feeds[kind]!.plane_status" :key="plane.index ?? index">
+                        <li v-if="plane.last_error">
+                            <strong
+                                >{{
+                                    plane.name ||
+                                    feeds[kind]!.config.planes[index]?.name ||
+                                    t('hemsUi.planeNumber', { number: index + 1 })
+                                }}:</strong
+                            >
+                            {{ t('hemsUi.' + providerMessage(plane.last_error)) }}
+                            <span v-if="plane.http_status && plane.http_status > 0">
+                                (HTTP {{ plane.http_status }})</span
+                            >
+                            <code class="d-block small"
+                                >{{ plane.last_error
+                                }}<template v-if="plane.request?.tls_error">
+                                    · TLS {{ plane.request.tls_error }} {{ plane.request.tls_error_text }}</template
+                                ></code
+                            >
+                        </li>
+                    </template>
+                </ul>
                 <template v-if="props.view === 'overview'">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3" role="status">
                         <span
@@ -353,7 +380,7 @@
                         />
                         <a
                             class="d-block mt-2"
-                            href="https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/feature/hems-real-control/docs/HEMS_Energy_Data.md"
+                            href="https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/integration/hems-next/docs/HEMS_Energy_Data.md"
                             target="_blank"
                             rel="noopener"
                             >{{ t('hemsUi.bridgeDocs') }}</a
@@ -385,13 +412,13 @@
             </form>
             <template v-if="props.view === 'diagnostics'">
                 <dl class="row small">
-                    <dt class="col-sm-4">state / last_error</dt>
+                    <dt class="col-sm-4">{{ t('hemsUi.stateAndError') }}</dt>
                     <dd class="col-sm-8 text-break">{{ feeds[kind]!.state }} / {{ feeds[kind]!.last_error || '—' }}</dd>
-                    <dt class="col-sm-4">generated_at / fetched_at</dt>
+                    <dt class="col-sm-4">{{ t('hemsUi.generationAndFetch') }}</dt>
                     <dd class="col-sm-8">
                         {{ date(feeds[kind]!.generated_at) }} / {{ date(feeds[kind]!.fetched_at) }}
                     </dd>
-                    <dt class="col-sm-4">source_age / transport_age (s)</dt>
+                    <dt class="col-sm-4">{{ t('hemsUi.sourceAndTransportAge') }}</dt>
                     <dd class="col-sm-8">
                         {{ feeds[kind]!.source_age_seconds ?? '—' }} / {{ feeds[kind]!.transport_age_seconds }}
                     </dd>
@@ -399,7 +426,7 @@
                     <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
                     <dt class="col-sm-4">{{ t('hemsUi.transportFreshness') }}</dt>
                     <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
-                    <dt class="col-sm-4">next_refresh</dt>
+                    <dt class="col-sm-4">{{ t('hemsUi.nextRefresh') }}</dt>
                     <dd class="col-sm-8">{{ date(feeds[kind]!.next_refresh) }}</dd>
                 </dl>
                 <details>

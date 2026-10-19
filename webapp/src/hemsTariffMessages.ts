@@ -3,6 +3,13 @@
 export const hemsTariffMessages = {
     en: {
         hemsUi: {
+            devicesManualControls: 'Device setup and manual controls',
+            stateAndError: 'State / last error',
+            generationAndFetch: 'Source generation / fetch time',
+            sourceAndTransportAge: 'Source age / fetch age (s)',
+            nextRefresh: 'Next refresh',
+            planeNotAttempted:
+                'Not requested in this refresh; an earlier plane may have failed or exhausted the quota.',
             cheap: 'Low',
             normal: 'Normal',
             expensive: 'High',
@@ -15,6 +22,13 @@ export const hemsTariffMessages = {
     },
     de: {
         hemsUi: {
+            devicesManualControls: 'Geräteeinrichtung und manuelle Steuerung',
+            stateAndError: 'Status / letzter Fehler',
+            generationAndFetch: 'Quellerzeugung / Abrufzeit',
+            sourceAndTransportAge: 'Quellalter / Abrufalter (s)',
+            nextRefresh: 'Nächste Aktualisierung',
+            planeNotAttempted:
+                'In dieser Aktualisierung nicht angefragt; eine vorherige Fläche kann fehlgeschlagen sein oder das Kontingent ausgeschöpft haben.',
             cheap: 'Niedrig',
             normal: 'Normal',
             expensive: 'Hoch',
@@ -27,6 +41,13 @@ export const hemsTariffMessages = {
     },
     fr: {
         hemsUi: {
+            devicesManualControls: 'Configuration des appareils et commandes manuelles',
+            stateAndError: 'État / dernière erreur',
+            generationAndFetch: 'Génération source / récupération',
+            sourceAndTransportAge: 'Âge de la source / récupération (s)',
+            nextRefresh: 'Prochaine actualisation',
+            planeNotAttempted:
+                'Non demandé pendant cette actualisation ; un plan précédent a pu échouer ou épuiser le quota.',
             cheap: 'Bas',
             normal: 'Normal',
             expensive: 'Élevé',

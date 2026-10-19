@@ -41,24 +41,9 @@
                             HEMS
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="navbarHemsDropdown">
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/hems">{{
-                                    $t('menu.HemsInfo')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/hems/settings">{{
-                                    $t('menu.HemsSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/hems/devices"
-                                    >{{ $t('menu.DeviceManager') }} / {{ $t('profiles.Title') }}</router-link
-                                >
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/hems/diagnostics">{{
-                                    $t('hemsUi.diagnostics')
+                            <li v-for="item in hemsNavigation" :key="item.path">
+                                <router-link @click="onClick" class="dropdown-item" :to="item.path">{{
+                                    $t('hemsUi.' + item.label)
                                 }}</router-link>
                             </li>
                         </ul>
@@ -223,6 +208,7 @@
 import { isLoggedIn, logout } from '@/utils/authentication';
 import { BIconEgg, BIconSun, BIconTree, BIconBatteryCharging } from 'bootstrap-icons-vue';
 import { defineComponent } from 'vue';
+import { hemsNavigation } from '@/utils/hemsNavigation';
 import LocaleSwitcher from './LocaleSwitcher.vue';
 import ThemeSwitcher from './ThemeSwitcher.vue';
 
@@ -237,6 +223,7 @@ export default defineComponent({
     },
     data() {
         return {
+            hemsNavigation,
             isLogged: isLoggedIn(),
             now: {} as Date,
         };

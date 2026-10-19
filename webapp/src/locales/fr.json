@@ -64,8 +64,6 @@
         }
     },
     "menu": {
-        "HemsSettings": "Paramètres HEMS",
-        "HemsInfo": "Informations HEMS",
         "LiveView": "Direct",
         "Settings": "Paramètres",
         "NetworkSettings": "Réseau",
@@ -1312,7 +1310,6 @@
             "insufficient_memory": "Mémoire insuffisante pour le calcul.",
             "too_many_soc_states": "Augmenter le pas de planification SoC."
         },
-        "deviceProfiles": "Avancé · profils des appareils",
         "modeSummaryDisabled": "La commande HEMS est désactivée.",
         "modeSummaryMonitor": "Les écritures automatiques sont désactivées. Les commandes manuelles exigent l’autorisation Commande HEMS.",
         "modeSummaryActive": "Les politiques automatiques peuvent écrire uniquement dans les catégories autorisées pour Commande HEMS.",

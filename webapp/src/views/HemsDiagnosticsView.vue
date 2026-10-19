@@ -414,7 +414,7 @@
                 <p>Capability: {{ controlText(target.profile_info.control_reason) }}</p>
                 <p v-for="reason in target.blockers" :key="reason">{{ controlText(reason) }}</p>
             </div>
-            <RouterLink to="/hems/settings">HEMS settings and manual semantic controls</RouterLink>
+            <RouterLink to="/hems/devices">{{ $t('hemsUi.devicesManualControls') }}</RouterLink>
         </CardElement>
     </BasePage>
 </template>

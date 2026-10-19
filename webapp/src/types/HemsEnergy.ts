@@ -1,3 +1,14 @@
+export interface PlaneStatus {
+    index?: number;
+    name?: string;
+    enabled?: boolean;
+    state?: string;
+    attempted_at?: number;
+    fetched_at: number;
+    last_error: string | null;
+    http_status?: number;
+    request?: { dns?: number; tls_error?: number; tls_error_text?: string; http_error?: string };
+}
 export type EnergyKind = 'tariff' | 'forecast';
 export type EnergyView = 'overview' | 'settings' | 'diagnostics';
 export interface PvPlane {
@@ -49,7 +60,7 @@ export interface EnergyFeed {
     transport_age_seconds: number;
     rate_remaining: number;
     attribution?: string;
-    plane_status?: { fetched_at: number; last_error: string | null }[];
+    plane_status?: PlaneStatus[];
     provider: string;
     source: string;
     state: string;

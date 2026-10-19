@@ -190,7 +190,13 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
     if (source.settings().source == Source::ForecastSolar) {
         auto planes = output["plane_status"].to<JsonArray>();
         for (size_t i = 0; i < source.settings().planeCount; ++i) {
-            auto p = planes.add<JsonObject>(); p["index"] = i; p["fetched_at"] = _planes[i].fetchedAt;
+            auto p = planes.add<JsonObject>(); p["index"] = i;
+            p["name"] = static_cast<char const*>(source.settings().planes[i].name);
+            p["enabled"] = source.settings().planes[i].enabled;
+            p["attempted_at"] = _planes[i].attemptedAt;
+            p["state"] = !source.settings().planes[i].enabled ? "disabled" : !_planes[i].attemptedAt ? "not_attempted"
+                : _planes[i].error ? "failed" : _planes[i].info.httpStatus == 200 ? "success" : "loading";
+            p["fetched_at"] = _planes[i].fetchedAt;
             p["http_status"] = _planes[i].info.httpStatus; p["last_error"] = _planes[i].error; p["rate_remaining"] = _planes[i].info.rateRemaining;
             nativeJson(_planes[i].info, p["request"].to<JsonObject>());
         }
@@ -306,6 +312,11 @@ __attribute__((noinline)) void Service::runPending(Domain domain)
         _pending[i] = false; generation = _generation[i];
         settings = provider(domain).settings(); _running[i] = true;
         _native[i] = {}; _stage[i] = "local_prerequisite";
+        if (domain == Domain::Forecast) {
+            // A new cycle must not present an unattempted plane's old error or
+            // transport result as the result of this refresh. Keep last success.
+            for (auto& plane : _planes) { plane.attemptedAt = 0; plane.error = nullptr; plane.info = {}; }
+        }
     }
     Diagnostics::Scope activity(Diagnostics::Component::Energy, domain == Domain::Tariff ? Diagnostics::Operation::Tariff : Diagnostics::Operation::Forecast);
     fetch(domain, settings, generation);
@@ -330,6 +341,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             {
                 std::lock_guard<std::mutex> lock(_mutex);
                 if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
+                if (settings.source == Source::ForecastSolar) { _planes[i].attemptedAt = utcNow(); }
             }
             response = false;
             Diagnostics::workerPhase(Diagnostics::Phase::ProviderStart, settings.source == Source::ForecastSolar ? i : -1);
@@ -338,7 +350,13 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             // plane scratch only when there is already an aggregate to preserve.
             if (merge && !single) {
                 single.reset(new (std::nothrow) Series());
-                if (!single) { error = "insufficient_memory"; parsed = false; break; }
+                if (!single) {
+                    error = "insufficient_memory";
+                    std::lock_guard<std::mutex> lock(_mutex);
+                    if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
+                    _planes[i].error = error;
+                    parsed = false; break;
+                }
             }
             info = {};
             bool ok = nativeRequest(settings, i, merge ? *single : *series, info, error);
@@ -364,7 +382,12 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             if (!ok) { parsed = false; break; }
             if (merge) {
                 Diagnostics::workerPhase(Diagnostics::Phase::Aggregate, i);
-                if (!aggregate(*series, *single, *series, error)) { parsed = false; break; }
+                if (!aggregate(*series, *single, *series, error)) {
+                    std::lock_guard<std::mutex> lock(_mutex);
+                    if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
+                    _planes[i].error = error;
+                    parsed = false; break;
+                }
             }
             if (settings.source == Source::ForecastSolar && i + 1 < requests) {
                 bool more = false;

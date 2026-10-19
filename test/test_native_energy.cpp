@@ -42,6 +42,10 @@ int main()
     assert(!memcmp(&saved, &output, sizeof(output)));
     d = prices(4); d["price"][1] = 1e30; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
     d = prices(4); d["unix_seconds"][1] = Now; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
+    Plane east; east.latitudeE6 = -12345678; east.longitudeE6 = 13400001;
+    east.tilt = 35; east.azimuth = -90; east.peakW = 3250;
+    char url[256]; forecastUrl(east, url, sizeof(url));
+    assert(!strcmp(url, "https://api.forecast.solar/estimate/-12.345678/13.400001/35/-90/3.250?time=utc&full=1"));
     uint32_t dateStart; assert(parseUtc("2026-10-17T00:00:00Z", dateStart));
     assert(retryAfterSeconds("Sat, 17 Oct 2026 01:00:00 GMT", dateStart) == 3600);
     assert(retryAfterSeconds("Sat, 17 Oct 2026 00:00:00 GMT", dateStart) == 0);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include <vector>
 #include <freertos/FreeRTOS.h>
 #include <functional>
 struct TestTask;
@@ -12,6 +13,7 @@ uint32_t ulTaskNotifyTake(int, uint32_t);
 #define pdMS_TO_TICKS(value) (value)
 #endif
 inline std::function<void()> duringDelay;
-inline void vTaskDelay(uint32_t) { if (duringDelay) { auto callback = std::move(duringDelay); duringDelay = {}; callback(); } }
+inline std::vector<uint32_t> delays;
+inline void vTaskDelay(uint32_t ticks) { delays.push_back(ticks); if (duringDelay) { auto callback = std::move(duringDelay); duringDelay = {}; callback(); } }
 
 inline unsigned uxTaskGetStackHighWaterMark(TaskHandle_t) { return 8192; }
