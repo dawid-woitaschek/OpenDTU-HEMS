@@ -13,7 +13,7 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write src/",
-    "test": "node ../test/test_hems_admin.mjs && node ../test/test_tariff_units.mjs && node ../test/test_hems_presentation.mjs && node ../test/test_firmware_provenance.mjs"
+    "test": "node ../test/test_hems_admin.mjs && node ../test/test_tariff_units.mjs && node ../test/test_hems_presentation.mjs && node ../test/test_firmware_provenance.mjs && node ../test/test_firmware_lookup.mjs && node ../test/test_profile_catalog.mjs"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",
