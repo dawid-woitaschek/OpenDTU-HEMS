@@ -33,6 +33,7 @@ interface and checked official evidence, not every function in a dependency.
 | OpenDTU / OnBattery inherited interfaces | Own REST/WebSocket endpoints, Hoymiles radio, CAN/BMS, VE.Direct, SML and configurable meter adapters | No single interchangeable newer external API | E for own endpoints; D for unchecked vendor contract revisions | Do not relabel local `/api` paths or radio revisions as an obsolete REST version. Hardware-facing changes deferred to vendor/device evidence. |
 | Browser APIs | Fetch, AbortSignal timeout, typed arrays, File/Blob; SHA-256 must work on local HTTP | Standards-based APIs; no meaningful REST version | E | Small current `@noble/hashes` 2.4.0 implementation verifies profiles when Web Crypto is unavailable on local HTTP. Keep clipboard/manual file fallbacks for insecure local contexts. |
 | Node / web tooling | Node 24, older Vue/Vite/lint/type tooling | [Node distribution index](https://nodejs.org/dist/index.json): stable 26.12.0; current official package metadata and vendor repositories below | B → migrated; C for TS7 | CI and local build use Node 26; current dependency releases installed. Migrate `__dirname`/CommonJS optional Vite config loading to native ESM. |
+| Yarn / package-manager setup | Classic 1.22.22 and bundled Corepack assumption | Stable Yarn 4.18.1; [official Yarn source](https://github.com/yarnpkg/berry), [Corepack distribution policy](https://github.com/nodejs/corepack#readme) | B → migrated | Keep node_modules linking, immutable installs, quote npm-run-all glob for the new shell, explicitly provision Corepack 0.36.0 and share cached Node/Yarn setup across CI. Node >=25 no longer bundles Corepack. |
 | JSON schemas | Own profile v1/v2, normalized energy v1, firmware manifest v1 | Repository-owned bounded contracts, not JSON Schema draft identifiers | E | v2 catalog entries remain backend validated; preserve v1 read-only profile and legacy firmware provenance compatibility. No unrelated `$schema` draft migration found. |
 
 ### Native dependency migrations
@@ -170,6 +171,7 @@ merging/running its workflow on the canonical ref.
 | Locale keys | Advanced deviceProfiles and duplicated menu HemsInfo/HemsSettings keys became unused | REMOVE | Remove only these proven-unused keys in EN/DE/FR. |
 | Docs | Old feature-branch energy-doc URL, no-unit-tests claim, old Node/platform setup and Retry-After statement | REMOVE | Canonical ref link and current test/setup/transport behavior. |
 | Vite | CommonJS require/dirname in ESM config; native-loader warning | REMOVE | Dynamic ESM optional config import and import.meta.dirname. |
+| CI/tooling duplication | Repeated Node/Corepack setup; Copilot setup lacked checkout before repository requirements | CONSOLIDATE | Shared setup-web composite explicitly provisions current package manager, caches dependencies, and requires checkout first. No legacy Yarn-1 retention. |
 | Factory build | Global esptool could win over platform package; missing Python dependency after tool upgrade | REMOVE | Prioritize packaged tool and centralize reproducible build requirements. |
 | Profile schemas v1/v2 | Read-only import compatibility versus bounded optional control metadata | KEEP — DISTINCT PURPOSE | Removing v1 would strand installed read-only profiles; it never grants writes. |
 | Firmware legacy manifests | Exact image versus recoverable source provenance | KEEP — DISTINCT PURPOSE | Mandatory compatibility remains covered; no shortened SHA identity adoption. |
@@ -188,6 +190,7 @@ merging/running its workflow on the canonical ref.
 | Broad vendor/dependency inventory D rows | No verified current authoritative mapping/release comparison | Resolve each named uncertainty, not just a deprecation search. |
 | Permission editors | Settings and Devices both edit storage/EVSE permission, with different surrounding context | Product decision before removing a permission-editing entry point; keep control semantics and persistence intact. |
 | HEMS profile naming / manual control placement | Broader consolidation risks moving safety-sensitive actions | Product decision and accessibility/usage review; preserve explicit manual action boundaries. |
+| Local profile summary requests | Devices and profile administration separately fetch the same lightweight local summary | Consolidate summary ownership in a focused follow-up; current lists have different consumers and the four-slot bound limits work. |
 | Duplicate backend error translations | Backend uses English diagnostic messages across inherited endpoints | Stable error-code/API/i18n migration; touched repository errors are translated now. |
 | Tests/artifact ignore list | Native executables and __pycache__ clutter git status | Keep generated output out of commits; consolidating Makefile outputs/ignore rules is separate low-value housekeeping. |
 | Full-tree dead code removal | A search hit is not proof of unreachable runtime/hardware paths | No speculative removal; actual removed redundancy is listed above. |
@@ -221,3 +224,7 @@ before first canonical publication; one pinned official profile returned **200**
 4457 bytes, SHA-256 equal to the repository source. Provider documentation/API
 access remained proxy-denied; no successful Energy-Charts/Forecast.Solar live
 validation is claimed. No complete provider payloads were logged.
+
+Yarn 4 validation additionally uses a fresh empty node_modules installation from
+the immutable lockfile with network disabled and dependency lifecycle scripts
+disabled. This checks that the build does not depend on previous install scripts.

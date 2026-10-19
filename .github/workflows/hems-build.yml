@@ -67,20 +67,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r pio-scripts/requirements.txt
 
-      - name: Enable Corepack
-        working-directory: webapp
-        run: corepack enable
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '26'
-          cache: yarn
-          cache-dependency-path: webapp/yarn.lock
+      - uses: ./.github/actions/setup-web
 
       - name: Install WebApp dependencies
         working-directory: webapp
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Build WebApp
         working-directory: webapp
@@ -138,13 +129,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '26'
+      - uses: ./.github/actions/setup-web
       - name: Install UI and isolated browser test dependencies
         run: |
-          corepack enable
-          yarn --cwd webapp install --frozen-lockfile
+          yarn --cwd webapp install --immutable
           npm install --prefix work/browser --no-package-lock playwright@1.64.1
       - uses: actions/checkout@v7
         with:

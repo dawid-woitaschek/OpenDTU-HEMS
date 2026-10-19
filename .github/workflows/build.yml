@@ -93,22 +93,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r pio-scripts/requirements.txt
 
-      - name: Enable Corepack
-        run: |
-            cd webapp
-            corepack enable
-
-      - name: Setup Node.js and yarn
-        uses: actions/setup-node@v7
-        with:
-          node-version: "26"
-          cache: "yarn"
-          cache-dependency-path: "webapp/yarn.lock"
+      - uses: ./.github/actions/setup-web
 
       - name: Install WebApp dependencies
         run: |
             cd webapp
-            yarn install --frozen-lockfile
+            yarn install --immutable
 
       - name: Build WebApp
         run: |

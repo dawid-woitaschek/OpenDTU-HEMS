@@ -19,7 +19,8 @@ export PATH=/usr/bin:$PATH
 node --version  # Should show v26.x.x
 
 # Enable corepack for yarn
-sudo corepack enable
+npm install --global corepack@0.36.0
+corepack enable
 
 # Install Python dependencies
 python3 -m pip install --upgrade pip
@@ -38,7 +39,7 @@ cd /path/to/OpenDTU-OnBattery
 
 # Build webapp first (ALWAYS required before firmware)
 cd webapp
-yarn install --frozen-lockfile  # Takes ~25 seconds
+yarn install --immutable  # Takes ~25 seconds
 yarn build                       # Takes ~15 seconds - NEVER CANCEL
 
 # Return to repository root for firmware build
@@ -131,7 +132,7 @@ After making changes, ALWAYS run this complete validation sequence:
 ```bash
 # 1. Validate webapp
 cd webapp
-yarn install --frozen-lockfile
+yarn install --immutable
 yarn lint
 yarn prettier --check src/
 yarn build
@@ -166,7 +167,7 @@ physical devices.
 
 ### Build Failures
 1. **"HTTPClientError" during pio run**: Ensure unrestricted internet access is available for ESP32 platform downloads. Network firewalls or restrictions will cause firmware builds to fail. Contact repository administrators to configure network access if builds fail with network errors.
-2. **"yarn: command not found"**: Run `sudo corepack enable`
+2. **"yarn: command not found"**: Install Corepack with `npm install --global corepack@0.36.0`, then run `corepack enable`.
 3. **"Node version too old"**: Ensure Node.js 26 is installed and in PATH
 4. **"webapp_dist not found"**: Run `yarn build` in webapp directory first
 

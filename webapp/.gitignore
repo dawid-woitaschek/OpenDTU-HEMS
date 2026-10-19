@@ -38,3 +38,6 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
+
+# Yarn install state; dependencies remain in node_modules.
+.yarn/
