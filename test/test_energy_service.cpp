@@ -1,4 +1,5 @@
 #include "energy_harness.h"
+#include "provider_fixtures.h"
 int main()
 {
     Service service; Scheduler scheduler; service.init(scheduler);
@@ -57,12 +58,12 @@ int main()
     assert(api["config"]["pricing"]["grid_micros_per_kwh"] == 123400);
     assert(api["config"]["pricing"]["markup_micros_per_kwh"] == 1234);
     assert(api["config"]["pricing"]["monthly_micros"] == 9990000);
-    doc.clear(); doc["unit"] = "EUR / MWh";
-    for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
+    doc = ProviderFixtures::prices(8, currentUtc);
+    for (unsigned i = 0; i < 8; ++i) { doc["data"][i]["values"]["day_ahead_price"] = i ? 200.0 : -50.0; }
     httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && data.intervals[0].value == -50000);
     api.clear(); service.serialize(Domain::Tariff, api.to<JsonObject>());
-    assert(api["source_fresh"].isNull() && api["source_age_seconds"].isNull());
+    assert(api["source_fresh"] == true && api["source_age_seconds"] == 0 && api["generated_at"] == currentUtc);
     assert(api["transport_fresh"] == true && api["planning_usable"] == true);
     assert(!service.requestRefresh(Domain::Tariff)); // Short request spacing still applies; the ordinary interval does not block manual refresh.
     testNow += 3600000; httpAvailable = false; scheduler.execute(); runWorkers();

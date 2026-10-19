@@ -91,7 +91,7 @@ __attribute__((noinline)) bool nativeRequest(Settings const& settings, unsigned 
         ok = providerGet(url, settings.source, doc, info, error);
         if (ok) {
             ok = settings.source == Source::ForecastSolar ? parseForecastSolar(doc.as<JsonVariantConst>(), series, info, error)
-                : parseEnergyCharts(doc.as<JsonVariantConst>(), utcNow(), series, error);
+                : parseEnergyCharts(doc.as<JsonVariantConst>(), series, error);
         }
         info.jsonPeak = allocator.peak;
     }
@@ -375,7 +375,9 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 // An obsolete result cannot publish data, but requests already made
                 // still count for request spacing and server/quota holds.
                 if (provider(domain).settings().source == settings.source) {
-                    if (info.dns >= 0 || info.httpStatus != 0) { provider(domain).cooldown(millis(), 15, RetryKind::Transport); }
+                    if (info.dns >= 0 || info.httpStatus != 0) {
+                        provider(domain).cooldown(millis(), settings.source == Source::EnergyCharts ? 30 : 15, RetryKind::Transport);
+                    }
                     if (info.retrySeconds) { provider(domain).defer(millis(), info.retrySeconds, info.httpStatus == 429 || info.rateRemaining == 0 || (error && !strcmp(error, "provider_rate_limited")) ? RetryKind::RateLimited : RetryKind::Provider); }
                 }
                 if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
@@ -411,7 +413,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
     auto index = static_cast<unsigned>(domain);
     if (parsed && provider(domain).accept(*series, utcNow(), millis())) {
         ++_revision; _failures[index] = 0; _stage[index] = "success";
-        provider(domain).cooldown(millis(), 15, RetryKind::Transport); // Native/manual anti-hammer spacing.
+        provider(domain).cooldown(millis(), settings.source == Source::EnergyCharts ? 30 : 15, RetryKind::Transport);
     } else {
         if (parsed) { error = provider(domain).lastError(); }
         provider(domain).failed(error ? error : "invalid_payload", millis());

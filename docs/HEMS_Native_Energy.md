@@ -34,19 +34,29 @@ adapter are added in this pass.
 
 ## Sources and reference review
 
-The public [Energy-Charts API and OpenAPI contract](https://api.energy-charts.info/)
-were inspected on 2026-10-17, including its current `/price?bzn=DE-LU` response:
-`unix_seconds`, nullable `price`, `unit`, and `license_info`. This describes the implemented legacy adapter, not approval to retain v1. The
-current-contract migration remains mandatory; see [Modernization audit](Modernization_Audit.md)
-for current migration status and contract verification. This adapter supplies
-UTC interval starts, avoiding local-time ambiguity. Germany/Luxembourg is the deliberate bounded region in V1.
-The provider queries the complete German local today and tomorrow, using CET/CEST
-calendar boundaries (23/25-hour days). It handles hourly and quarter-hour series,
-negative values, unpublished/null prices and gaps. An interval's duration is the
-smallest supported observed resolution; gaps do not stretch a price across missing
-periods. Unpublished tomorrow means a partial horizon, not fabricated prices.
-Prices in EUR/MWh become integer micro EUR/kWh by multiplying by 1000 and rounding
-once at the adapter boundary. Changing/unknown units fail the update.
+The supplied current [Energy-Charts OpenAPI](https://api.energy-charts.info/openapi.json)
+2.0 and [full API description](https://api.energy-charts.info/llms-full.txt) were
+verified against an external HTTP 200 v2 response on 2026-10-19. The native adapter
+uses `/v2/price?bzn=DE-LU` exclusively. It strictly consumes schema 2.0's row-based
+`data[*].timestamp` / `values.day_ahead_price`, looks up the series by ID, validates
+the declared PT15M/15 or PT1H/60 interval, timezone, unit and deprecation status,
+and rejects malformed metadata/values. The live 192-record response is PT15M;
+bounded declared hourly compatibility remains supported by the uniform schema.
+
+Germany/Luxembourg remains the bounded region. Existing CET/CEST calendar
+boundaries query local today and tomorrow (23/25-hour days). Data timestamps mark
+interval starts with explicit Berlin offsets; null leaves unpublished coverage
+missing. Availability metadata never fills missing data. Prices in EUR/MWh become
+integer micro-EUR/kWh by multiplying by 1000 and rounding once at the adapter
+boundary, with overflow checks. Optimizer and dispatch semantics are unchanged.
+
+`generated_at` means provider response-generation time, including cached response
+age; it is not upstream market publication time. Generation and successful fetch
+timestamps/ages remain distinct. Failed refreshes retain accepted covered prices;
+null/uncovered/expired intervals stay unusable. There is no fallback to v1.
+`deprecated=true` explicitly rejects the refresh and displays a localized reason.
+See [the modernization audit](Modernization_Audit.md) for full parser/retention
+coverage and resource limits.
 
 Attribution: **Energy-Charts.info; Bundesnetzagentur / SMARD.de; CC BY 4.0**.
 The API documentation explicitly permits public access and specifies attribution,
@@ -90,13 +100,18 @@ hostname validation are performed by Arduino-ESP32's mbedTLS-backed
 `Trust.h` contains public Mozilla/system-store roots: ISRG X1 (2035), X2 (2040),
 DigiCert Global Root G2 (2038), and Google Trust Services R1..R4 (2036). These roots
 are firmware-owned and need maintenance if provider trust chains change. They are
-CA anchors, not pinned leaf certificates. Root expiry does not establish that a
-provider's current chain is compatible; live TLS smoke testing is still required.
+CA anchors, not pinned leaf certificates. The official default Let's Encrypt YR2 → Root YR → ISRG Root X1 chain matches
+these existing roots; its public intermediate/cross-sign verifies with the bundle
+in OpenSSL. Live ESP32 TLS smoke testing remains required.
 The firmware must fail closed when its clock or trust anchors are unsuitable.
 
 HTTP connect/body timeouts are 5 seconds, TLS handshake timeout 10 seconds, and
-body parsing has a 15-second deadline. HTTP 429/503 honors numeric Retry-After
-with a conservative floor; date-form Retry-After is converted against synchronized UTC and preserves longer holds.
+body parsing has a 15-second deadline. Energy-Charts requests are spaced at least
+30 seconds, with an ordinary refresh of at least one hour; the documented limit
+of 2/minute (burst 2) can be reduced under load. Numeric and date-form Retry-After
+are honored against synchronized UTC without shortening longer holds. HTTP 429
+has a 60-second Energy-Charts floor and a two-hour Forecast.Solar floor; HTTP 503
+has a 15-minute floor.
 Responses are limited to 40,000 bytes and JSON allocation to 49,152 bytes. Filtering
 removes unrelated provider fields before allocation. Truncated Content-Length,
 trailing non-JSON data, unsupported origins, redirects, malformed/oversized JSON,

@@ -4,10 +4,11 @@ Audit date: 2026-10-19. Base: `integration/hems-next` at
 `82a06f3e61028b5d47a6d369adc7bd9f72b020ca`.
 
 Official current provider specifications and bounded live responses were supplied
-on 2026-10-19 and inspected directly. They supersede the earlier environment
-access limitation. Forecast.Solar's public contract and successful external
-requests are verified below; Energy-Charts v2 migration remains mandatory until
-the adapter is replaced. No raw private location/network capture is committed.
+on 2026-10-19 and inspected directly. Energy-Charts is migrated to the current v2
+contract. Forecast.Solar's public contract and successful external requests are
+verified. The specific undocumented `full=1` behavior and physical ESP32 operation
+remain separate validation limits. No raw private location/network capture is
+committed.
 
 Classification: A CURRENT, B OUTDATED—MIGRATE, C BLOCKED FROM MIGRATION,
 D UNCERTAIN, E NOT VERSIONED. "Current" below applies only to the stated
@@ -17,7 +18,7 @@ interface and checked official evidence, not every function in a dependency.
 
 | Area | Current interface at start | Newest suitable interface / official source | Status | Action |
 |------|---------------------------|--------------------------------------------|--------|--------|
-| Energy-Charts | Legacy `/price?bzn=DE-LU&start=<unix>&end=<unix>`; `unix_seconds`, `price`, `unit` | [Official OpenAPI](https://api.energy-charts.info/openapi.json), v2.0 contract supplied and verified | B; mandatory migration outstanding | No guessed v2 parser and no legacy fallback. Removed the documentation's "still supported" justification. Strict existing parser/retention tests remain. |
+| Energy-Charts | Legacy `/price?bzn=DE-LU&start=<unix>&end=<unix>`; `unix_seconds`, `price`, `unit` | Supplied [OpenAPI 2.0](https://api.energy-charts.info/openapi.json), [full API description](https://api.energy-charts.info/llms-full.txt), live v2 response; stable release 2026-07-20 | B → migrated | Fixed `/v2/price`, strict uniform envelope, declared interval and ISO Berlin timestamps; no v1 parser or fallback. Provider generation and fetch time are distinct. |
 | Forecast.Solar public estimate | Public unversioned `/estimate/lat/lon/tilt/azimuth/kWp?time=utc&full=1`; `watt_hours_period` | Supplied [official Swagger](https://api.forecast.solar/swagger.yaml) v7.41.0.2515 (2026-09-04), plus three successful live captures | A for endpoint/parameters; E for URL versioning | Public endpoint requires no key. Parameter ranges, East-negative/West-positive convention, UTC query and ResponseFull verified. No API-version migration needed. |
 | Forecast.Solar `full=1` | Dense hourly timeline required by the gap-rejecting parser | Missing from supplied Swagger; exact live East query succeeds and changes sparse output into dense hourly output | D: undocumented behavior | Retain deliberately. Sanitized dense/sparse fixtures enforce the dependency and failure atomicity; no invented night or daytime values. |
 | GitHub REST source comparison | Unversioned request defaults to old calendar version | `2026-03-10`: [official version table](https://github.com/github/docs/blob/main/data/tables/rest-api-versions.yml), [official OpenAPI](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.2026-03-10.json) | B → migrated | Explicit version and JSON Accept headers. Verified compare response still contains `ahead_by`, `behind_by`, `status`, `html_url`; test asserts headers. |
@@ -93,7 +94,7 @@ was attempted and rejected for the concrete Vue compiler incompatibility below.
 | Vendored libraries/contracts | Frozen 1.1.1, SDM, VeDirectFrameHandler, SMLParser, CpuTemperature and internal helpers | Vendor repositories/documentation linked in source | D: latest upstream equivalence/licensing and local modifications not established. VE.Direct cites protocol 3.34 without a current official revision check. | No blanket current claim and no blind vendor subtree replacement. |
 | User-configured HTTP/MQTT meters/bridges | Local JSON/SML and device-specific URLs | Depends on configured hardware/server | E/D: no fixed vendor URL/version to upgrade globally | Keep configurable transport; per-device migrations need actual configured contract. |
 | Legacy local HTTP / optional MQTT TLS | User-selectable HTTP and CA configuration | HTTPS-capable device endpoints vary | D: no safe global switch for arbitrary local hardware; native providers remain verified HTTPS only. | No TLS weakening. Broader inherited transport hardening requires compatibility work. |
-| Provider source metadata / East-plane incident | See provider rows | Supplied official schemas and externally successful bounded captures | Contracts verified; physical device incident remains unverified | Complete v2 migration and retain specific `full=1` uncertainty; reproduce device failure if it recurs. |
+| Provider source metadata / East-plane incident | See provider rows | Supplied official schemas and externally successful bounded captures | Contracts verified; physical device incident remains unverified | V2 migrated; retain specific `full=1` uncertainty and reproduce device failure if it recurs. |
 
 ## Firmware update state and provenance
 
@@ -116,6 +117,63 @@ Build commit, source commit and tested merge commit stay distinct. Same source w
 a different tested build is a different image, not a newer source. Old PR channel
 publication dates do not establish ancestry. Regression coverage executes the real
 Vue methods and rendered page, including pr-25 → deinemutter and both race orders.
+
+## Energy-Charts v2 contract
+
+The supplied OpenAPI identifies stable v2.0 (2026-07-20); the official full
+self-description explicitly says to prefer `/v2/...`. Public key-free
+`/v2/price?bzn=DE-LU&start=<unix>&end=<unix>` replaces `/price`. Existing German
+local-day UTC boundaries and DST logic remain unchanged; inclusive request end
+is the end of tomorrow minus one second.
+
+The filtered parser requires schema `2.0`, endpoint `price`, bidding zone DE-LU,
+Europe/Berlin, EUR / MWh, explicit non-deprecated status and license text. It
+finds `day_ahead_price` by stable ID (exactly one match, <=16 descriptors) and
+rejects an incompatible per-series unit override. Country, if present, must be
+de. PT15M/15 and PT1H/60 are the only supported metadata pairs; PT1H is retained
+as a declared uniform-schema resolution for hourly/historical compatibility,
+not claimed as the current live DE-LU response. The supplied live response has
+192 PT15M records over today and tomorrow and is 15,465 bytes.
+
+Each of 1..256 rows must carry an explicit price key, a parseable ISO timestamp
+and a consecutive UTC step matching the declared interval. Berlin UTC offsets
+must match CET/CEST at that instant, including repeated/skipped local DST hours.
+Explicit null skips an unpublished interval; a missing key or row is malformed.
+Availability bounds are checked against row timestamps and published price
+bounds. They describe envelope availability, not continuous planning coverage:
+`available_until` labels the last interval start, not its end. Only accepted,
+non-null intervals determine coverage. Partial tomorrow stays partial.
+
+`generated_at` is provider **response-generation time**, never electricity-market
+publication time. Cached responses keep their true generation time. The model
+stores it separately from successful local fetch time; existing `source_*` API
+fields retain compatibility and mean provider-generation metadata. UI labels in
+EN/DE/FR say provider response/generation. Fractional generation timestamps are
+stored at the existing second precision. Price conversion remains
+`llround(EUR_per_MWh * 1000)` to signed int32 micro-EUR/kWh, with finite/overflow
+checks before conversion. No floating-point price enters optimizer/dispatch.
+
+All validation precedes destination mutation, using two bounded passes without a
+second Series. Failure (including deprecated=true, malformed payload or HTTP 429)
+retains accepted data and exposes a stable error. Still-covered tariff intervals
+remain planning-usable independently of transport/provider response age; null,
+uncovered or expired intervals never become invented prices. No v1 fallback is
+implemented. `energy_charts_deprecated` is explicitly localized and rejected.
+
+The documented price rate limit is an upper bound of 2/minute, burst 2, with
+possible dynamic reduction. Automatic cadence remains >=1 hour. Manual/transport
+spacing is >=30 seconds. Retry-After on all HTTP responses (seconds or HTTP date)
+is honored without shortening a longer hold; HTTP 429 uses >=60 seconds for
+Energy-Charts (>=2 hours for Forecast.Solar), and 503 retains its >=15-minute
+floor. No aggressive multi-request retry is added.
+
+Deterministic tests cover the supplied shape, 15-minute/hourly intervals,
+negative/tie/boundary money, null/partial/full coverage, 23/25-hour days, malformed
+metadata/timestamps/values, ordering/duplicates, count/overflow bounds,
+deprecation, atomic rejection, retained planning data and quota holds. Production
+HTTPS filtering is exercised at 192 and 256 records; host JSON allocator peaks
+are 33,047 and 43,799 bytes under the 49,152-byte cap (including an ignored 8 KB
+field on the wire). These are host measurements, not ESP32 TLS peak headroom.
 
 ## Forecast.Solar investigation
 
@@ -213,7 +271,7 @@ merging/running its workflow on the canonical ref.
 
 | Area | Reason deferred | Required decision/validation |
 |------|-----------------|------------------------------|
-| Energy-Charts v2 | Current official contract and successful external response supplied | Implement strict parser/filter migration and deterministic contract/coverage tests. No old-API-support exception. |
+| ESP32 Energy-Charts v2 runtime | Official contract, external HTTP 200 shape and deterministic parser/transport checks pass | Verify physical HTTPS/parser/heap/stack operation and retained coverage on ESP32-S3 without PSRAM. |
 | Forecast.Solar physical East failure | External East/West/full queries succeed; no live ESP32 incident capture | Reproduce on updated physical firmware if it recurs; inspect named-plane HTTP/DNS/TLS, quota and heap/stack. `full=1` remains specifically undocumented. |
 | Arduino 3 / IDF driver port | Changed shared SPI ownership and network initialization | Port W5500/netif/mbedTLS without hardware semantics change; test Ethernet/Wi-Fi, TLS, stack/heap, CAN/UART/radio and firmware size. |
 | Broad vendor/dependency inventory D rows | No verified current authoritative mapping/release comparison | Resolve each named uncertainty, not just a deprecation search. |
@@ -227,14 +285,21 @@ merging/running its workflow on the canonical ref.
 ## Validation and physical limits
 
 Validation results and final resource measurements are recorded in the PR/report.
-Native tests exercise real parsers, profile validation/import constraints, energy
+Native tests include the strict v2 conformance suite and sanitized Forecast.Solar
+sparse/dense captures. Address/undefined-behavior sanitizer checks also pass for
+v2 (LeakSanitizer is unavailable under the environment tracer). Native tests
+exercise real parsers, profile validation/import constraints, energy
 retention, quota/generation handling, firmware contracts and safety/control paths.
-Browser APIs are deterministic fixtures, not an ESP32 HTTP server. Web production
+Browser suites run the built gzip web assets through a local static server with
+firmware-style Content-Encoding; API responses are deterministic fixtures, not an
+ESP32 HTTP server. Web production
 build includes TypeScript checks. Target build is generic_esp32s3_usb, 8 MB,
 without PSRAM. No firmware was flashed and no physical device command was sent.
 Remaining physical validation: WARP3, Marstek, EV Protection timing, live bound
 profile reload, Ethernet/radio after dependency updates, provider TLS/DNS/clock,
-heap/worker-stack pressure and actual provider failure/quota behavior.
+heap/worker-stack pressure and actual provider failure/quota behavior. Energy-Charts
+v2 HTTPS/parser/heap behavior and actual East-plane reproduction remain physical
+validation items; desktop captures do not establish those outcomes.
 
 Validated locally: complete `make test` native suite; targeted final energy-service
 rebuild; HEMS configuration and firmware channel/provenance Python tests; four
@@ -244,14 +309,14 @@ full production C++ lint, frontend lint, Prettier, Vue/TypeScript and production
 build; workflow YAML syntax and whitespace checks. All passed.
 
 Final target build: **generic_esp32s3_usb SUCCESS**. Static RAM **116512 / 327680
-bytes (35.6%)**; linked flash **2861593 / 3932160 bytes (72.8%)**; OTA binary
-**2861952 bytes**. No PSRAM flag/dependency was added. These are static/linker
+bytes (35.6%)**; linked flash **2864229 / 3932160 bytes (72.8%)**; OTA binary
+**2864592 bytes**. No PSRAM flag/dependency was added. These are static/linker
 measurements, not proof of worst-case live TLS heap/stack headroom.
 
 Bounded network checks: generated public catalog URL returned **404**, expected
 before first canonical publication; one pinned official profile returned **200**,
-4457 bytes, SHA-256 equal to the repository source. Supplied official provider schemas and external HTTP 200 captures are now
-verified. No direct live ESP32 provider validation is claimed. No raw private
+4457 bytes, SHA-256 equal to the repository source. Supplied official provider
+schemas and external HTTP 200 captures are now verified. No direct live ESP32 provider validation is claimed. No raw private
 provider captures are committed or logged.
 
 Yarn 4 validation additionally uses a fresh empty node_modules installation from

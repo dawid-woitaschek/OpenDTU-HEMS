@@ -5,8 +5,9 @@ export const hemsTariffMessages = {
         hemsUi: {
             devicesManualControls: 'Device setup and manual controls',
             stateAndError: 'State / last error',
-            generationAndFetch: 'Source generation / fetch time',
-            sourceAndTransportAge: 'Source age / fetch age (s)',
+            generationAndFetch: 'Provider generation / fetch time',
+            sourceAndTransportAge: 'Provider response age / fetch age (s)',
+            providerDeprecated: 'The provider has marked this endpoint for discontinuation. Previous data is retained.',
             nextRefresh: 'Next refresh',
             planeNotAttempted:
                 'Not requested in this refresh; an earlier plane may have failed or exhausted the quota.',
@@ -24,8 +25,10 @@ export const hemsTariffMessages = {
         hemsUi: {
             devicesManualControls: 'Geräteeinrichtung und manuelle Steuerung',
             stateAndError: 'Status / letzter Fehler',
-            generationAndFetch: 'Quellerzeugung / Abrufzeit',
-            sourceAndTransportAge: 'Quellalter / Abrufalter (s)',
+            generationAndFetch: 'Erzeugung der Anbieterantwort / Abrufzeit',
+            sourceAndTransportAge: 'Alter der Anbieterantwort / Abrufalter (s)',
+            providerDeprecated:
+                'Der Anbieter hat diesen Endpunkt zur Einstellung vorgemerkt. Bisherige Daten bleiben erhalten.',
             nextRefresh: 'Nächste Aktualisierung',
             planeNotAttempted:
                 'In dieser Aktualisierung nicht angefragt; eine vorherige Fläche kann fehlgeschlagen sein oder das Kontingent ausgeschöpft haben.',
@@ -43,8 +46,10 @@ export const hemsTariffMessages = {
         hemsUi: {
             devicesManualControls: 'Configuration des appareils et commandes manuelles',
             stateAndError: 'État / dernière erreur',
-            generationAndFetch: 'Génération source / récupération',
-            sourceAndTransportAge: 'Âge de la source / récupération (s)',
+            generationAndFetch: 'Génération fournisseur / récupération',
+            sourceAndTransportAge: 'Âge de la réponse fournisseur / récupération (s)',
+            providerDeprecated:
+                'Le fournisseur a annoncé la suppression de ce point d’accès. Les données précédentes sont conservées.',
             nextRefresh: 'Prochaine actualisation',
             planeNotAttempted:
                 'Non demandé pendant cette actualisation ; un plan précédent a pu échouer ou épuiser le quota.',

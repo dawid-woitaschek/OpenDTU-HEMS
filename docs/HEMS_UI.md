@@ -57,7 +57,9 @@ Configured PV planes are expandable, with an edit link to the existing responsiv
 six-plane editor. Source timestamps, coverage end, next update attempt and monthly
 base fee remain in details; complete provider/plane diagnostics remain in Advanced
 Diagnostics. Receipt time is shown separately from source generation time, and an
-unknown source timestamp stays unknown.
+unknown source timestamp stays unknown. Energy-Charts v2 now provides the
+provider response-generation time; labels distinguish it from successful fetch
+time and never imply electricity-market publication time.
 
 The custom SVG remains appropriate for the bounded 256-interval API. No runtime
 dependency is added. Cheap and expensive intervals now form merged, low-opacity

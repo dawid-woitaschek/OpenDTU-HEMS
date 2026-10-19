@@ -22,7 +22,7 @@ struct Interval {
 };
 struct Series {
     Interval intervals[MaxIntervals] {};
-    uint32_t generatedAt = 0;
+    uint32_t generatedAt = 0; // Provider response generation, not upstream market publication.
     bool sourceTimestampKnown = true;
     uint16_t count = 0;
     char source[49] {}, currency[4] {};

@@ -169,3 +169,11 @@ an isolated Playwright installation and a dev server on localhost:5173. The HEMS
 browser suite additionally verifies named east-plane failures with retained data.
 These are simulated browser/backend boundaries; physical runtime reload, TLS and
 control timing still need ESP32 hardware validation.
+
+Provider contract follow-up: `test_energy_charts_v2` exercises the strict uniform
+v2 envelope, generation/fetch ages, integer money, metadata rejection, null/partial
+horizons, 23/25-hour DST and retained planning data. `test_energy_transport` runs
+the production bounded filter at 192/256 records and checks Retry-After holds.
+Forecast.Solar sparse/dense capture fixtures are sanitized; the dense query is
+retained deliberately and sparse overnight gaps are rejected atomically. Fixture
+provenance is in `test/fixtures/providers/README.md`. No test contacts a provider.

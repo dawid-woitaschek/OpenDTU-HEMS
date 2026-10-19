@@ -9,9 +9,7 @@ using namespace Hems::Energy;
 constexpr uint32_t Now = 1792180800;
 JsonDocument prices(unsigned count, uint32_t first = Now, unsigned resolution = 900)
 {
-    JsonDocument d; d["unit"] = "EUR / MWh";
-    for (unsigned i = 0; i < count; ++i) { d["unix_seconds"].add(first + i * resolution); d["price"].add(i ? 123.456 : -55.5); }
-    return d;
+    return ProviderFixtures::prices(count, first, resolution);
 }
 JsonDocument solar()
 {
@@ -42,22 +40,22 @@ int main()
     Series a, b, output; char const* error; NativeInfo info;
     for (unsigned count : {92, 100, 192, 196, 256}) {
         auto doc = prices(count);
-        assert(parseEnergyCharts(doc.as<JsonVariantConst>(), Now, output, error)); assert(output.count == count);
+        assert(parseEnergyCharts(doc.as<JsonVariantConst>(), output, error)); assert(output.count == count);
         assert(output.intervals[0].value == -55500 && output.intervals[1].value == 123456);
-        assert(output.covers(Now, Now + count * 900)); assert(!output.sourceTimestampKnown);
+        assert(output.covers(Now, Now + count * 900)); assert(output.sourceTimestampKnown && output.generatedAt == Now);
     }
-    auto d = prices(257); assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
-    d = prices(96); d["price"][10] = nullptr;
-    assert(parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error)); assert(!output.covers(Now, Now + 86400));
-    d = prices(4); d["unix_seconds"][3] = Now + 4 * 900;
-    assert(parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error)); assert(!output.current(Now + 3 * 900));
-    d = prices(4, Now, 3600); assert(parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error)); assert(output.intervals[3].end == Now + 14400);
-    d["unit"] = "EUR/kWh"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
+    auto d = prices(257); assert(!parseEnergyCharts(d.as<JsonVariantConst>(), output, error));
+    d = prices(96); d["data"][10]["values"]["day_ahead_price"] = nullptr;
+    assert(parseEnergyCharts(d.as<JsonVariantConst>(), output, error)); assert(!output.covers(Now, Now + 86400));
+    d = prices(4); d["data"][3]["timestamp"] = ProviderFixtures::timestamp(Now + 4 * 900);
+    assert(!parseEnergyCharts(d.as<JsonVariantConst>(), output, error));
+    d = prices(4, Now, 3600); assert(parseEnergyCharts(d.as<JsonVariantConst>(), output, error)); assert(output.intervals[3].end == Now + 14400);
+    d["unit"] = "EUR/kWh"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), output, error));
     auto saved = output;
-    d = prices(4); d["price"][3] = "1.2"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
+    d = prices(4); d["data"][3]["values"]["day_ahead_price"] = "1.2"; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), output, error));
     assert(!memcmp(&saved, &output, sizeof(output)));
-    d = prices(4); d["price"][1] = 1e30; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
-    d = prices(4); d["unix_seconds"][1] = Now; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), Now, output, error));
+    d = prices(4); d["data"][1]["values"]["day_ahead_price"] = 1e30; assert(!parseEnergyCharts(d.as<JsonVariantConst>(), output, error));
+    d = prices(4); d["data"][1]["timestamp"] = ProviderFixtures::timestamp(Now); assert(!parseEnergyCharts(d.as<JsonVariantConst>(), output, error));
     Plane east; east.latitudeE6 = -12345678; east.longitudeE6 = 13400001;
     east.tilt = 35; east.azimuth = -90; east.peakW = 3250;
     char url[256]; forecastUrl(east, url, sizeof(url));

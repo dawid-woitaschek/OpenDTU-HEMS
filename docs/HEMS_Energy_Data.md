@@ -134,7 +134,9 @@ configuration generation is discarded. Settings never grant device writes.
 successful receipt; `transport_age_seconds` and `source_age_seconds` are separate.
 Tariff usability follows authoritative current/future interval coverage, regardless
 of source age. Forecast freshness requires source/transport age within max_age_seconds.
-Unknown native tariff generation time is exposed explicitly rather than invented.
+Energy-Charts v2 supplies its true provider response-generation time, including
+cached response age. This is not electricity-market publication time. Native
+provider generation and successful transport/fetch time remain separate.
 `source_fresh` (null for an unknown source timestamp) and `transport_fresh` expose
 independent age/clock checks; they do not override tariff coverage usability.
 See [presentation and validation](HEMS_Presentation_Validation.md) for relative

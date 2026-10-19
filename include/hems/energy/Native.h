@@ -15,7 +15,7 @@ struct NativeInfo {
 };
 uint32_t retryAfterSeconds(char const* text, uint32_t now);
 bool parseUtc(char const* text, uint32_t& utc, bool bareUtc = false);
-bool parseEnergyCharts(JsonVariantConst json, uint32_t fetchedAt, Series& output, char const*& error);
+bool parseEnergyCharts(JsonVariantConst json, Series& output, char const*& error);
 bool parseForecastSolar(JsonVariantConst json, Series& output, NativeInfo& info, char const*& error);
 bool aggregate(Series const& first, Series const& second, Series& output, char const*& error);
 // Fixed native origins. HTTPS implementation validates CA chain and DNS identity; no redirects.
