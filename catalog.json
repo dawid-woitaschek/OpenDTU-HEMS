@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "source_commit": "3e61eca0ef2769038b4eebff3aa111b42480a3b3",
+  "profiles": [
+    {
+      "id": "tinkerforge.warp3-smart",
+      "category": "evse",
+      "vendor": "Tinkerforge",
+      "model": "WARP3 Smart",
+      "schema": "opendtu-hems-modbus-profile/v2",
+      "source_revision": "register-table-v2 / esp32-firmware-05762aabb8213219d63f8a52fe998f7e091edb2e",
+      "path": "evse/Tinkerforge-WARP3-Smart.json",
+      "size": 2495,
+      "sha256": "e34d8f767730bce75f3380e3cb7603ad59a101453a8f151a446e746b12ab5d0b",
+      "installed_sha256": "1a736865c64b9caf860992330a144896b8d0dc83ca236f4f8879d771785bd84c"
+    },
+    {
+      "id": "marstek.venus-e3.v148",
+      "category": "storage",
+      "vendor": "Marstek",
+      "model": "Venus E 3.0",
+      "schema": "opendtu-hems-modbus-profile/v2",
+      "source_revision": "control151-bms115-micro119",
+      "path": "storage/Marstek-Venus-E-3.0.json",
+      "size": 4457,
+      "sha256": "05f728d0e967e1fba832118cf466b3962c31cb98f7d5bc3a7b787a51dbe1f91e",
+      "installed_sha256": "fdd40d031142c0ee3f3d259bcee11702a4ce3259080f44803075e7c5dd9be04b"
+    }
+  ]
+}
