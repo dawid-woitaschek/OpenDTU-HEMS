@@ -20,13 +20,19 @@ bool parseUtc(char const* s, uint32_t& utc, bool bareUtc)
             || m < 1 || m > 12 || d < 1 || h < 0 || h > 23 || min < 0 || min > 59 || sec < 0 || sec > 59) { return false; }
     int daysInMonth[] = { 31, 28 + ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0), 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
     if (d > daysInMonth[m - 1]) { return false; }
+    char const* zone = s + 19;
+    if (*zone == '.') {
+        ++zone;
+        if (*zone < '0' || *zone > '9') { return false; }
+        while (*zone >= '0' && *zone <= '9') { ++zone; }
+    }
     int offset = 0;
-    if (s[19] == 'Z' && !s[20]) { /* explicit UTC */ }
-    else if ((s[19] == '+' || s[19] == '-') && strlen(s) == 25 && s[22] == ':') {
+    if (*zone == 'Z' && !zone[1]) { /* explicit UTC */ }
+    else if ((*zone == '+' || *zone == '-') && strlen(zone) == 6 && zone[3] == ':') {
         int oh, om, end = 0;
-        if (sscanf(s + 20, "%2d:%2d%n", &oh, &om, &end) != 2 || end != 5 || oh > 14 || om > 59 || oh < 0 || om < 0) { return false; }
-        offset = (oh * 60 + om) * 60 * (s[19] == '+' ? 1 : -1);
-    } else if (!bareUtc || s[19]) { return false; }
+        if (sscanf(zone + 1, "%2d:%2d%n", &oh, &om, &end) != 2 || end != 5 || oh > 14 || om > 59 || oh < 0 || om < 0) { return false; }
+        offset = (oh * 60 + om) * 60 * (*zone == '+' ? 1 : -1);
+    } else if (!bareUtc || *zone) { return false; }
     y -= m <= 2;
     int era = y / 400, year = y - era * 400;
     int doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
@@ -82,44 +88,65 @@ void germanyDay(uint32_t utc, unsigned ahead, uint32_t& start, uint32_t& end)
 void tariffUrl(uint32_t utc, char* out, size_t capacity)
 {
     uint32_t start, end, unused; germanyDay(utc, 0, start, unused); germanyDay(utc, 1, unused, end);
-    snprintf(out, capacity, "https://api.energy-charts.info/price?bzn=DE-LU&start=%" PRIu32 "&end=%" PRIu32 "",
+    snprintf(out, capacity, "https://api.energy-charts.info/v2/price?bzn=DE-LU&start=%" PRIu32 "&end=%" PRIu32 "",
         start, end - 1);
 }
 bool parseEnergyCharts(JsonVariantConst j, uint32_t now, Series& out, char const*& error)
 {
     error = "invalid_energy_charts_payload";
-    auto times = j["unix_seconds"].as<JsonArrayConst>(), values = j["price"].as<JsonArrayConst>();
-    if (strcmp(j["unit"] | "", "EUR / MWh") || times.size() < 2 || times.size() != values.size()) { return false; }
-    if (times.size() > MaxIntervals) { error = "invalid_interval_count"; return false; }
-    uint32_t resolution = 3600;
-    for (size_t i = 0; i < times.size(); ++i) {
-        if (!times[i].is<uint32_t>() || times[i].as<uint32_t>() < MinUtc) { return false; }
-        if (i) {
-            auto prev = times[i - 1].as<uint32_t>(), t = times[i].as<uint32_t>();
-            if (t <= prev || (t - prev) % 900) { return false; }
-            resolution = std::min(resolution, t - prev);
-        }
-    }
-    if (resolution != 900 && resolution != 3600) { return false; }
-    // Validate all values before touching the destination. The worker already owns
-    // an unpublished Series; another full-Series allocation here is redundant.
+    char const* schema = j["schema_version"] | "";
+    if (strncmp(schema, "2.", 2) || strcmp(j["endpoint"] | "", "price")
+            || strcmp(j["bidding_zone"] | "", "DE-LU") || strcmp(j["timezone"] | "", "Europe/Berlin")) { return false; }
+    if (!j["deprecated"].is<bool>()) { return false; }
+    if (j["deprecated"].as<bool>()) { error = "energy_charts_endpoint_deprecated"; return false; }
+    if (!j["interval_minutes"].is<unsigned>()) { return false; }
+    unsigned intervalMinutes = j["interval_minutes"].as<unsigned>();
+    if (intervalMinutes != 15 && intervalMinutes != 60) { return false; }
+    uint32_t resolution = intervalMinutes * 60;
+    uint32_t generatedAt;
+    if (!parseUtc(j["generated_at"] | static_cast<char const*>(nullptr), generatedAt)
+            || (generatedAt > now && generatedAt - now > 300)) { return false; }
+
+    auto series = j["series"].as<JsonArrayConst>(), data = j["data"].as<JsonArrayConst>();
+    if (series.size() != 1 || data.size() < 2) { return false; }
+    if (data.size() > MaxIntervals) { error = "invalid_interval_count"; return false; }
+    char const* seriesId = series[0]["id"] | "";
+    if (!*seriesId) { return false; }
+    char const* seriesUnit = series[0]["unit"] | "";
+    char const* unit = *seriesUnit ? seriesUnit : (j["unit"] | "");
+    if (strcmp(unit, "EUR/MWh") && strcmp(unit, "EUR / MWh")) { return false; }
+
+    // Validate the complete v2 envelope before touching the destination. Missing
+    // price rows stay real gaps; they are never stretched across unpublished data.
+    uint32_t previous = 0;
     size_t published = 0;
-    for (size_t i = 0; i < times.size(); ++i) {
-        if (times[i].as<uint32_t>() > UINT32_MAX - resolution) { return false; }
-        if (values[i].isNull()) { continue; }
-        if (!values[i].is<double>() || values[i].is<bool>()) { return false; }
-        double micros = values[i].as<double>() * 1000.0;
+    for (JsonVariantConst row : data) {
+        uint32_t timestamp;
+        if (!parseUtc(row["timestamp"] | static_cast<char const*>(nullptr), timestamp)
+                || timestamp > UINT32_MAX - resolution) { return false; }
+        if (previous && (timestamp <= previous || (timestamp - previous) % resolution)) { return false; }
+        previous = timestamp;
+        auto values = row["values"].as<JsonObjectConst>();
+        if (values.size() != 1 || !values.containsKey(seriesId)) { return false; }
+        auto value = values[seriesId];
+        if (value.isNull()) { continue; }
+        if (!value.is<double>() || value.is<bool>()) { return false; }
+        double micros = value.as<double>() * 1000.0;
         if (!std::isfinite(micros) || micros < INT32_MIN || micros > INT32_MAX) { return false; }
         ++published;
     }
     if (!published) { error = "prices_not_published"; return false; }
-    out.count = 0; out.generatedAt = now; out.sourceTimestampKnown = false;
-    snprintf(out.source, sizeof(out.source), "%s", "Energy-Charts.info / SMARD"); snprintf(out.currency, sizeof(out.currency), "%s", "EUR");
-    for (size_t i = 0; i < times.size(); ++i) {
-        if (values[i].isNull()) { continue; }
+
+    out.count = 0; out.generatedAt = generatedAt; out.sourceTimestampKnown = true;
+    snprintf(out.source, sizeof(out.source), "%s", "Energy-Charts.info / SMARD");
+    snprintf(out.currency, sizeof(out.currency), "%s", "EUR");
+    for (JsonVariantConst row : data) {
+        auto value = row["values"][seriesId];
+        if (value.isNull()) { continue; }
         auto& interval = out.intervals[out.count++]; interval = {};
-        interval.start = times[i]; interval.end = interval.start + resolution;
-        interval.value = std::llround(values[i].as<double>() * 1000.0);
+        parseUtc(row["timestamp"] | static_cast<char const*>(nullptr), interval.start);
+        interval.end = interval.start + resolution;
+        interval.value = std::llround(value.as<double>() * 1000.0);
     }
     error = nullptr; return true;
 }
