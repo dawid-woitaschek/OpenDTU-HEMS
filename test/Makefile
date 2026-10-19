@@ -116,8 +116,8 @@ $(TEST_OPTIMIZER_SERVICE): test_optimizer_service.cpp ../src/hems/optimizer/Serv
 $(TEST_TRANSPORT): test_energy_transport.cpp ../src/hems/energy/Transport.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -Itransport_stubs -I../include -I$(ARDUINOJSON) -o $@ $^
 
-$(TEST_NATIVE_ENERGY): test_native_energy.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp
-	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
+$(TEST_NATIVE_ENERGY): test_native_energy.cpp provider_fixtures.h ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
 $(TEST_SHADOW): test_shadow_optimizer.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^

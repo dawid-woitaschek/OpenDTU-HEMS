@@ -93,7 +93,9 @@
                               ? $t('hemsUi.' + providerMessage(statuses[index]!.last_error!))
                               : statuses?.[index]?.state === 'not_attempted'
                                 ? $t('hemsUi.planeNotAttempted')
-                                : $t(statuses?.[index]?.fetched_at ? 'hemsUi.ready' : 'hemsUi.waitingData')
+                                : statuses?.[index]?.state === 'loading'
+                                  ? $t('hemsUi.loadingEnergy')
+                                  : $t(statuses?.[index]?.fetched_at ? 'hemsUi.ready' : 'hemsUi.waitingData')
                     }}
                 </p>
                 <p v-else class="small text-body-secondary mt-3 mb-0">{{ $t('hemsUi.unsavedPlane') }}</p>

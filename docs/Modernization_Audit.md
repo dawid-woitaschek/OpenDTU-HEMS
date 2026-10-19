@@ -3,13 +3,11 @@
 Audit date: 2026-10-19. Base: `integration/hems-next` at
 `82a06f3e61028b5d47a6d369adc7bd9f72b020ca`.
 
-**This audit does not close the Energy-Charts migration.** Current official
-provider documentation/live APIs were denied by the environment proxy (CONNECT
-403). The requested network update was not present in the observed active
-configuration. No official replacement contract, timestamp semantics, quota or
-licensing terms are invented. Retaining an old interface merely because it is
-supported is explicitly rejected. The unresolved provider migration must be
-completed before treating this draft as the full modernization mission.
+Official current provider specifications and bounded live responses were supplied
+on 2026-10-19 and inspected directly. They supersede the earlier environment
+access limitation. Forecast.Solar's public contract and successful external
+requests are verified below; Energy-Charts v2 migration remains mandatory until
+the adapter is replaced. No raw private location/network capture is committed.
 
 Classification: A CURRENT, B OUTDATED—MIGRATE, C BLOCKED FROM MIGRATION,
 D UNCERTAIN, E NOT VERSIONED. "Current" below applies only to the stated
@@ -19,8 +17,9 @@ interface and checked official evidence, not every function in a dependency.
 
 | Area | Current interface at start | Newest suitable interface / official source | Status | Action |
 |------|---------------------------|--------------------------------------------|--------|--------|
-| Energy-Charts | Legacy `/price?bzn=DE-LU&start=<unix>&end=<unix>`; `unix_seconds`, `price`, `unit` | [Official OpenAPI](https://api.energy-charts.info/openapi.json), v2 suitability and exact contract not retrievable | D; mandatory migration outstanding | No guessed v2 parser and no legacy fallback. Removed the documentation's "still supported" justification. Strict existing parser/retention tests remain. |
-| Forecast.Solar | Public unversioned `/estimate/lat/lon/tilt/azimuth/kWp?time=utc&full=1`; `watt_hours_period` | [Official Swagger](https://api.forecast.solar/swagger.yaml), [estimate docs](https://doc.forecast.solar/api:estimate), blocked | D | No unverified API-version or payload change. Fixed independently reproducible diagnostics bug; expanded deterministic parameter/spacing/plane tests. |
+| Energy-Charts | Legacy `/price?bzn=DE-LU&start=<unix>&end=<unix>`; `unix_seconds`, `price`, `unit` | [Official OpenAPI](https://api.energy-charts.info/openapi.json), v2.0 contract supplied and verified | B; mandatory migration outstanding | No guessed v2 parser and no legacy fallback. Removed the documentation's "still supported" justification. Strict existing parser/retention tests remain. |
+| Forecast.Solar public estimate | Public unversioned `/estimate/lat/lon/tilt/azimuth/kWp?time=utc&full=1`; `watt_hours_period` | Supplied [official Swagger](https://api.forecast.solar/swagger.yaml) v7.41.0.2515 (2026-09-04), plus three successful live captures | A for endpoint/parameters; E for URL versioning | Public endpoint requires no key. Parameter ranges, East-negative/West-positive convention, UTC query and ResponseFull verified. No API-version migration needed. |
+| Forecast.Solar `full=1` | Dense hourly timeline required by the gap-rejecting parser | Missing from supplied Swagger; exact live East query succeeds and changes sparse output into dense hourly output | D: undocumented behavior | Retain deliberately. Sanitized dense/sparse fixtures enforce the dependency and failure atomicity; no invented night or daytime values. |
 | GitHub REST source comparison | Unversioned request defaults to old calendar version | `2026-03-10`: [official version table](https://github.com/github/docs/blob/main/data/tables/rest-api-versions.yml), [official OpenAPI](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.2026-03-10.json) | B → migrated | Explicit version and JSON Accept headers. Verified compare response still contains `ahead_by`, `behind_by`, `status`, `html_url`; test asserts headers. |
 | GitHub static firmware/profile assets | Raw anonymous HTTPS | [raw repository files](https://github.com/dawid-woitaschek/OpenDTU-HEMS) | E | Static catalog publication; no Contents API, account or token for browsing. Profile fetch pins immutable source SHA. |
 | GitHub Actions | checkout/setup-node/setup-python v7; cache v6; upload v7; download v8; github-script v9 | Official vendor tags: checkout 7.0.1, setup-node 7.1.0, setup-python 7.0.0, cache 6.1.0, upload 7.0.2, download 8.0.2, github-script 9.0.0 | A for these checked actions | Existing rolling major refs already resolve to current stable releases. Other third-party actions remain D below. |
@@ -94,7 +93,7 @@ was attempted and rejected for the concrete Vue compiler incompatibility below.
 | Vendored libraries/contracts | Frozen 1.1.1, SDM, VeDirectFrameHandler, SMLParser, CpuTemperature and internal helpers | Vendor repositories/documentation linked in source | D: latest upstream equivalence/licensing and local modifications not established. VE.Direct cites protocol 3.34 without a current official revision check. | No blanket current claim and no blind vendor subtree replacement. |
 | User-configured HTTP/MQTT meters/bridges | Local JSON/SML and device-specific URLs | Depends on configured hardware/server | E/D: no fixed vendor URL/version to upgrade globally | Keep configurable transport; per-device migrations need actual configured contract. |
 | Legacy local HTTP / optional MQTT TLS | User-selectable HTTP and CA configuration | HTTPS-capable device endpoints vary | D: no safe global switch for arbitrary local hardware; native providers remain verified HTTPS only. | No TLS weakening. Broader inherited transport hardening requires compatibility work. |
-| Provider API / source metadata / east-plane incident | See provider rows | Official sources blocked | D: no authoritative v2 schema or live request; no real-device diagnostic capture | Mandatory follow-up, not accepted API-version exception. |
+| Provider source metadata / East-plane incident | See provider rows | Supplied official schemas and externally successful bounded captures | Contracts verified; physical device incident remains unverified | Complete v2 migration and retain specific `full=1` uncertainty; reproduce device failure if it recurs. |
 
 ## Firmware update state and provenance
 
@@ -131,10 +130,40 @@ separates not-attempted, loading, success, failure and disabled. Last successful
 fetch time stays available. Aggregate errors attach to the plane being combined;
 overview errors name each failed plane and include bounded HTTP/TLS detail.
 
-This does **not** prove the physical east-plane failure was stale UI, TLS, DNS,
-quota, resource pressure or the provider. Current upstream contract and live TLS
-compatibility remain unverified. No successful aggregate is fabricated, no TLS
-fallback is introduced, and no provider was hammered.
+The supplied external East and West captures both return HTTP 200, code 0 and
+success; the exact East `time=utc&full=1` request also succeeds. All verify the
+public TLS certificate and hostname using TLS 1.2, with Let's Encrypt YR2 as
+issuer. East parameters are valid; provider rejection, global outage and rejection
+of `full=1` are not general explanations for this incident. West was deliberately
+requested twice: remaining 11 → 9 → 8 is explained, with no missing requester.
+Observed quota is 12 requests per 3600 seconds, not an invented fixed entitlement.
+
+The supplied Swagger does not list `full`. Without it, both captures have a
+48,849-second overnight gap and irregular sunrise/sunset boundaries. With it,
+the East capture has 47 continuous hourly boundaries, explicit night zeros, and
+46 parsed intervals. Removing the option alone would break the current parser's
+maximum-one-hour gap rule. Repository history introduced it with the native
+adapter and supplies no independent authoritative guarantee. Retaining it is the
+lowest-risk option; sparse gaps still fail atomically rather than being filled.
+
+Per-plane diagnostics additionally expose last successful provider generation
+and fetch timestamps/ages, quota period/limit/remaining and request retry delay.
+Provider generation is not market publication time. Loading no longer reuses a
+previous success label. HTTP-body rate-limit errors retain longer quota periods
+and never shorten an existing Retry-After. Dense/sparse/irregular-boundary and
+East-first failure regressions use sanitized deterministic data.
+
+Firmware trust includes ISRG Root X1/X2, and hostname/SNI, CA-chain and clock
+checks stay intact. Let's Encrypt's [official chain documentation](https://letsencrypt.org/certificates/)
+identifies the default YR2 → Root YR → ISRG Root X1 chain. The official YR2
+intermediate and cross-signed Root YR verify successfully with the existing
+bundled roots using OpenSSL. The existing anchors should therefore validate the
+default chain. This does not prove the exact chain served to ESP32 or its mbedTLS
+handshake/resource behavior. No roots or verification settings are changed.
+The physical East-plane failure remains unresolved: check live ESP32 DNS/TLS,
+heap/stack, scheduling/quota, transient failures and pre-fix stale diagnostics.
+Desktop curl success does not establish device success. No successful aggregate
+is fabricated and no additional live requests are required for these tests.
 
 ## Repository catalog
 
@@ -184,8 +213,8 @@ merging/running its workflow on the canonical ref.
 
 | Area | Reason deferred | Required decision/validation |
 |------|-----------------|------------------------------|
-| Energy-Charts v2 | Official contract inaccessible | Check endpoint, parameters, units, resolution, nulls, source/generated semantics, rate limits, license/attribution; strict parser/filter migration and live smoke request. No old-API-support exception. |
-| Forecast.Solar live compatibility / east failure | Upstream hosts blocked; no device capture | One bounded official response plus real failing-plane HTTP/DNS/TLS/memory diagnostics; verify clock/trust/parameters and actual quota. |
+| Energy-Charts v2 | Current official contract and successful external response supplied | Implement strict parser/filter migration and deterministic contract/coverage tests. No old-API-support exception. |
+| Forecast.Solar physical East failure | External East/West/full queries succeed; no live ESP32 incident capture | Reproduce on updated physical firmware if it recurs; inspect named-plane HTTP/DNS/TLS, quota and heap/stack. `full=1` remains specifically undocumented. |
 | Arduino 3 / IDF driver port | Changed shared SPI ownership and network initialization | Port W5500/netif/mbedTLS without hardware semantics change; test Ethernet/Wi-Fi, TLS, stack/heap, CAN/UART/radio and firmware size. |
 | Broad vendor/dependency inventory D rows | No verified current authoritative mapping/release comparison | Resolve each named uncertainty, not just a deprecation search. |
 | Permission editors | Settings and Devices both edit storage/EVSE permission, with different surrounding context | Product decision before removing a permission-editing entry point; keep control semantics and persistence intact. |
@@ -214,16 +243,16 @@ rendered modernization (360/1440), HEMS and economic suites (320/360/768/1440);
 full production C++ lint, frontend lint, Prettier, Vue/TypeScript and production
 build; workflow YAML syntax and whitespace checks. All passed.
 
-Final target build: **generic_esp32s3_usb SUCCESS**. Static RAM **116456 / 327680
-bytes (35.5%)**; linked flash **2861249 / 3932160 bytes (72.8%)**; OTA binary
-**2861616 bytes**. No PSRAM flag/dependency was added. These are static/linker
+Final target build: **generic_esp32s3_usb SUCCESS**. Static RAM **116512 / 327680
+bytes (35.6%)**; linked flash **2861593 / 3932160 bytes (72.8%)**; OTA binary
+**2861952 bytes**. No PSRAM flag/dependency was added. These are static/linker
 measurements, not proof of worst-case live TLS heap/stack headroom.
 
 Bounded network checks: generated public catalog URL returned **404**, expected
 before first canonical publication; one pinned official profile returned **200**,
-4457 bytes, SHA-256 equal to the repository source. Provider documentation/API
-access remained proxy-denied; no successful Energy-Charts/Forecast.Solar live
-validation is claimed. No complete provider payloads were logged.
+4457 bytes, SHA-256 equal to the repository source. Supplied official provider schemas and external HTTP 200 captures are now
+verified. No direct live ESP32 provider validation is claimed. No raw private
+provider captures are committed or logged.
 
 Yarn 4 validation additionally uses a fresh empty node_modules installation from
 the immutable lockfile with network disabled and dependency lifecycle scripts

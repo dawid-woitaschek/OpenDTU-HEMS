@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Native.h>
+#include "provider_fixtures.h"
 #include <cassert>
 #include <cstring>
+#include <ctime>
 #include <iostream>
 using namespace Hems::Energy;
 constexpr uint32_t Now = 1792180800;
@@ -19,6 +21,20 @@ JsonDocument solar()
     auto p = d["result"]["watt_hours_period"].to<JsonObject>();
     p["2026-10-17 00:00:00"] = 0; p["2026-10-17 01:00:00"] = 0;
     p["2026-10-17 02:00:00"] = 1000; p["2026-10-17 03:00:00"] = 500;
+    return d;
+}
+// Synthetic contract examples, not copies of private live provider captures.
+JsonDocument solarTimeline(bool dense)
+{
+    auto d = solar(); auto periods = d["result"]["watt_hours_period"].to<JsonObject>();
+    uint32_t start = 0; assert(parseUtc("2026-10-17T00:00:00Z", start));
+    for (unsigned hour = 0; hour <= 48; ++hour) {
+        auto dayHour = hour % 24;
+        if (!dense && (dayHour < 6 || dayHour > 18)) { continue; }
+        time_t utc = start + hour * 3600; struct tm date {}; gmtime_r(&utc, &date);
+        char key[32]; strftime(key, sizeof(key), "%Y-%m-%dT%H:%M:%SZ", &date);
+        periods[key] = dayHour > 6 && dayHour < 18 ? 100 : 0;
+    }
     return d;
 }
 int main()
@@ -60,6 +76,30 @@ int main()
     for (auto bad : {"2026-02-30T00:00:00Z", "2026-10-17 12:00:00", "2026-10-17T25:00:00Z", "2026-10-17T00:00:00+20:00"}) { assert(!parseUtc(bad, x)); }
     d = solar(); assert(parseForecastSolar(d.as<JsonVariantConst>(), a, info, error)); assert(a.count == 3 && a.intervals[0].value == 0);
     assert(a.intervals[1].value == 1000 && info.rateRemaining == 5);
+    auto dense = solarTimeline(true);
+    assert(parseForecastSolar(dense.as<JsonVariantConst>(), output, info, error) && output.count == 48);
+    assert(output.intervals[0].value == 0 && output.intervals[7].value == 100 && output.intervals[24].value == 0);
+    auto retainedDense = output; auto sparse = solarTimeline(false);
+    assert(!parseForecastSolar(sparse.as<JsonVariantConst>(), output, info, error) && !strcmp(error, "forecast_interval_gap"));
+    assert(!memcmp(&retainedDense, &output, sizeof(output))); // No invented overnight intervals or partial output.
+    // Sunrise/sunset boundaries shorter than one hour remain supported.
+    JsonDocument irregular; irregular["message"] = d["message"];
+    auto periods = irregular["result"]["watt_hours_period"].to<JsonObject>();
+    periods["2026-10-17T06:17:00Z"] = 0; periods["2026-10-17T07:00:00Z"] = 43;
+    periods["2026-10-17T07:43:00Z"] = 86;
+    assert(parseForecastSolar(irregular.as<JsonVariantConst>(), output, info, error));
+    assert(output.count == 2 && output.intervals[0].value == 60 && output.intervals[1].value == 120);
+    // Sanitized supplied live shapes: the exact full query succeeds, while
+    // sparse public estimates fail atomically at the overnight gap.
+    auto fullCapture = ProviderFixtures::load("forecast-east-full.json"); info = {};
+    assert(parseForecastSolar(fullCapture.as<JsonVariantConst>(), output, info, error));
+    assert(output.count == 46 && info.rateLimit == 12 && info.rateRemaining == 8 && info.ratePeriodSeconds == 3600);
+    auto acceptedCapture = output;
+    for (auto file : {"forecast-east.json", "forecast-west.json"}) {
+        auto capture = ProviderFixtures::load(file); info = {};
+        assert(!parseForecastSolar(capture.as<JsonVariantConst>(), output, info, error));
+        assert(!strcmp(error, "forecast_interval_gap") && !memcmp(&acceptedCapture, &output, sizeof(output)));
+    }
     b = a; for (size_t i = 0; i < b.count; ++i) { b.intervals[i].value *= 2; }
     assert(aggregate(a, b, output, error)); assert(output.intervals[1].value == 3000);
     b.intervals[0].end -= 100; assert(!aggregate(a, b, output, error));
@@ -67,6 +107,11 @@ int main()
     d["result"]["watt_hours_period"].remove("2026-10-17 01:00:00"); assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error));
     assert(!memcmp(&saved, &a, sizeof(a)));
     d = solar(); d["message"]["code"] = 429; assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error)); assert(info.retrySeconds >= 7200);
+    d["message"]["ratelimit"]["period"] = 10800; info = {};
+    assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error));
+    assert(info.ratePeriodSeconds == 10800 && info.retrySeconds == 10800 && info.rateLimit == 12);
+    info.retrySeconds = 86400;
+    assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error) && info.retrySeconds == 86400);
     d = solar(); d["message"]["code"] = 500; assert(!parseForecastSolar(d.as<JsonVariantConst>(), a, info, error));
     d = solar(); d["message"]["ratelimit"]["remaining"] = 0; info = {};
     info.retrySeconds = 86400;

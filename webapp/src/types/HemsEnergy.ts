@@ -5,9 +5,23 @@ export interface PlaneStatus {
     state?: string;
     attempted_at?: number;
     fetched_at: number;
+    generated_at?: number;
+    provider_age_seconds?: number | null;
+    transport_age_seconds?: number | null;
     last_error: string | null;
     http_status?: number;
-    request?: { dns?: number; tls_error?: number; tls_error_text?: string; http_error?: string };
+    rate_limit?: number;
+    rate_remaining?: number;
+    request?: {
+        dns?: 'not_attempted' | 'resolved' | 'failed';
+        tls_error?: number;
+        tls_error_text?: string;
+        http_error?: string;
+        duration_ms?: number;
+        payload_bytes?: number;
+        rate_period_seconds?: number;
+        retry_after_seconds?: number;
+    };
 }
 export type EnergyKind = 'tariff' | 'forecast';
 export type EnergyView = 'overview' | 'settings' | 'diagnostics';

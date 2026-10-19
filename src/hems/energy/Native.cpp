@@ -58,6 +58,9 @@ uint32_t retryAfterSeconds(char const* text, uint32_t now)
 }
 void forecastUrl(Plane const& p, char* out, size_t capacity)
 {
+    // full=1 supplies the dense hourly night periods required by this parser.
+    // It is empirically supported but absent from the current public Swagger;
+    // removing it requires a separate, proven sparse-period interpretation.
     snprintf(out, capacity, "https://api.forecast.solar/estimate/%.6f/%.6f/%u/%d/%.3f?time=utc&full=1",
         p.latitudeE6 / 1000000.0, p.longitudeE6 / 1000000.0, unsigned(p.tilt), static_cast<int>(p.azimuth), p.peakW / 1000.0);
 }
@@ -128,14 +131,17 @@ bool parseForecastSolar(JsonVariantConst j, Series& out, NativeInfo& info, char 
 {
     error = "invalid_forecast_solar_payload";
     auto message = j["message"];
+    if (message["ratelimit"]["limit"].is<int32_t>()) { info.rateLimit = message["ratelimit"]["limit"]; }
+    if (message["ratelimit"]["remaining"].is<int32_t>()) { info.rateRemaining = message["ratelimit"]["remaining"]; }
+    if (message["ratelimit"]["period"].is<uint32_t>()) { info.ratePeriodSeconds = message["ratelimit"]["period"]; }
+    if (info.rateRemaining == 0 || message["code"] == 429) {
+        info.retrySeconds = std::max(info.retrySeconds, std::max(static_cast<uint32_t>(7200), info.ratePeriodSeconds));
+    }
     if (!message["code"].is<int>() || message["code"].as<int>() != 0 || strcmp(message["type"] | "", "success")) {
-        if (message["code"] == 429) { info.retrySeconds = std::max(info.retrySeconds, static_cast<uint32_t>(7200)); error = "provider_rate_limited"; }
+        if (message["code"] == 429) { error = "provider_rate_limited"; }
         else { error = "forecast_solar_error"; }
         return false;
     }
-    if (message["ratelimit"]["limit"].is<int32_t>()) { info.rateLimit = message["ratelimit"]["limit"]; }
-    if (message["ratelimit"]["remaining"].is<int32_t>()) { info.rateRemaining = message["ratelimit"]["remaining"]; }
-    if (info.rateRemaining == 0) { info.retrySeconds = std::max(info.retrySeconds, std::max(static_cast<uint32_t>(7200), message["ratelimit"]["period"] | static_cast<uint32_t>(0))); }
     uint32_t generatedAt;
     if (!parseUtc(message["info"]["time_utc"], generatedAt)) { return false; }
     auto periods = j["result"]["watt_hours_period"].as<JsonObjectConst>();

@@ -6,7 +6,7 @@ namespace Hems::Energy {
 struct NativeInfo {
     int16_t httpStatus = 0;
     int32_t rateLimit = -1, rateRemaining = -1;
-    uint32_t retrySeconds = 0;
+    uint32_t retrySeconds = 0, ratePeriodSeconds = 0;
     int32_t tlsError = 0; // WiFiClientSecure connect result, when negative; -1 is ambiguous.
     int8_t dns = -1; // -1: not attempted, 0: resolution failed, 1: resolved.
     char httpError[40] {}, tlsErrorText[96] {};

@@ -38,7 +38,7 @@ The public [Energy-Charts API and OpenAPI contract](https://api.energy-charts.in
 were inspected on 2026-10-17, including its current `/price?bzn=DE-LU` response:
 `unix_seconds`, nullable `price`, `unit`, and `license_info`. This describes the implemented legacy adapter, not approval to retain v1. The
 current-contract migration remains mandatory; see [Modernization audit](Modernization_Audit.md)
-for upstream-access blockers and outstanding contract verification. This adapter supplies
+for current migration status and contract verification. This adapter supplies
 UTC interval starts, avoiding local-time ambiguity. Germany/Luxembourg is the deliberate bounded region in V1.
 The provider queries the complete German local today and tomorrow, using CET/CEST
 calendar boundaries (23/25-hour days). It handles hourly and quarter-hour series,
@@ -53,16 +53,20 @@ The API documentation explicitly permits public access and specifies attribution
 rate limiting and commercial access terms. Commercial redistribution/operators
 must review those terms. This firmware does not use Tinkerforge's backend.
 
-[Forecast.Solar's official public API description](https://forecast.solar/) provides
-today/tomorrow hourly forecasts without an API key. Its linked
-[Swagger contract](https://api.forecast.solar/swagger.yaml) and
-[estimate documentation](https://doc.forecast.solar/api:estimate) are the reference
-links. The documentation host was blocked by the research service's robots policy
-and the workspace's outbound policy; the browser research tool could not decode
-the Swagger YAML. The official homepage's request/response contract and current
-public clients informed the adapter; **live `time=utc&full=1` response compatibility
-still needs a real-provider smoke test**. This limitation is separate from tested
-software parsing. No live provider requests run in CI.
+[Forecast.Solar's official Swagger](https://api.forecast.solar/swagger.yaml)
+v7.41.0.2515, dated 2026-09-04, was supplied with bounded live captures on
+2026-10-19. It verifies the public key-free estimate endpoint, parameter ranges,
+azimuth convention, `time=utc`, and ResponseFull's four result maps. Both real
+planes succeeded externally; East also succeeded with the exact firmware query
+`time=utc&full=1`. This verifies the external contract, not ESP32 operation.
+
+`full=1` is absent from that Swagger but empirically changes sparse daylight
+periods into a dense hourly timeline with explicit night zeros. The current
+parser rejects gaps longer than one hour; the sparse captures contain an
+overnight gap. The option is therefore retained deliberately. No arbitrary
+missing periods are interpolated. Sanitized fixtures cover both shapes; no live
+provider requests run in CI. The original device East failure still requires
+physical DNS/TLS/resource diagnostics; see [the audit](Modernization_Audit.md).
 
 The current Tinkerforge reference was inspected at
 [`63b24ce1bae2df8f123de36aab516dfc9ab9c5d2`](https://github.com/Tinkerforge/esp32-firmware/tree/63b24ce1bae2df8f123de36aab516dfc9ab9c5d2/software/src/modules):

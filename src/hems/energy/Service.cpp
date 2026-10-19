@@ -43,6 +43,7 @@ void nativeJson(NativeInfo const& info, JsonObject out)
     out["tls_error_text"] = info.tlsErrorText[0] ? info.tlsErrorText : nullptr;
     out["dns"] = info.dns < 0 ? "not_attempted" : info.dns ? "resolved" : "failed";
     out["duration_ms"] = info.durationMs; out["payload_bytes"] = info.payloadBytes; out["json_peak_bytes"] = info.jsonPeak;
+    out["rate_period_seconds"] = info.ratePeriodSeconds; out["retry_after_seconds"] = info.retrySeconds;
     serializeMemory(info.before, out["before"].to<JsonObject>());
     serializeMemory(info.connected, out["connected"].to<JsonObject>());
     serializeMemory(info.decoded, out["decoded"].to<JsonObject>());
@@ -197,7 +198,14 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
             p["state"] = !source.settings().planes[i].enabled ? "disabled" : !_planes[i].attemptedAt ? "not_attempted"
                 : _planes[i].error ? "failed" : _planes[i].info.httpStatus == 200 ? "success" : "loading";
             p["fetched_at"] = _planes[i].fetchedAt;
+            // These timestamps describe the last successful plane parse, which
+            // need not have produced an accepted complete multi-plane aggregate.
+            p["generated_at"] = _planes[i].generatedAt;
+            p["provider_age_seconds"] = nullptr; p["transport_age_seconds"] = nullptr;
+            if (_planes[i].generatedAt) { p["provider_age_seconds"] = now >= _planes[i].generatedAt ? now - _planes[i].generatedAt : 0; }
+            if (_planes[i].fetchedAt) { p["transport_age_seconds"] = now >= _planes[i].fetchedAt ? now - _planes[i].fetchedAt : 0; }
             p["http_status"] = _planes[i].info.httpStatus; p["last_error"] = _planes[i].error; p["rate_remaining"] = _planes[i].info.rateRemaining;
+            p["rate_limit"] = _planes[i].info.rateLimit;
             nativeJson(_planes[i].info, p["request"].to<JsonObject>());
         }
     }
@@ -375,7 +383,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 _native[static_cast<unsigned>(domain)] = info;
                 if (settings.source == Source::ForecastSolar) {
                     auto& plane = _planes[i];
-                    if (ok) { plane.fetchedAt = utcNow(); }
+                    if (ok) { plane.fetchedAt = utcNow(); plane.generatedAt = (merge ? *single : *series).generatedAt; }
                     plane.error = error; plane.info = info;
                 }
             }

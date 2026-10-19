@@ -79,6 +79,7 @@ int main()
     doc.clear(); doc["message"]["code"] = 0; doc["message"]["type"] = "success";
     time_t now = time(nullptr); struct tm utc {}; gmtime_r(&now, &utc); char key[32]; strftime(key, sizeof(key), "%Y-%m-%dT%H:%M:%S+00:00", &utc);
     doc["message"]["info"]["time_utc"] = key;
+    doc["message"]["ratelimit"]["limit"] = 12; doc["message"]["ratelimit"]["period"] = 3600;
     for (unsigned i = 0; i < 5; ++i) { time_t t = now + i * 3600; gmtime_r(&t, &utc); strftime(key, sizeof(key), "%Y-%m-%d %H:%M:%S", &utc); doc["result"]["watt_hours_period"][key] = i ? 1000 : 0; }
     httpBody.clear(); serializeJson(doc, httpBody);
     // One, two and six configured planes all use the same serial worker.
@@ -104,6 +105,29 @@ int main()
     assert(api["plane_status"][0]["http_status"] == 200 && api["plane_status"][1]["http_status"] == -1);
     assert(api["plane_status"][1]["name"] == "East");
     assert(api["plane_status"][1]["state"] == "failed" && api["plane_status"][1]["attempted_at"].as<uint32_t>() > 0);
+    assert(api["plane_status"][0]["generated_at"] == now && api["plane_status"][0]["provider_age_seconds"] == 0);
+    assert(api["plane_status"][0]["transport_age_seconds"] == 0);
+    assert(api["plane_status"][0]["rate_limit"] == 12);
+    assert(api["plane_status"][0]["request"]["rate_period_seconds"] == 3600);
+    failSolarRequest = 0;
+    // A failure on East before West is attempted cannot present West's prior
+    // successful transport as a result of the current refresh.
+    strcpy(settings.planes[0].name, "East"); strcpy(settings.planes[1].name, "West");
+    assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; testNow += 15000;
+    assert(service.requestRefresh(Domain::Forecast));
+    scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Forecast, data, status); accepted = data; fetchedAt = status.fetchedAt;
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    auto westFetched = api["plane_status"][1]["fetched_at"].as<uint32_t>();
+    testNow += 7200000; solarRequests = 0; failSolarRequest = 1;
+    scheduler.execute(); runWorkers();
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    assert(solarRequests == 1 && api["plane_status"][0]["name"] == "East" && api["plane_status"][0]["state"] == "failed");
+    assert(api["plane_status"][1]["name"] == "West" && api["plane_status"][1]["state"] == "not_attempted");
+    assert(api["plane_status"][1]["attempted_at"] == 0 && api["plane_status"][1]["http_status"] == 0);
+    assert(api["plane_status"][1]["fetched_at"] == westFetched && api["plane_status"][1]["generated_at"] == now);
+    assert(api["plane_status"][1]["rate_limit"] == -1 && api["plane_status"][1]["last_error"].isNull());
+    assert(!service.requestRefresh(Domain::Forecast)); // A failed cycle cannot spin immediately.
     failSolarRequest = 0;
     // A server hold on HTTP 200 also stops the remaining planes and retains the
     // complete previously accepted site. It cannot be bypassed manually.
@@ -115,6 +139,7 @@ int main()
     auto held = service.requestRefresh(Domain::Forecast);
     assert(!held && !strcmp(held.reason, "provider_backoff") && held.retryAfterSeconds == 900);
     api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    assert(api["plane_status"][0]["request"]["retry_after_seconds"] == 900);
     assert(api["plane_status"][1]["state"] == "not_attempted");
     assert(api["plane_status"][1]["last_error"].isNull() && api["plane_status"][1]["http_status"] == 0);
     nativeRetrySeconds = 0;
