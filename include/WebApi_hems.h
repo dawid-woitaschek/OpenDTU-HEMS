@@ -8,7 +8,12 @@ public:
     void init(AsyncWebServer& server);
 
 private:
+    void onOptimizer(AsyncWebServerRequest* request);
+    void initEnergy(AsyncWebServer& server);
+    void onEnergyGet(AsyncWebServerRequest* request);
+    void onEnergyPost(AsyncWebServerRequest* request);
     void onStatus(AsyncWebServerRequest* request);
+    void onCommand(AsyncWebServerRequest* request);
     void onConfigGet(AsyncWebServerRequest* request);
     void onConfigPost(AsyncWebServerRequest* request);
 };

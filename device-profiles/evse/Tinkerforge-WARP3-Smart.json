@@ -1,17 +1,17 @@
 {
-  "schema": "opendtu-hems-modbus-profile/v1",
+  "schema": "opendtu-hems-modbus-profile/v2",
   "id": "tinkerforge.warp3-smart",
   "capabilities": ["evse"],
   "metadata": {
     "vendor": "Tinkerforge",
     "model": "WARP3 Smart",
-    "source": "Official Tinkerforge WARP Charger Modbus register table",
-    "source_revision": "cf09655aa599d708da70c383ab3c8d02876ec62d",
-    "description": "Vendor-documented read-only WARP3 Smart profile for manual OpenDTU-HEMS import"
+    "source": "Official Tinkerforge WARP3 Modbus register table and firmware source",
+    "source_revision": "register-table-v2 / esp32-firmware-05762aabb8213219d63f8a52fe998f7e091edb2e",
+    "description": "WARP3 Smart telemetry without meter values plus bounded current control"
   },
   "provenance": {
-    "author": "Tinkerforge documentation; OpenDTU-HEMS adaptation",
-    "license": "Profile adaptation GPL-2.0-or-later; upstream documentation cited"
+    "author": "Tinkerforge documentation/source; OpenDTU-HEMS adaptation",
+    "license": "Profile adaptation GPL-2.0-or-later; upstream documentation/source cited"
   },
   "transport": {
     "protocol": "modbus_tcp",
@@ -19,6 +19,14 @@
     "unit_id": 1,
     "address_base": 0
   },
+  "identity": {
+    "kind": "device_instance",
+    "source": "Tinkerforge esp32-firmware cb474182: Modbus box_id -> ESP32Common eFuse UID; see HEMS_CONTROL.md",
+    "fields": [
+      { "space": "input", "address": 10, "count": 2, "encoding": "register_bytes" }
+    ]
+  },
+  "recovery": { "release_replay_safe": false },
   "telemetry": [
     {
       "key": "register_table_version",
@@ -28,15 +36,6 @@
       "type": "uint32",
       "min": 2,
       "max": 5
-    },
-    {
-      "key": "uptime_s",
-      "space": "input",
-      "address": 12,
-      "count": 2,
-      "type": "uint32",
-      "unit": "s",
-      "min": 0
     },
     {
       "key": "iec_state",
@@ -67,5 +66,43 @@
       "min": 0,
       "max": 32
     }
-  ]
+  ],
+  "control": {
+    "release": [
+      {
+        "address": 1002,
+        "type": "uint32",
+        "value": 32000
+      }
+    ],
+    "operations": [
+      {
+        "key": "set_current_a",
+        "input": {
+          "unit": "A",
+          "min": 6,
+          "max": 32,
+          "step": 1
+        },
+        "writes": [
+          {
+            "address": 1002,
+            "type": "uint32",
+            "value": "input",
+            "scale": 0.001
+          }
+        ]
+      },
+      {
+        "key": "stop_charging",
+        "writes": [
+          {
+            "address": 1002,
+            "type": "uint32",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  }
 }

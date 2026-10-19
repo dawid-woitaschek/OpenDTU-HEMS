@@ -1,0 +1,38 @@
+export const controlLabels: Record<string, string> = {
+    set_current_a: 'Set current',
+    set_charge_power_w: 'Charge power',
+    set_discharge_power_w: 'Discharge power',
+    set_target_soc_pct: 'Target SoC',
+    stop: 'Stop',
+    release: 'Release control',
+    device_permission_missing: 'Monitor only — enable HEMS control to command this device type.',
+    device_not_configured: 'Configure the device endpoint and select an imported profile.',
+    device_not_enabled: 'Enable HEMS and this device to read fresh telemetry.',
+    profile_not_controllable: 'Update the bound profile to enable semantic control.',
+    device_unreachable: 'Device is unreachable. Control returns when communication recovers.',
+    telemetry_not_fresh: 'Waiting for fresh, valid telemetry.',
+    command_busy: 'Device worker is busy. Please wait.',
+    profile_not_loaded: 'No compatible runtime profile loaded. Import and bind a profile in Devices.',
+    schema_v1_read_only: 'Schema v1 is telemetry only. Replace this runtime profile with a schema v2 control profile.',
+    missing_control_metadata:
+        'This runtime profile has no control operations. Import a newer version of the same profile ID.',
+    invalid_control_metadata: 'Control metadata cannot produce a valid bounded command.',
+    missing_release: 'This profile has no semantic release operation. Replace it with a complete control profile.',
+    pending: 'Queued',
+    running: 'Running',
+    succeeded: 'Succeeded',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    ready: 'Semantic control supported',
+    None: 'No error',
+    none: 'No error',
+    Timeout: 'Timed out',
+    Network: 'Network unavailable',
+    WriteFailed: 'Modbus write failed',
+    ReadbackFailed: 'Register readback failed',
+    VerificationFailed: 'Register readback did not match',
+    AuthorizationRevoked: 'Permission or configuration changed during the command',
+};
+export function controlText(value: string) {
+    return controlLabels[value] ?? value.replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+}

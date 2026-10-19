@@ -70,7 +70,7 @@ bool Utils::checkJsonAlloc(const JsonDocument& doc, const char* function, const 
     return true;
 }
 
-/// @brief Remove all files but the PINMAPPING_FILENAME
+/// @brief Reset configuration while preserving pin mapping and recovery evidence.
 void Utils::removeAllFiles()
 {
     auto root = LittleFS.open("/");

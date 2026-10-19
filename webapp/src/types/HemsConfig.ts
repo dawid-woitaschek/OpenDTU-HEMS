@@ -1,5 +1,8 @@
+export type HemsDeviceControlMode = 'monitor' | 'hems';
+
 export interface HemsConfig {
     version: number;
+    mode: 'Disabled' | 'Monitor' | 'Active';
     enabled: boolean;
     warp: {
         enabled: boolean;
@@ -12,5 +15,6 @@ export interface HemsConfig {
         profile: string;
         port: number;
         unit: number;
+        control_mode: HemsDeviceControlMode;
     };
 }

@@ -1,11 +1,24 @@
 export const hemsSupplementMessages = {
     en: {
         hems: {
-            Warp: 'EV charger — read only',
+            Active: 'Active',
+            Warp: 'EV charger / EVSE',
             WarpEnabled: 'EV charger telemetry enabled',
-            WarpSetupHint: 'Current read-only provider: WARP Modbus TCP. Configure the EV charger host and TCP port.',
+            WarpSetupHint:
+                'Configure the EV charger via Modbus TCP. Select an imported EVSE profile, then configure host and TCP port.',
+            EvseSelectProfile: 'Select an EVSE profile…',
+            EvseNoProfiles: 'No compatible EVSE profile imported',
+            EvseNoProfilesHint: 'No EVSE profile is available. Import a compatible Modbus profile below first.',
+            EvseProfileRequired:
+                'EV charger telemetry cannot be enabled without an EVSE profile. Select a profile first.',
+            EvseProfileUnavailable: 'The selected EVSE profile is not available. Select an existing EVSE profile.',
             ConfigLoadFailed: 'HEMS configuration could not be loaded.',
             ConfigSaveFailed: 'HEMS configuration could not be saved.',
+            ControlMode: 'Control mode',
+            ControlMonitorOnly: 'Monitor only',
+            ControlHems: 'HEMS control',
+            ControlModeHint:
+                'Monitor only uses telemetry without normal writes. HEMS control enables manual commands and automatic writes in Active.',
             InvalidWallboxHost: 'Enter a valid hostname or IPv4 address. IPv4 octets must be between 0 and 255.',
             InvalidWallboxPort: 'Enter a valid wallbox TCP port between 1 and 65535.',
             NormalizedState: 'Normalized HEMS state',
@@ -15,7 +28,8 @@ export const hemsSupplementMessages = {
             StorageSoc: 'Storage SoC',
             EvseVehicle: 'EV connected',
             Constraints: 'Effective constraints',
-            ConstraintsHint: 'Read-only view of the effective permissions and power limits after constraint composition.',
+            ConstraintsHint:
+                'Read-only view of the effective permissions and power limits after constraint composition.',
             StorageChargeAllowed: 'Storage charging allowed',
             StorageDischargeAllowed: 'Storage discharging allowed',
             MaxChargePower: 'Maximum storage charge power',
@@ -24,9 +38,9 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Fresh',
             QualityStale: 'Stale',
             QualityUnknown: 'Unknown',
-            EvProtectionShadow: 'EV protection — Shadow',
+            EvProtectionShadow: 'EV protection',
             EvProtectionShadowHint:
-                'Evaluates whether EV charging should block storage discharge. Shadow mode only observes and proposes; it does not change effective constraints or write to hardware.',
+                'Active enforces EV discharge protection only when Storage control is enabled; Monitor shows the proposal.',
             EvProtectionState: 'Policy state',
             EvProtectionCharging: 'EV charging',
             EvProtectionConditionAge: 'Condition active for',
@@ -39,7 +53,7 @@ export const hemsSupplementMessages = {
             },
         },
         storage: {
-            Title: 'Storage — read only',
+            Title: 'Storage',
             Enabled: 'Storage telemetry enabled',
             Profile: 'Modbus profile',
             SelectProfile: 'Select a storage profile…',
@@ -70,6 +84,7 @@ export const hemsSupplementMessages = {
             ModbusEndpoint: 'Modbus TCP endpoint',
         },
         profiles: {
+            Hint: 'Importing a profile does not enable a device or grant write permission. Write access is enabled separately per device type.',
             Capabilities: 'Suitable for',
             UsedBy: 'Used by',
             NoCapabilities: 'No supported HEMS consumer',
@@ -82,23 +97,39 @@ export const hemsSupplementMessages = {
     },
     de: {
         hems: {
-            Warp: 'Wallbox — nur Lesezugriff',
+            Active: 'Aktiv',
+            Warp: 'Wallbox / EVSE',
             WarpEnabled: 'Wallbox-Telemetrie aktiviert',
             WarpSetupHint:
-                'Aktuell wird die Wallbox über den WARP-Modbus-TCP-Provider ausgelesen. Hostname/IP-Adresse und TCP-Port der Wallbox konfigurieren.',
+                'Wallbox über Modbus TCP anbinden. Ein importiertes EVSE-Profil auswählen und anschließend Hostname/IP-Adresse sowie TCP-Port konfigurieren.',
+            EvseSelectProfile: 'EVSE-Profil auswählen…',
+            EvseNoProfiles: 'Kein geeignetes EVSE-Profil importiert',
+            EvseNoProfilesHint:
+                'Es ist kein EVSE-Profil verfügbar. Importiere unten zuerst ein kompatibles Modbus-Profil.',
+            EvseProfileRequired:
+                'Wallbox-Telemetrie kann ohne EVSE-Profil nicht aktiviert werden. Wähle zuerst ein Profil aus.',
+            EvseProfileUnavailable:
+                'Das ausgewählte EVSE-Profil ist nicht verfügbar. Wähle ein vorhandenes EVSE-Profil aus.',
             ConfigLoadFailed: 'Die HEMS-Konfiguration konnte nicht geladen werden.',
             ConfigSaveFailed: 'Die HEMS-Konfiguration konnte nicht gespeichert werden.',
+            ControlMode: 'Steuermodus',
+            ControlMonitorOnly: 'Nur überwachen',
+            ControlHems: 'HEMS-Steuerung',
+            ControlModeHint:
+                'Nur überwachen verwendet die Telemetrie ohne normale Schreibzugriffe. HEMS-Steuerung erlaubt manuelle Befehle und im Modus Aktiv automatische Schreibzugriffe.',
             InvalidWallboxHost:
                 'Gib einen gültigen Hostnamen oder eine gültige IPv4-Adresse ein. IPv4-Oktette müssen zwischen 0 und 255 liegen.',
             InvalidWallboxPort: 'Gib einen gültigen Wallbox-TCP-Port zwischen 1 und 65535 ein.',
             NormalizedState: 'Normalisierter HEMS-Zustand',
-            NormalizedHint: 'Herstellerneutrale Werte, die von HEMS-Regeln und später der Optimierung verwendet werden.',
+            NormalizedHint:
+                'Herstellerneutrale Werte, die von HEMS-Regeln und später der Optimierung verwendet werden.',
             GridPower: 'Netzleistung',
             PvPower: 'PV-Leistung',
             StorageSoc: 'Speicher-SoC',
             EvseVehicle: 'Fahrzeug verbunden',
             Constraints: 'Wirksame Begrenzungen',
-            ConstraintsHint: 'Nur-Lese-Ansicht der wirksamen Freigaben und Leistungsgrenzen nach der Zusammenführung aller Regeln.',
+            ConstraintsHint:
+                'Nur-Lese-Ansicht der wirksamen Freigaben und Leistungsgrenzen nach der Zusammenführung aller Regeln.',
             StorageChargeAllowed: 'Speicher laden erlaubt',
             StorageDischargeAllowed: 'Speicher entladen erlaubt',
             MaxChargePower: 'Maximale Speicher-Ladeleistung',
@@ -107,9 +138,9 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Aktuell',
             QualityStale: 'Veraltet',
             QualityUnknown: 'Unbekannt',
-            EvProtectionShadow: 'EV-Schutz — Shadow',
+            EvProtectionShadow: 'EV-Schutz',
             EvProtectionShadowHint:
-                'Bewertet, ob ein ladendes Fahrzeug die Speicherentladung sperren sollte. Shadow beobachtet und schlägt nur vor; wirksame Begrenzungen und Hardware bleiben unverändert.',
+                'Im Modus Aktiv erzwingt der EV-Schutz die Entladesperre nur bei aktivierter Speichersteuerung; Monitor zeigt lediglich den Vorschlag.',
             EvProtectionState: 'Regelzustand',
             EvProtectionCharging: 'Fahrzeug lädt',
             EvProtectionConditionAge: 'Bedingung aktiv seit',
@@ -122,7 +153,7 @@ export const hemsSupplementMessages = {
             },
         },
         storage: {
-            Title: 'Speicher — nur Lesezugriff',
+            Title: 'Speicher',
             Enabled: 'Speicher-Telemetrie aktiviert',
             Profile: 'Modbus-Profil',
             SelectProfile: 'Speicherprofil auswählen…',
@@ -157,6 +188,7 @@ export const hemsSupplementMessages = {
             ModbusEndpoint: 'Modbus-TCP-Endpunkt',
         },
         profiles: {
+            Hint: 'Ein Profilimport aktiviert kein Gerät und erteilt keine Schreibfreigabe. Schreibzugriffe werden separat je Geräteart über den Steuermodus freigegeben.',
             Capabilities: 'Geeignet für',
             UsedBy: 'Verwendet von',
             NoCapabilities: 'Kein unterstützter HEMS-Verbraucher',
@@ -164,28 +196,43 @@ export const hemsSupplementMessages = {
             StorageConsumer: 'Speicher',
             DeleteBlocked: 'Entferne zuerst die Profilzuordnung beim aufgeführten Verbraucher.',
             MissingStorageProfile:
-                'Das konfigurierte Speicherprofil „{id}“ ist nicht verfügbar. Wähle ein anderes Profil oder deaktiviere die Speicher-Telemetrie.',
+                'Das konfigurierte Speicherprofil „{id}” ist nicht verfügbar. Wähle ein anderes Profil oder deaktiviere die Speicher-Telemetrie.',
         },
     },
     fr: {
         hems: {
-            Warp: 'Borne de recharge — lecture seule',
+            Active: 'Actif',
+            Warp: 'Borne de recharge / EVSE',
             WarpEnabled: 'Télémétrie de la borne activée',
             WarpSetupHint:
-                'Le fournisseur actuel en lecture seule est WARP Modbus TCP. Configurez l’hôte et le port TCP de la borne.',
+                'Configurez la borne via Modbus TCP. Sélectionnez un profil EVSE importé, puis configurez l’hôte et le port TCP.',
+            EvseSelectProfile: 'Sélectionner un profil EVSE…',
+            EvseNoProfiles: 'Aucun profil EVSE compatible importé',
+            EvseNoProfilesHint: 'Aucun profil EVSE n’est disponible. Importez d’abord un profil Modbus compatible.',
+            EvseProfileRequired:
+                'La télémétrie de la borne ne peut pas être activée sans profil EVSE. Sélectionnez d’abord un profil.',
+            EvseProfileUnavailable:
+                'Le profil EVSE sélectionné n’est pas disponible. Sélectionnez un profil EVSE existant.',
             ConfigLoadFailed: 'La configuration HEMS n’a pas pu être chargée.',
             ConfigSaveFailed: 'La configuration HEMS n’a pas pu être enregistrée.',
+            ControlMode: 'Mode de contrôle',
+            ControlMonitorOnly: 'Surveillance uniquement',
+            ControlHems: 'Contrôle HEMS',
+            ControlModeHint:
+                'La surveillance utilise la télémétrie sans écritures normales. Le contrôle HEMS autorise les commandes manuelles et les écritures automatiques en mode Actif.',
             InvalidWallboxHost:
                 'Saisissez un nom d’hôte ou une adresse IPv4 valide. Les octets IPv4 doivent être compris entre 0 et 255.',
             InvalidWallboxPort: 'Saisissez un port TCP de borne valide entre 1 et 65535.',
             NormalizedState: 'État HEMS normalisé',
-            NormalizedHint: 'Valeurs indépendantes du fournisseur utilisées par les règles HEMS et l’optimisation future.',
+            NormalizedHint:
+                'Valeurs indépendantes du fournisseur utilisées par les règles HEMS et l’optimisation future.',
             GridPower: 'Puissance réseau',
             PvPower: 'Puissance PV',
             StorageSoc: 'SoC du stockage',
             EvseVehicle: 'Véhicule connecté',
             Constraints: 'Contraintes effectives',
-            ConstraintsHint: 'Vue en lecture seule des autorisations et limites de puissance après composition des règles.',
+            ConstraintsHint:
+                'Vue en lecture seule des autorisations et limites de puissance après composition des règles.',
             StorageChargeAllowed: 'Charge du stockage autorisée',
             StorageDischargeAllowed: 'Décharge du stockage autorisée',
             MaxChargePower: 'Puissance de charge maximale du stockage',
@@ -194,9 +241,9 @@ export const hemsSupplementMessages = {
             QualityFresh: 'Actuel',
             QualityStale: 'Périmé',
             QualityUnknown: 'Inconnu',
-            EvProtectionShadow: 'Protection VE — Shadow',
+            EvProtectionShadow: 'Protection VE',
             EvProtectionShadowHint:
-                'Évalue si la recharge du véhicule devrait bloquer la décharge du stockage. Le mode Shadow observe et propose uniquement; les contraintes effectives et le matériel restent inchangés.',
+                'En mode Actif, la protection VE bloque la décharge uniquement si le contrôle du stockage est activé ; Monitor affiche seulement la proposition.',
             EvProtectionState: 'État de la règle',
             EvProtectionCharging: 'Véhicule en charge',
             EvProtectionConditionAge: 'Condition active depuis',
@@ -209,7 +256,7 @@ export const hemsSupplementMessages = {
             },
         },
         storage: {
-            Title: 'Stockage — lecture seule',
+            Title: 'Stockage',
             Enabled: 'Télémétrie du stockage activée',
             Profile: 'Profil Modbus',
             SelectProfile: 'Sélectionner un profil de stockage…',
@@ -245,6 +292,7 @@ export const hemsSupplementMessages = {
             ModbusEndpoint: 'Point de terminaison Modbus TCP',
         },
         profiles: {
+            Hint: 'Importer un profil n’active aucun appareil et n’accorde aucune autorisation d’écriture. Les écritures sont activées séparément pour chaque type d’appareil.',
             Capabilities: 'Compatible avec',
             UsedBy: 'Utilisé par',
             NoCapabilities: 'Aucun consommateur HEMS pris en charge',

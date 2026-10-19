@@ -12,7 +12,7 @@
             :text="$t('firmwareupgrade.OtaError')"
             textVariant="text-bg-danger"
             center-content
-            v-if="!loading && !uploading && OTAError != ''"
+            v-if="!loading && !uploading && !remoteUpdating && OTAError != ''"
         >
             <p class="h1 mb-2">
                 <BIconExclamationCircleFill />
@@ -32,7 +32,7 @@
             :text="$t('firmwareupgrade.OtaStatus')"
             textVariant="text-bg-success"
             center-content
-            v-else-if="!loading && !uploading && OTASuccess"
+            v-else-if="!loading && !uploading && !remoteUpdating && OTASuccess"
         >
             <BIconCheckCircle class="fs-1" />&nbsp;{{ $t('firmwareupgrade.OtaSuccess') }}
         </CardElement>
@@ -45,42 +45,191 @@
             {{ $t('firmwareupgrade.NoOtaSupport') }}
         </CardElement>
 
-        <CardElement
-            :text="$t('firmwareupgrade.FirmwareUpload')"
-            textVariant="text-bg-primary"
-            center-content
-            v-else-if="!loading && !uploading"
-        >
-            <div class="form-group">
-                <input class="form-control" type="file" ref="file" accept=".bin,.bin.gz" @change="selectFirmware" />
-            </div>
-            <div class="mt-3" v-if="file !== null">
-                <div class="mb-2">{{ file.name }}</div>
-                <button class="btn btn-primary" @click="uploadOTA">
-                    {{ $t('firmwareupgrade.FirmwareUpload') }}
-                </button>
-            </div>
-        </CardElement>
+        <template v-else-if="!loading">
+            <CardElement v-if="!uploading" :text="$t('firmwareupgrade.RepositoryUpdate')" textVariant="text-bg-primary">
+                <div class="text-start">
+                    <h6>{{ $t('firmwareupgrade.InstalledFirmware') }}</h6>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.Branch') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ firmwareStatus.git_branch }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildCommit') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ shortSha(firmwareStatus.git_sha) }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.SourceCommit') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ shortSha(sourceCommit) }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.TestedMergeCommit') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ shortSha(firmwareStatus.tested_merge_commit || firmwareStatus.git_sha) }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildTarget') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ firmwareStatus.pioenv }}</code>
+                        </dd>
+                        <dt class="col-sm-4">{{ $t('firmwareupgrade.UpdateChannel') }}</dt>
+                        <dd class="col-sm-8">
+                            <code>{{ firmwareStatus.update_channel || '—' }}</code>
+                        </dd>
+                    </dl>
 
-        <CardElement
-            :text="$t('firmwareupgrade.UploadProgress')"
-            textVariant="text-bg-primary"
-            center-content
-            v-else-if="!loading && uploading"
-        >
-            <div class="progress">
-                <div
-                    class="progress-bar"
-                    role="progressbar"
-                    :style="{ width: progress + '%' }"
-                    v-bind:aria-valuenow="progress"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                >
-                    {{ progress }}%
+                    <hr />
+
+                    <div class="row g-2 align-items-end mb-4">
+                        <div class="col-lg-8">
+                            <label class="form-label fw-semibold" for="firmware-update-channel">
+                                {{ $t('firmwareupgrade.UpdateChannel') }}
+                            </label>
+                            <input
+                                id="firmware-update-channel"
+                                v-model.trim="selectedChannel"
+                                class="form-control font-monospace"
+                                type="text"
+                                maxlength="64"
+                                placeholder="hems-next / hems / pr-19"
+                                :disabled="remoteUpdating"
+                                @keyup.enter="checkRemoteUpdate"
+                            />
+                            <div class="form-text">
+                                {{ $t('firmwareupgrade.ChannelHint') }}
+                            </div>
+                        </div>
+                        <div class="col-lg-4 d-grid">
+                            <button
+                                class="btn btn-outline-primary"
+                                :disabled="manifestLoading || remoteUpdating || !selectedChannel"
+                                @click="checkRemoteUpdate"
+                            >
+                                <BIconArrowRepeat /> {{ $t('firmwareupgrade.RetryCheck') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="!selectedChannel" class="alert alert-warning mb-0" role="alert">
+                        {{ $t('firmwareupgrade.NoUpdateChannel') }}
+                    </div>
+
+                    <div v-else-if="manifestLoading" class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ms-2">{{ $t('firmwareupgrade.Loading') }}</span>
+                    </div>
+
+                    <div v-else-if="manifestError" class="alert alert-warning mb-0" role="alert">
+                        <div>{{ manifestError }}</div>
+                        <button class="btn btn-sm btn-outline-dark mt-2" @click="checkRemoteUpdate">
+                            <BIconArrowRepeat /> {{ $t('firmwareupgrade.RetryCheck') }}
+                        </button>
+                    </div>
+
+                    <template v-else-if="updateManifest && remoteBuild">
+                        <h6>{{ $t('firmwareupgrade.AvailableFirmware') }}</h6>
+                        <dl class="row mb-3">
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.UpdateChannel') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ updateManifest.channel }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.Branch') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ updateManifest.branch }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildCommit') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ shortSha(updateManifest.commit) }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.SourceCommit') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ shortSha(updateManifest.source_commit || '') }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.TestedMergeCommit') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ shortSha(updateManifest.tested_merge_commit || updateManifest.commit) }}</code>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.BuildTarget') }}</dt>
+                            <dd class="col-sm-8">
+                                <code>{{ firmwareStatus.pioenv }}</code>
+                                <span class="text-muted ms-2">({{ formatSize(remoteBuild.size) }})</span>
+                            </dd>
+                            <dt class="col-sm-4">{{ $t('firmwareupgrade.Published') }}</dt>
+                            <dd class="col-sm-8">{{ formatDate(updateManifest.published_at) }}</dd>
+                        </dl>
+
+                        <div v-if="upToDate" class="alert alert-success mb-0" role="alert">
+                            {{ $t('firmwareupgrade.FirmwareCurrent') }}
+                        </div>
+                        <div v-else class="alert alert-info mb-3" role="alert">
+                            {{ $t('firmwareupgrade.FirmwareAvailable') }}
+                        </div>
+
+                        <div v-if="!upToDate" class="text-center">
+                            <button class="btn btn-primary" @click="installRemote" :disabled="remoteUpdating">
+                                <span
+                                    v-if="remoteUpdating"
+                                    class="spinner-border spinner-border-sm me-2"
+                                    role="status"
+                                ></span>
+                                {{ $t('firmwareupgrade.InstallLatest') }}
+                            </button>
+                            <div v-if="remoteUpdating && remoteStatus" class="small text-muted mt-2">
+                                {{ remoteStatus }}
+                            </div>
+                        </div>
+                    </template>
                 </div>
-            </div>
-        </CardElement>
+            </CardElement>
+
+            <CardElement
+                v-else
+                :text="$t('firmwareupgrade.UploadProgress')"
+                textVariant="text-bg-primary"
+                center-content
+            >
+                <div class="progress">
+                    <div
+                        class="progress-bar"
+                        role="progressbar"
+                        :style="{ width: progress + '%' }"
+                        v-bind:aria-valuenow="progress"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                    >
+                        {{ progress }}%
+                    </div>
+                </div>
+            </CardElement>
+
+            <details v-if="!uploading && !remoteUpdating" class="mt-4">
+                <summary class="btn btn-outline-secondary">
+                    {{ $t('firmwareupgrade.ManualInstall') }}
+                </summary>
+                <div class="mt-3">
+                    <CardElement
+                        :text="$t('firmwareupgrade.FirmwareUpload')"
+                        textVariant="text-bg-secondary"
+                        center-content
+                    >
+                        <p class="text-muted text-start">{{ $t('firmwareupgrade.ManualInstallHint') }}</p>
+                        <div class="form-group">
+                            <input
+                                class="form-control"
+                                type="file"
+                                ref="file"
+                                accept=".bin,.bin.gz"
+                                @change="selectFirmware"
+                            />
+                        </div>
+                        <div class="mt-3" v-if="file !== null">
+                            <div class="mb-2">{{ file.name }}</div>
+                            <button class="btn btn-primary" @click="uploadOTA">
+                                {{ $t('firmwareupgrade.FirmwareUpload') }}
+                            </button>
+                        </div>
+                    </CardElement>
+                </div>
+            </details>
+        </template>
     </BasePage>
 </template>
 
@@ -93,6 +242,17 @@ import { BIconArrowLeft, BIconArrowRepeat, BIconCheckCircle, BIconExclamationCir
 import SparkMD5 from 'spark-md5';
 import { defineComponent } from 'vue';
 import { waitRestart } from '@/utils/waitRestart';
+
+import {
+    exactImageInstalled,
+    installedSourceCommit,
+    validManifest,
+    type FirmwareLookupState,
+    type FirmwareBuild,
+    type FirmwareManifest,
+} from '@/utils/firmwareProvenance';
+
+const CHANNEL_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 export default defineComponent({
     components: {
@@ -110,40 +270,87 @@ export default defineComponent({
             progress: 0,
             OTAError: '',
             OTASuccess: false,
-            type: 'firmware',
             file: null as File | null,
             firmwareStatus: {} as FirmwareStatus,
+            selectedChannel: '',
+            updateManifest: null as FirmwareManifest | null,
+            remoteBuild: null as FirmwareBuild | null,
+            lookupState: 'idle' as FirmwareLookupState,
+            lookupGeneration: 0,
+            manifestError: '',
+            remoteUpdating: false,
+            remoteStatus: '',
         };
     },
+    watch: {
+        selectedChannel: {
+            handler() {
+                this.invalidateLookup();
+            },
+            flush: 'sync',
+        },
+    },
+    computed: {
+        manifestLoading(): boolean {
+            return this.lookupState === 'loading';
+        },
+        sourceCommit(): string {
+            return installedSourceCommit(this.firmwareStatus, this.updateManifest ?? undefined) ?? '';
+        },
+        upToDate(): boolean {
+            return (
+                this.lookupState === 'found/current' &&
+                !!this.updateManifest &&
+                this.selectedChannel.trim() === this.updateManifest.channel &&
+                exactImageInstalled(this.firmwareStatus, this.updateManifest)
+            );
+        },
+    },
     methods: {
-        fileMD5(file: File) {
+        shortSha(value: string): string {
+            if (!value) return '—';
+            return value.length > 12 ? value.slice(0, 12) : value;
+        },
+        formatSize(bytes: number): string {
+            return `${(bytes / 1024 / 1024).toFixed(2)} MiB`;
+        },
+        formatDate(value: string): string {
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+        },
+        fileMD5(blob: Blob): Promise<string> {
             return new Promise((resolve, reject) => {
-                const blobSlice = File.prototype.slice;
-                const chunkSize = 2097152; // Read in chunks of 2MB
-                const chunks = Math.ceil(file.size / chunkSize);
+                const chunkSize = 2097152;
+                const chunks = Math.ceil(blob.size / chunkSize);
                 const spark = new SparkMD5.ArrayBuffer();
                 const fileReader = new FileReader();
                 let currentChunk = 0;
+
                 fileReader.onload = () => {
-                    spark.append(fileReader.result as ArrayBuffer); // Append array buffer
+                    spark.append(fileReader.result as ArrayBuffer);
                     currentChunk += 1;
                     if (currentChunk < chunks) {
                         loadNext();
                     } else {
-                        const md5 = spark.end();
-                        resolve(md5);
+                        resolve(spark.end());
                     }
                 };
-                fileReader.onerror = (e) => {
-                    reject(e);
-                };
+                fileReader.onerror = (event) => reject(event);
+
                 const loadNext = () => {
                     const start = currentChunk * chunkSize;
-                    const end = start + chunkSize >= file.size ? file.size : start + chunkSize;
-                    fileReader.readAsArrayBuffer(blobSlice.call(file, start, end));
+                    const end = Math.min(start + chunkSize, blob.size);
+                    fileReader.readAsArrayBuffer(blob.slice(start, end));
                 };
                 loadNext();
             });
+        },
+        async fileSHA256(blob: Blob): Promise<string | null> {
+            if (!window.isSecureContext || !window.crypto?.subtle) return null;
+            const digest = await window.crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+            return Array.from(new Uint8Array(digest))
+                .map((byte) => byte.toString(16).padStart(2, '0'))
+                .join('');
         },
         isFactoryFirmwareFile(filename: string): boolean {
             const lowerFilename = filename.toLowerCase();
@@ -152,15 +359,12 @@ export default defineComponent({
         isValidFirmwareFile(filename: string): boolean {
             const validExtensions = ['.bin', '.bin.gz'];
             const lowerFilename = filename.toLowerCase();
-            return (
-                !this.isFactoryFirmwareFile(filename) &&
-                validExtensions.some((ext) => lowerFilename.endsWith(ext))
-            );
+            return !this.isFactoryFirmwareFile(filename) && validExtensions.some((ext) => lowerFilename.endsWith(ext));
         },
         setInvalidFileError() {
             this.OTAError = this.$t('firmwareupgrade.InvalidFileType', {
                 validTypes: '.bin, .bin.gz (excluding .factory.bin / .factory.bin.gz)',
-            });
+            }) as string;
         },
         selectFirmware(event: Event) {
             this.OTAError = '';
@@ -172,12 +376,8 @@ export default defineComponent({
                 this.setInvalidFileError();
             }
         },
-        uploadOTA() {
-            if (this.file === null) {
-                return;
-            }
-
-            if (!this.isValidFirmwareFile(this.file.name)) {
+        uploadFirmware(file: File, knownMd5?: string) {
+            if (!this.isValidFirmwareFile(file.name)) {
                 this.setInvalidFileError();
                 return;
             }
@@ -186,7 +386,6 @@ export default defineComponent({
             const formData = new FormData();
             const request = new XMLHttpRequest();
             request.addEventListener('load', () => {
-                // request.response will hold the response from the server
                 if (request.status === 200) {
                     this.OTASuccess = true;
                     waitRestart(this.$router);
@@ -196,29 +395,34 @@ export default defineComponent({
                 this.uploading = false;
                 this.progress = 0;
             });
-            // Upload progress
-            request.upload.addEventListener('progress', (e) => {
-                this.progress = Math.trunc((e.loaded / e.total) * 100);
+            request.addEventListener('error', () => {
+                this.OTAError = `[HTTP ERROR] ${request.status} ${request.statusText}`;
+                this.uploading = false;
+                this.progress = 0;
+            });
+            request.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) this.progress = Math.trunc((event.loaded / event.total) * 100);
             });
             request.withCredentials = true;
-            this.fileMD5(this.file)
+
+            const md5Promise = knownMd5 ? Promise.resolve(knownMd5) : this.fileMD5(file);
+            md5Promise
                 .then((md5) => {
-                    if (this.file === null) {
-                        throw new Error('Firmware file selection was cleared');
-                    }
-                    formData.append('MD5', md5 as string);
-                    formData.append('firmware', this.file, this.file.name);
+                    formData.append('MD5', md5);
+                    formData.append('firmware', file, file.name);
                     request.open('post', '/api/firmware/update');
-                    authHeader().forEach((value, key) => {
-                        request.setRequestHeader(key, value);
-                    });
+                    authHeader().forEach((value, key) => request.setRequestHeader(key, value));
                     request.send(formData);
                 })
                 .catch(() => {
-                    this.OTAError = 'Unknown error while upload, check the console for details.';
+                    this.OTAError = 'Unknown error while preparing the firmware upload.';
                     this.uploading = false;
                     this.progress = 0;
                 });
+        },
+        uploadOTA() {
+            if (this.file === null) return;
+            this.uploadFirmware(this.file);
         },
         retryOTA() {
             this.OTAError = '';
@@ -230,18 +434,149 @@ export default defineComponent({
             this.OTASuccess = false;
             this.file = null;
             const input = this.$refs.file as HTMLInputElement | undefined;
-            if (input !== undefined) {
-                input.value = '';
+            if (input !== undefined) input.value = '';
+        },
+        validChannelId(value: string): boolean {
+            return value.length > 0 && value.length <= 64 && CHANNEL_ID_PATTERN.test(value);
+        },
+        manifestUrl(channel: string): string {
+            const branch = `firmware-channel-${channel}`;
+            return `https://raw.githubusercontent.com/${this.firmwareStatus.update_repository}/${branch}/manifest.json`;
+        },
+        firmwareUrl(filename: string, channel: string): string {
+            const branch = `firmware-channel-${channel}`;
+            return `https://raw.githubusercontent.com/${this.firmwareStatus.update_repository}/${branch}/${filename}`;
+        },
+        validBuild(value: FirmwareBuild | undefined): value is FirmwareBuild {
+            if (!value) return false;
+            const expectedName = `opendtu-hems-${this.firmwareStatus.pioenv}.bin`;
+            return (
+                value.file === expectedName &&
+                Number.isInteger(value.size) &&
+                value.size > 0 &&
+                /^[0-9a-f]{32}$/i.test(value.md5) &&
+                /^[0-9a-f]{64}$/i.test(value.sha256) &&
+                !this.isFactoryFirmwareFile(value.file)
+            );
+        },
+        invalidateLookup() {
+            ++this.lookupGeneration;
+            this.updateManifest = null;
+            this.remoteBuild = null;
+            this.manifestError = '';
+            this.lookupState = 'idle';
+        },
+        async checkRemoteUpdate() {
+            this.invalidateLookup();
+            const channel = this.selectedChannel.trim();
+            const generation = this.lookupGeneration;
+            const repository = this.firmwareStatus.update_repository;
+            const current = () => generation === this.lookupGeneration && channel === this.selectedChannel.trim();
+            if (!channel) return;
+            if (!this.validChannelId(channel)) {
+                this.lookupState = 'invalid';
+                this.manifestError = this.$t('firmwareupgrade.ChannelInvalid') as string;
+                return;
+            }
+            this.lookupState = 'loading';
+            try {
+                const response = await fetch(this.manifestUrl(channel), { cache: 'no-store' });
+                if (!current()) return;
+                if (response.status === 404) {
+                    this.lookupState = 'not_found';
+                    this.manifestError = this.$t('firmwareupgrade.ChannelNotPublished') as string;
+                    return;
+                }
+                if (!response.ok) throw new Error(this.$t('firmwareupgrade.UpdateCheckFailed') as string);
+                const manifest: unknown = await response.json();
+                if (!current()) return;
+                if (!validManifest(manifest, repository, channel)) {
+                    this.lookupState = 'invalid';
+                    this.manifestError = this.$t('firmwareupgrade.ManifestInvalid') as string;
+                    return;
+                }
+                const build = manifest.builds[this.firmwareStatus.pioenv];
+                if (!this.validBuild(build)) {
+                    this.lookupState = 'invalid';
+                    this.manifestError = this.$t('firmwareupgrade.BuildTargetMissing') as string;
+                    return;
+                }
+                this.updateManifest = manifest;
+                this.remoteBuild = build;
+                // Hash inequality and publication dates do not prove source ancestry.
+                this.lookupState = exactImageInstalled(this.firmwareStatus, manifest)
+                    ? 'found/current'
+                    : 'found/different';
+            } catch (error) {
+                if (!current()) return;
+                this.lookupState = 'error';
+                this.manifestError =
+                    error instanceof Error ? error.message : (this.$t('firmwareupgrade.UpdateCheckFailed') as string);
+            }
+        },
+        async installRemote() {
+            if (
+                this.lookupState !== 'found/different' ||
+                !this.remoteBuild ||
+                !this.updateManifest ||
+                this.updateManifest.channel !== this.selectedChannel.trim()
+            )
+                return;
+            const build = this.remoteBuild;
+            const channel = this.updateManifest.channel;
+
+            this.OTAError = '';
+            this.OTASuccess = false;
+            this.remoteUpdating = true;
+            try {
+                this.remoteStatus = this.$t('firmwareupgrade.DownloadingFirmware') as string;
+                const response = await fetch(this.firmwareUrl(build.file, channel), { cache: 'no-store' });
+                if (!response.ok) throw new Error(this.$t('firmwareupgrade.RemoteDownloadFailed') as string);
+                const blob = await response.blob();
+                if (blob.size !== build.size) {
+                    throw new Error(this.$t('firmwareupgrade.IntegrityCheckFailed') as string);
+                }
+
+                this.remoteStatus = this.$t('firmwareupgrade.VerifyingFirmware') as string;
+                const md5 = await this.fileMD5(blob);
+                if (md5.toLowerCase() !== build.md5.toLowerCase()) {
+                    throw new Error(this.$t('firmwareupgrade.IntegrityCheckFailed') as string);
+                }
+                const sha256 = await this.fileSHA256(blob);
+                if (sha256 !== null && sha256.toLowerCase() !== build.sha256.toLowerCase()) {
+                    throw new Error(this.$t('firmwareupgrade.IntegrityCheckFailed') as string);
+                }
+
+                const file = new File([blob], build.file, { type: 'application/octet-stream' });
+                this.remoteUpdating = false;
+                this.remoteStatus = '';
+                this.uploadFirmware(file, md5);
+            } catch (error) {
+                this.remoteUpdating = false;
+                this.remoteStatus = '';
+                this.OTAError =
+                    error instanceof Error
+                        ? error.message
+                        : (this.$t('firmwareupgrade.RemoteDownloadFailed') as string);
             }
         },
         getFirmwareStatus() {
             fetch('/api/firmware/status', { headers: authHeader() })
                 .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data) => {
+                .then((data: FirmwareStatus) => {
                     this.firmwareStatus = data;
+                    this.selectedChannel = data.update_channel || '';
                     this.loading = false;
+                    if (data.ota_supported && this.selectedChannel) this.checkRemoteUpdate();
+                })
+                .catch(() => {
+                    this.loading = false;
+                    this.OTAError = this.$t('firmwareupgrade.UpdateCheckFailed') as string;
                 });
         },
+    },
+    beforeUnmount() {
+        this.invalidateLookup();
     },
     mounted() {
         if (!isLoggedIn()) {
@@ -249,8 +584,8 @@ export default defineComponent({
                 path: '/login',
                 query: { returnUrl: this.$router.currentRoute.value.fullPath },
             });
+            return;
         }
-        this.loading = false;
         this.getFirmwareStatus();
     },
 });

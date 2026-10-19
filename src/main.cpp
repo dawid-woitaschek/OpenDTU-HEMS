@@ -14,6 +14,8 @@
 #include <battery/Controller.h>
 #include <gridcharger/Controller.h>
 #include <hems/Controller.h>
+#include <hems/energy/Service.h>
+#include <hems/optimizer/Service.h>
 #include "MqttHandleDtu.h"
 #include "MqttHandleHass.h"
 #include "MqttHandleInverter.h"
@@ -25,6 +27,7 @@
 #include "NtpSettings.h"
 #include "PinMapping.h"
 #include "RestartHelper.h"
+#include <RuntimeDiagnostics.h>
 #include "Scheduler.h"
 #include "SunPosition.h"
 #include "Utils.h"
@@ -44,6 +47,8 @@ static const char* TAG = "main";
 
 void setup()
 {
+    Diagnostics::init();
+    Diagnostics::Scope boot(Diagnostics::Component::Runtime, Diagnostics::Operation::Boot);
     // Move all dynamic allocations >512byte to psram (if available)
     heap_caps_malloc_extmem_enable(512);
 
@@ -65,11 +70,10 @@ void setup()
     // Initialize file system
     ESP_LOGI(TAG, "Mounting FS...");
     if (!LittleFS.begin(false)) { // Do not format if mount failed
-        ESP_LOGW(TAG, "Failed mounting FS... Trying to format...");
-        const bool success = LittleFS.begin(true);
-        ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_ERROR), TAG, "FS reformat %s", success ? "successful" : "failed");
+        ESP_LOGE(TAG, "Failed mounting FS; configuration filesystem unavailable");
     }
 
+    Diagnostics::phase(boot.token, Diagnostics::Phase::Configuration);
     // Read configuration values
     ESP_LOGI(TAG, "Reading configuration...");
     Configuration.init(scheduler);
@@ -107,11 +111,13 @@ void setup()
 
     SerialPortManager.init();
 
+    Diagnostics::phase(boot.token, Diagnostics::Phase::Network);
     // Initialize Network
     ESP_LOGI(TAG, "Initializing Network...");
     NetworkSettings.init(scheduler);
     NetworkSettings.applyConfig();
 
+    Diagnostics::phase(boot.token, Diagnostics::Phase::Start);
     // Initialize NTP
     ESP_LOGI(TAG, "Initializing NTP...");
     NtpSettings.init();
@@ -131,6 +137,8 @@ void setup()
     MqttHandlePowerLimiterHass.init(scheduler);
 
     HemsController.init(scheduler);
+    Hems::Energy::EnergyData.init(scheduler);
+    Hems::Optimizer::ShadowOptimizer.init();
 
     // Initialize WebApi
     ESP_LOGI(TAG, "Initializing WebApi...");

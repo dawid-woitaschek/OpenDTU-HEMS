@@ -5,6 +5,7 @@
 
 #include "WebApi_maintenance.h"
 #include "RestartHelper.h"
+#include <RuntimeDiagnostics.h>
 #include "WebApi.h"
 #include "WebApi_errors.h"
 #include <AsyncJson.h>
@@ -45,9 +46,10 @@ void WebApiMaintenanceClass::onRebootPost(AsyncWebServerRequest* request)
 
         WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 
+        Diagnostics::Scope activity(Diagnostics::Component::Maintenance, Diagnostics::Operation::Restart);
         // write the runtime data to LittleFS, but do not write if last write operation was less than 10 min ago
         RuntimeData.write(10);
-        RestartHelper.triggerRestart();
+        RestartHelper.triggerRestart(Diagnostics::RestartSource::MaintenanceReboot);
     } else {
         retMsg["message"] = "Reboot cancled!";
         retMsg["code"] = WebApiError::MaintenanceRebootCancled;

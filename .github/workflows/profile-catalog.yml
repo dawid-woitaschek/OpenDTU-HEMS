@@ -1,0 +1,63 @@
+name: HEMS profile catalog
+on:
+  push:
+    branches: [integration/hems-next]
+    paths: ['device-profiles/**', 'src/hems/profiles/Profile.cpp', 'include/hems/profiles/**', 'pio-scripts/*profile_catalog*', '.github/workflows/profile-catalog.yml']
+  pull_request:
+    paths: ['device-profiles/**', 'src/hems/profiles/Profile.cpp', 'include/hems/profiles/**', 'pio-scripts/*profile_catalog*', 'test/test_profile_catalog_generation.py', '.github/workflows/profile-catalog.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: profile-catalog-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: bblanchon/ArduinoJson
+          ref: v7.4.3
+          path: work/ArduinoJson
+      - name: Compile authoritative profile validator
+        run: g++ -std=c++17 -Iinclude -Iwork/ArduinoJson/src pio-scripts/profile_catalog_validator.cpp src/hems/profiles/Profile.cpp -o work/profile-catalog-validator
+      - name: Generate and verify catalog
+        run: |
+          python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator
+          python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator --check
+          python3 test/test_profile_catalog_generation.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: profile-catalog
+          path: work/profile-catalog/catalog.json
+  publish:
+    if: github.ref == 'refs/heads/integration/hems-next' && github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: profile-catalog
+          path: work/profile-catalog
+      - name: Publish generated static index
+        env:
+          CATALOG_COMMIT: ${{ github.sha }}
+        run: |
+          current=$(git ls-remote origin refs/heads/integration/hems-next | cut -f1)
+          if [ "$current" != "$CATALOG_COMMIT" ]; then
+            echo 'Superseded source revision; newer workflow publishes the catalog.'
+            exit 0
+          fi
+          cp work/profile-catalog/catalog.json "$RUNNER_TEMP/catalog.json"
+          git switch --orphan device-profile-catalog
+          cp "$RUNNER_TEMP/catalog.json" catalog.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add catalog.json
+          git commit -m "profiles: publish catalog for $CATALOG_COMMIT"
+          git push --force origin HEAD:refs/heads/device-profile-catalog

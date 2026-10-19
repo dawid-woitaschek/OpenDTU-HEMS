@@ -5,6 +5,7 @@
 
 class ResetReason {
 public:
+    static int get_reset_reason_raw(const uint8_t cpu_id);
     static String get_reset_reason_verbose(const uint8_t cpu_id);
     static String get_reset_reason_short(const uint8_t cpu_id);
 };

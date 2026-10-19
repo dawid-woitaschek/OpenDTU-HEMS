@@ -285,3 +285,8 @@ GitHub merge-ref build metadata may shift the final artifact size slightly.
 No persistent profile RAM is added. PR #5 keeps only the selected immutable profile
 snapshot in the storage provider and remains designed for the no-PSRAM reference
 target.
+
+
+## Schema-v2 optional metadata
+
+Schema v2 accepts optional bounded read-only `identity` and `recovery` objects. V1 rejects these additions. Identity fields allow 1–4 FC03/FC04 reads of 1–8 registers each, at most 64 bytes. `release_replay_safe` is optional diagnostic metadata. WARP declares an upstream eFuse UID; Marstek has no stable identity declaration. Neither is a normal-control prerequisite. The current firmware never reconstructs durable ownership or automatically replays a boot release. See [HEMS_CONTROL.md](HEMS_CONTROL.md).

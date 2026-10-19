@@ -13,5 +13,6 @@ Signal<double> normalizeGridPower(std::optional<float> powerW, bool valid, bool 
 Signal<double> normalizePvPower(double totalPowerW, uint8_t configuredSolarSources,
         uint8_t observedSolarSources, bool classificationComplete, bool anyStale);
 SystemState normalize(Warp::Snapshot const& warp, Storage::Snapshot const& storage);
+StorageState normalizeStorage(Storage::Snapshot const& storage);
 
 } // namespace Hems::Model

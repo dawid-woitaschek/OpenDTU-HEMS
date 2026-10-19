@@ -4,14 +4,18 @@ on:
   push:
     branches:
       - hems
+      - integration/hems-next
     paths-ignore:
       - docs/**
+      - device-profiles/**
       - '**/*.md'
   pull_request:
     branches:
       - hems
+      - integration/hems-next
     paths-ignore:
       - docs/**
+      - device-profiles/**
       - '**/*.md'
   workflow_dispatch:
 
@@ -61,26 +65,26 @@ jobs:
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade platformio setuptools
+          pip install -r pio-scripts/requirements.txt
 
-      - name: Enable Corepack
-        working-directory: webapp
-        run: corepack enable
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: yarn
-          cache-dependency-path: webapp/yarn.lock
+      - uses: ./.github/actions/setup-web
 
       - name: Install WebApp dependencies
         working-directory: webapp
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Build WebApp
         working-directory: webapp
         run: yarn build
+
+      - name: Test HEMS Admin save behavior
+        if: matrix.environment == 'generic_esp32s3_usb'
+        run: |
+          node test/test_hems_admin.mjs
+          node test/test_tariff_units.mjs
+          node test/test_hems_presentation.mjs
+          node test/test_firmware_provenance.mjs
+          node test/test_firmware_lookup.mjs
 
       - name: Build firmware
         run: pio run -e ${{ matrix.environment }}
@@ -88,6 +92,12 @@ jobs:
       - name: Test HEMS configuration compatibility
         if: matrix.environment == 'generic_esp32s3_usb'
         run: python test/test_hems_config.py .pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
+
+      - name: Test firmware update channel configuration
+        if: matrix.environment == 'generic_esp32s3_usb'
+        run: |
+          python test/test_firmware_channels.py
+          python test/test_firmware_provenance.py
 
       - name: Prepare firmware artifacts
         shell: bash
@@ -104,6 +114,183 @@ jobs:
           name: opendtu-hems-${{ matrix.environment }}
           path: .pio/build/${{ matrix.environment }}/opendtu-hems-*.bin
           if-no-files-found: error
+
+      - name: Keep matching ESP32-S3 symbols for panic backtrace decoding
+        if: matrix.environment == 'generic_esp32s3_usb'
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-symbols-generic_esp32s3_usb
+          path: .pio/build/generic_esp32s3_usb/firmware.elf
+          if-no-files-found: error
+          retention-days: 14
+
+  browser:
+    name: HEMS browser regressions
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-web
+      - name: Install UI and isolated browser test dependencies
+        run: |
+          yarn --cwd webapp install --immutable
+          npm install --prefix work/browser --no-package-lock playwright@1.64.1
+      - uses: actions/checkout@v7
+        with:
+          repository: bblanchon/ArduinoJson
+          ref: v7.4.3
+          path: work/ArduinoJson
+      - name: Prepare validated profile catalog fixture
+        run: |
+          g++ -std=c++17 -Iinclude -Iwork/ArduinoJson/src pio-scripts/profile_catalog_validator.cpp src/hems/profiles/Profile.cpp -o work/profile-catalog-validator
+          python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator
+          node test/test_profile_catalog.mjs
+      - name: Exercise product and economic dispatch flows without hardware
+        env:
+          CHROMIUM_PATH: /usr/bin/google-chrome
+        run: |
+          yarn --cwd webapp dev --host 127.0.0.1 > work/vite.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          export PLAYWRIGHT_MODULE="$GITHUB_WORKSPACE/work/browser/node_modules/playwright"
+          node test/test_hems_browser.mjs
+          node test/test_economic_browser.mjs
+          node test/test_modernization_browser.mjs
+      - name: Keep browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hems-browser-evidence
+          path: |
+            work/screenshots
+            work/vite.log
+
+  publish_firmware_channel:
+    name: Publish firmware update channel
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+    needs: [build, browser]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source revision
+        uses: actions/checkout@v7
+
+      - name: Resolve update channel
+        id: channel
+        shell: bash
+        run: |
+          mapfile -t channel_data < <(python - <<'PY'
+          import json
+          import os
+          import re
+
+          with open('firmware-channels.json', 'r', encoding='utf-8') as fp:
+              config = json.load(fp)
+
+          repository = config.get('repository')
+          if repository != os.environ['GITHUB_REPOSITORY']:
+              raise SystemExit(f"firmware-channels.json repository mismatch: {repository!r}")
+
+          event_name = os.environ['GITHUB_EVENT_NAME']
+          if event_name == 'pull_request':
+              with open(os.environ['GITHUB_EVENT_PATH'], 'r', encoding='utf-8') as fp:
+                  event = json.load(fp)
+              pull_request = event.get('pull_request') or {}
+              head = pull_request.get('head') or {}
+              head_repo = (head.get('repo') or {}).get('full_name')
+              number = event.get('number')
+              branch = head.get('ref')
+              if head_repo != repository:
+                  raise SystemExit('Temporary update channels are only published for same-repository pull requests')
+              if not isinstance(number, int) or number < 1 or not isinstance(branch, str) or not branch:
+                  raise SystemExit('Invalid pull request metadata for firmware update channel')
+              channel_id = f'pr-{number}'
+          else:
+              branch = os.environ['GITHUB_REF_NAME']
+              entry = config.get('channels', {}).get(branch)
+              if not isinstance(entry, dict):
+                  raise SystemExit(f"No firmware update channel configured for branch {branch!r}")
+              channel_id = entry.get('id', '')
+
+          if not isinstance(channel_id, str) or not re.fullmatch(r'[A-Za-z0-9._-]+', channel_id):
+              raise SystemExit(f"Invalid firmware update channel id: {channel_id!r}")
+          print(channel_id)
+          print(branch)
+          PY
+          )
+          channel_id="${channel_data[0]}"
+          source_branch="${channel_data[1]}"
+          echo "id=${channel_id}" >> "$GITHUB_OUTPUT"
+          echo "branch=firmware-channel-${channel_id}" >> "$GITHUB_OUTPUT"
+          echo "source_branch=${source_branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Download firmware build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/firmware-artifacts
+
+      - name: Prepare rolling channel snapshot
+        shell: bash
+        env:
+          CHANNEL_ID: ${{ steps.channel.outputs.id }}
+          CHANNEL_BRANCH: ${{ steps.channel.outputs.branch }}
+          SOURCE_BRANCH: ${{ steps.channel.outputs.source_branch }}
+          UPDATE_REPOSITORY: ${{ github.repository }}
+        run: |
+          artifact_root="$RUNNER_TEMP/firmware-artifacts"
+          dist="$RUNNER_TEMP/firmware-dist"
+          rm -rf "$dist"
+          mkdir -p "$dist"
+
+          shopt -s nullglob
+          for artifact_dir in "$artifact_root"/opendtu-hems-*; do
+            [ -d "$artifact_dir" ] || continue
+            artifact_name="$(basename "$artifact_dir")"
+            environment="${artifact_name#opendtu-hems-}"
+            ota_file=""
+            for candidate in "$artifact_dir"/opendtu-hems-"$environment"-*.bin; do
+              [[ "$candidate" == *.factory.bin ]] && continue
+              ota_file="$candidate"
+              break
+            done
+            if [ -z "$ota_file" ]; then
+              echo "No OTA binary found for $environment" >&2
+              exit 1
+            fi
+            cp "$ota_file" "$dist/opendtu-hems-${environment}.bin"
+          done
+
+          if ! compgen -G "$dist/opendtu-hems-*.bin" > /dev/null; then
+            echo "No OTA binaries collected" >&2
+            exit 1
+          fi
+
+          export DIST="$dist"
+          python pio-scripts/create_firmware_manifest.py
+
+          ls -lh "$dist"
+
+      - name: Publish rolling channel branch
+        shell: bash
+        env:
+          CHANNEL_BRANCH: ${{ steps.channel.outputs.branch }}
+          SOURCE_BRANCH: ${{ steps.channel.outputs.source_branch }}
+          SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          dist="$RUNNER_TEMP/firmware-dist"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --orphan "$CHANNEL_BRANCH"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a "$dist"/. .
+          git add manifest.json README.md opendtu-hems-*.bin
+          git commit -m "firmware: publish ${SOURCE_BRANCH} ${SOURCE_COMMIT::7}"
+          git push --force origin "HEAD:refs/heads/${CHANNEL_BRANCH}"
 
   generate_pr_artifacts_comment:
     name: Generate PR artifact index
@@ -139,18 +326,24 @@ jobs:
               return;
             }
 
-            let body = '### OpenDTU-HEMS Build Artifacts\n\n';
-            body += 'Firmware built from this pull request:\n\n';
+            const prChannel = `pr-${context.issue.number}`;
+            let body = '### Direct OTA binaries\n\n';
+            body += 'Raw OTA images for this pull request, no ZIP extraction required:\n\n';
+            for (const artifact of firmwareArtifacts) {
+              const environment = artifact.name.replace(/^opendtu-hems-/, '');
+              body += `* [${environment}.bin](https://raw.githubusercontent.com/${owner}/${repo}/firmware-channel-${prChannel}/opendtu-hems-${environment}.bin)\n`;
+            }
 
+            body += '\n### ZIP artifacts (fallback)\n\n';
             for (const artifact of firmwareArtifacts) {
               body += `* [${artifact.name}.zip](https://nightly.link/${owner}/${repo}/actions/artifacts/${artifact.id}.zip)\n`;
             }
 
             body += '\n### Notice\n';
-            body += '* Each ZIP contains the OTA binary and the factory binary for that target. Extract the ZIP before flashing.\n';
-            body += '* Use the normal `.bin` for a compatible OTA update. Use `.factory.bin` only for a full factory flash when appropriate.\n';
-            body += `* [Successful HEMS build run](https://github.com/${owner}/${repo}/actions/runs/${context.runId})\n`;
-            body += `* Built from workflow commit \`${context.sha}\`.\n`;
+            body += `* The direct OTA images follow temporary update channel \`${prChannel}\`.\n`;
+            body += '* Use the normal `.bin` for OTA. Factory images remain available only inside the fallback ZIP artifacts.\n';
+            body += `* Source commit: \`${context.payload.pull_request.head.sha}\`.\n`;
+            body += `* Tested merge / image commit: \`${context.sha}\`.\n`;
 
             core.setOutput('body', body);
 

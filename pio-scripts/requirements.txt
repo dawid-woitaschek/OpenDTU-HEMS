@@ -1,0 +1,5 @@
+# Match the esptool packaged by PlatformIO espressif32 6.13.0. Its Python
+# dependencies are also needed when create_factory_bin imports the module.
+platformio==6.2.0
+esptool==4.11.0
+setuptools

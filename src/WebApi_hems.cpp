@@ -3,12 +3,14 @@
 #include "Configuration.h"
 #include "WebApi.h"
 #include <hems/ConfigUpdate.h>
+#include <hems/evse/SettingsStore.h>
 #include <hems/Controller.h>
 #include <hems/profiles/FlashStore.h>
 #include <hems/storage/SettingsStore.h>
 #include <hems/storage/Telemetry.h>
 #include <memory>
 #include <mutex>
+#include <new>
 
 namespace {
 
@@ -85,11 +87,102 @@ void serializeLimit(JsonObject target, Hems::Constraints::UpperLimit const& limi
     if (limit.active) { target["value_w"] = limit.valueW; }
 }
 
+void serializeActuationTarget(JsonObject target, Hems::ControlTarget controlTarget)
+{
+    auto readiness = HemsController.getActuationReadiness(controlTarget);
+    auto command = HemsController.getActuationCommandSnapshot(controlTarget);
+    auto cleanup = HemsController.getActuationCleanupSnapshot(controlTarget);
+
+    char profileId[Hems::Profiles::MaxId + 1] {};
+    HemsController.getControlProfileId(controlTarget, profileId, sizeof(profileId));
+    target["profile"] = static_cast<char const*>(profileId);
+    target["control_mode"] = Hems::controlModeName(HemsController.getControlMode(controlTarget));
+    target["permission_granted"] = HemsController.controlPermissionGranted(controlTarget);
+    target["allowed"] = readiness.allowed();
+    target["ready_for_active"] = readiness.readyForActive();
+
+    auto blockers = target["blockers"].to<JsonArray>();
+    for (auto blocker : {
+            Hems::Actuation::ReadinessBlocker::DevicePermissionMissing,
+            Hems::Actuation::ReadinessBlocker::DeviceNotConfigured,
+            Hems::Actuation::ReadinessBlocker::DeviceNotEnabled,
+            Hems::Actuation::ReadinessBlocker::ProfileNotControllable,
+            Hems::Actuation::ReadinessBlocker::DeviceUnreachable,
+            Hems::Actuation::ReadinessBlocker::TelemetryNotFresh,
+            Hems::Actuation::ReadinessBlocker::CommandBusy,
+        }) {
+        if (readiness.has(blocker)) { blockers.add(Hems::Actuation::readinessBlockerName(blocker)); }
+    }
+    auto info = HemsController.getProfileInfo(controlTarget);
+    auto profile = target["profile_info"].to<JsonObject>();
+    profile["id"] = static_cast<char const*>(info.id);
+    profile["schema_version"] = info.schemaVersion;
+    profile["telemetry_supported"] = info.telemetry;
+    profile["control_supported"] = info.control;
+    profile["control_reason"] = info.reason;
+    profile["identity_metadata"] = info.identity;
+    profile["recovery_metadata"] = info.recovery;
+    profile["release_replay_safe"] = info.releaseReplaySafe;
+    profile["source_revision"] = static_cast<char const*>(info.revision);
+    profile["fingerprint"] = info.fingerprint;
+    auto operations = profile["operations"].to<JsonArray>();
+    for (uint8_t i = 0; i < info.operationCount; ++i) {
+        auto const& operation = info.operations[i];
+        auto entry = operations.add<JsonObject>();
+        entry["action"] = Hems::Actuation::actionName(operation.action);
+        entry["has_input"] = operation.hasInput;
+        if (operation.hasInput) {
+            entry["min"] = operation.minimum; entry["max"] = operation.maximum; entry["step"] = operation.step;
+            entry["unit"] = static_cast<char const*>(operation.unit);
+        }
+    }
+
+    auto commandResult = HemsController.getActuationCommandResult(controlTarget);
+    target["ownership_uncertain"] = HemsController.ownershipUncertain(controlTarget);
+    JsonObject mailbox = target["command"].to<JsonObject>();
+    mailbox["last_error"] = Hems::Actuation::commandErrorName(commandResult.error);
+    mailbox["last_stage"] = Hems::Actuation::commandStageName(commandResult.stage);
+    mailbox["execution_error"] = Hems::Actuation::executionErrorName(commandResult.execution.error);
+    mailbox["transport_error"] = Hems::Modbus::errorName(commandResult.execution.transport.error);
+    mailbox["planning_error"] = Hems::Profiles::controlPlanErrorName(commandResult.planning.error);
+    mailbox["write_attempted"] = commandResult.execution.writeAttempted;
+    mailbox["readback_verified"] = commandResult.execution.readbackVerified;
+    mailbox["modbus_exception"] = commandResult.execution.transport.exception;
+    mailbox["completed_ms"] = commandResult.completedMs;
+    mailbox["age_ms"] = commandResult.completedMs ? millis() - commandResult.completedMs : 0;
+    mailbox["automatic"] = command.command.automatic;
+    mailbox["source"] = Hems::Actuation::originName(command.command.origin);
+    mailbox["plan_revision"] = command.command.authority;
+    mailbox["state"] = Hems::Actuation::mailboxStateName(command.state);
+    mailbox["id"] = nullptr;
+    mailbox["generation"] = nullptr;
+    mailbox["action"] = nullptr;
+    mailbox["value"] = nullptr;
+    if (command.id != 0) {
+        mailbox["id"] = command.id;
+        mailbox["generation"] = command.generation;
+        mailbox["action"] = Hems::Actuation::actionName(command.command.action);
+        if (command.command.hasValue) { mailbox["value"] = command.command.value; }
+    }
+
+    JsonObject cleanupJson = target["cleanup"].to<JsonObject>();
+    cleanupJson["state"] = Hems::Actuation::cleanupStateName(cleanup.state);
+    cleanupJson["retained_context"] = cleanup.retainedContext;
+    cleanupJson["attempts"] = cleanup.attempts;
+    cleanupJson["last_error"] = Hems::Actuation::commandErrorName(cleanup.lastResult.error);
+    cleanupJson["last_stage"] = Hems::Actuation::commandStageName(cleanup.lastResult.stage);
+    cleanupJson["execution_error"] = Hems::Actuation::executionErrorName(cleanup.lastResult.execution.error);
+    cleanupJson["transport_error"] = Hems::Modbus::errorName(cleanup.lastResult.execution.transport.error);
+    cleanupJson["modbus_exception"] = cleanup.lastResult.execution.transport.exception;
+}
+
 } // namespace
 
 void WebApiHemsClass::init(AsyncWebServer& server)
 {
+    initEnergy(server);
     using std::placeholders::_1;
+    server.on("/api/hems/command", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onCommand, this, _1)));
     server.on("/api/hems/status", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onStatus, this, _1)));
     server.on("/api/hems/config", HTTP_GET, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onConfigGet, this, _1)));
     server.on("/api/hems/config", HTTP_POST, static_cast<ArRequestHandlerFunction>(std::bind(&WebApiHemsClass::onConfigPost, this, _1)));
@@ -101,9 +194,9 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
 
     auto* response = new AsyncJsonResponse();
     auto& root = response->getRoot();
-    root["state"] = HemsController.getMode() == Hems::Mode::Monitor ? "Monitor" : "Disabled";
+    root["state"] = Hems::modeName(HemsController.getMode());
     root["decision"] = "None";
-
+    root["uptime_ms"] = millis();
     auto warpSnapshot = HemsController.getWarpSnapshot();
     auto storageSnapshot = HemsController.getStorageSnapshot();
     root["external_devices"] = (warpSnapshot.configured ? 1 : 0) + (storageSnapshot.configured ? 1 : 0);
@@ -236,6 +329,15 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     serializeLimit(storageConstraints["max_charge_power"].to<JsonObject>(), constraints.storage.maxChargePower);
     serializeLimit(storageConstraints["max_discharge_power"].to<JsonObject>(), constraints.storage.maxDischargePower);
 
+    JsonObject actuation = root["actuation"].to<JsonObject>();
+    actuation["global_active"] = HemsController.getMode() == Hems::Mode::Active;
+    auto capability = HemsController.controlCapability();
+    actuation["storage_control_enabled"] = capability.storage;
+    actuation["evse_control_enabled"] = capability.evse;
+    HemsController.serializeEconomic(root["economic_dispatch"].to<JsonObject>());
+    serializeActuationTarget(actuation["evse"].to<JsonObject>(), Hems::ControlTarget::Evse);
+    serializeActuationTarget(actuation["storage"].to<JsonObject>(), Hems::ControlTarget::Storage);
+
     auto evProtection = HemsController.getEvProtectionShadowSnapshot();
     JsonObject shadow = root["shadow"].to<JsonObject>();
     JsonObject evProtectionJson = shadow["ev_protection"].to<JsonObject>();
@@ -251,6 +353,7 @@ void WebApiHemsClass::onStatus(AsyncWebServerRequest* request)
     evProtectionJson["would_block_storage_discharge"] =
         !evProtection.proposedConstraints.storage.dischargeAllowed;
 
+    evProtectionJson["blocking_storage_discharge"] = !constraints.storage.dischargeAllowed;
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 
@@ -276,6 +379,7 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     auto& retMsg = response->getRoot();
     WarpConfig warpConfig;
     StorageConfig storageConfig;
+    bool modePresent = !root["mode"].isNull();
     bool enabledPresent = !root["enabled"].isNull();
     bool warpPresent = !root["warp"].isNull();
     bool storagePresent = !root["storage"].isNull();
@@ -296,11 +400,11 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
         sendValueError("unsupported_stored_version", "version", "Stored HEMS configuration version is unsupported.");
         return;
     }
-    if (!enabledPresent && !warpPresent && !storagePresent) {
+    if (!modePresent && !enabledPresent && !warpPresent && !storagePresent) {
         sendValueError("empty_update", "request", "No HEMS settings were provided.");
         return;
     }
-    if (Hems::ConfigUpdate::mixesPersistenceDomains(enabledPresent, warpPresent, storagePresent)) {
+    if (Hems::ConfigUpdate::mixesPersistenceDomains(enabledPresent || modePresent, warpPresent, storagePresent)) {
         sendValueError("mixed_config_domains", "request",
                 "Storage settings must be updated separately from HEMS and wallbox settings.");
         return;
@@ -341,11 +445,26 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
     }
     if (profileLock.owns_lock()) { profileLock.unlock(); }
 
-    bool mainConfigChanged = enabledPresent || warpPresent;
+    // Persist the unbinding before changing telemetry enablement. Otherwise an old
+    // hems-evse.json could silently restore write permission after an API re-enable/reboot.
+    if (warpPresent && warpConfig.Enabled != Configuration.get().Hems.Warp.Enabled
+            && !Hems::Evse::BindingSettings.clear()) {
+        sendValueError("evse_unbind_persist_failed", "warp.enabled", "Failed to persist EVSE profile unbinding.");
+        return;
+    }
+
+    bool mainConfigChanged = modePresent || enabledPresent || warpPresent;
     if (mainConfigChanged) {
         auto guard = Configuration.getWriteGuard();
         auto& config = guard.getConfig();
-        if (enabledPresent) { config.Hems.Enabled = root["enabled"].as<bool>(); }
+        if (enabledPresent) {
+            config.Hems.Enabled = root["enabled"].as<bool>();
+            config.Hems.Mode = config.Hems.Enabled ? Hems::Mode::Monitor : Hems::Mode::Disabled;
+        }
+        if (modePresent) {
+            config.Hems.Mode = Hems::parseMode(root["mode"].as<char const*>());
+            config.Hems.Enabled = config.Hems.Mode != Hems::Mode::Disabled;
+        }
         if (warpPresent) { config.Hems.Warp = warpConfig; }
     }
 
@@ -357,5 +476,40 @@ void WebApiHemsClass::onConfigPost(AsyncWebServerRequest* request)
         retMsg["message"] = "Settings saved!";
         retMsg["code"] = WebApiError::GenericSuccess;
     }
+    WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+}
+
+void WebApiHemsClass::onCommand(AsyncWebServerRequest* request)
+{
+    if (!WebApi.checkCredentials(request)) { return; }
+    if (!request->hasParam("data", true)
+            || request->getParam("data", true)->value().length() > 384) { request->send(400); return; }
+    auto* response = new AsyncJsonResponse();
+    Hems::Profiles::BoundedAllocator allocator; JsonDocument data(&allocator);
+    if (!WebApi.parseRequestData(request, response, data)) { return; }
+    auto name = data["target"].as<char const*>(); auto action = data["action"].as<char const*>();
+    Hems::Actuation::Command command;
+    bool valid = name && action && (!strcmp(name, "evse") || !strcmp(name, "storage"));
+    if (valid) {
+        command.target = !strcmp(name, "evse") ? Hems::ControlTarget::Evse : Hems::ControlTarget::Storage;
+        bool found = false;
+        for (auto candidate : { Hems::Actuation::Action::SetCurrentA, Hems::Actuation::Action::SetChargePowerW,
+                Hems::Actuation::Action::SetDischargePowerW, Hems::Actuation::Action::SetTargetSocPct,
+                Hems::Actuation::Action::Stop, Hems::Actuation::Action::Release }) {
+            if (!strcmp(action, Hems::Actuation::actionName(candidate))) { command.action = candidate; found = true; break; }
+        }
+        valid = found;
+        command.hasValue = !data["value"].isUnbound();
+        if (command.hasValue) {
+            valid = valid && data["value"].is<double>() && !data["value"].is<bool>();
+            command.value = data["value"].as<double>();
+        }
+    }
+    uint32_t id = 0;
+    bool accepted = valid && HemsController.submitManual(command, id);
+    auto& root = response->getRoot(); root["accepted"] = accepted; root["command_id"] = id;
+    root["message"] = accepted ? "Command queued. Results and fresh telemetry follow in device status."
+        : "Command unavailable: check device permission, freshness, supported bounds, current constraints and worker state.";
+    response->setCode(accepted ? 202 : 409);
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }

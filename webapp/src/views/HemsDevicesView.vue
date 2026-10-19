@@ -1,5 +1,6 @@
 <template>
-    <BasePage :title="'HEMS — ' + $t('menu.DeviceManager') + ' / ' + $t('profiles.Title')" :isLoading="dataLoading">
+    <BasePage :title="$t('hemsUi.devices')" :isLoading="dataLoading">
+        <HemsNav />
         <BootstrapAlert
             v-model="alert.show"
             dismissible
@@ -11,7 +12,6 @@
         <template v-if="!dataLoading && !loadFailed && hemsConfig.version === 1">
             <form @submit.prevent="saveWarp">
                 <CardElement :text="$t('hems.Warp')" textVariant="text-bg-primary">
-                    <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
                     <InputElement
                         :label="$t('hems.WarpEnabled')"
                         v-model="hemsConfig.warp.enabled"
@@ -35,6 +35,54 @@
                             step="1"
                             wide
                         />
+                        <div class="row mb-3">
+                            <label for="hems-evse-profile" class="col-sm-4 col-form-label">{{
+                                $t('storage.Profile')
+                            }}</label>
+                            <div class="col-sm-8">
+                                <select id="hems-evse-profile" class="form-select" v-model="evseBinding.profile">
+                                    <option value="" disabled>
+                                        {{
+                                            evseProfiles.length
+                                                ? $t('hems.EvseSelectProfile')
+                                                : $t('hems.EvseNoProfiles')
+                                        }}
+                                    </option>
+                                    <option v-if="evseProfileUnavailable" :value="evseBinding.profile" disabled>
+                                        ⚠ {{ evseBinding.profile }}
+                                    </option>
+                                    <option v-for="profile in evseProfiles" :key="profile.id" :value="profile.id">
+                                        {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
+                                    </option>
+                                </select>
+                                <div v-if="evseProfileUnavailable" class="alert alert-warning mt-2 mb-0" role="alert">
+                                    {{ $t('hems.EvseProfileUnavailable') }}
+                                </div>
+                                <div
+                                    v-else-if="!evseProfiles.length"
+                                    class="alert alert-warning mt-2 mb-0"
+                                    role="alert"
+                                >
+                                    {{ $t('hems.EvseNoProfilesHint') }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label for="hems-evse-control-mode" class="col-sm-4 col-form-label">{{
+                                $t('hems.ControlMode')
+                            }}</label>
+                            <div class="col-sm-8">
+                                <select
+                                    id="hems-evse-control-mode"
+                                    class="form-select"
+                                    v-model="evseBinding.control_mode"
+                                >
+                                    <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
+                                    <option value="hems">{{ $t('hems.ControlHems') }}</option>
+                                </select>
+                                <div class="form-text">{{ $t('hems.ControlModeHint') }}</div>
+                            </div>
+                        </div>
                         <div class="alert alert-secondary" role="alert">{{ $t('hems.WarpSetupHint') }}</div>
                     </template>
                     <FormFooter @reload="getConfig" />
@@ -43,7 +91,6 @@
 
             <form @submit.prevent="saveStorage">
                 <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
-                    <div class="alert alert-info" role="alert">{{ $t('hems.ReadOnlyHint') }}</div>
                     <InputElement
                         :label="$t('storage.Enabled')"
                         v-model="hemsConfig.storage.enabled"
@@ -69,7 +116,11 @@
                                     v-model="hemsConfig.storage.profile"
                                 >
                                     <option value="" disabled>
-                                        {{ profiles.length ? $t('storage.SelectProfile') : $t('storage.NoProfiles') }}
+                                        {{
+                                            storageProfiles.length
+                                                ? $t('storage.SelectProfile')
+                                                : $t('storage.NoProfiles')
+                                        }}
                                     </option>
                                     <option
                                         v-if="storageProfileUnavailable"
@@ -78,7 +129,7 @@
                                     >
                                         ⚠ {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
                                     </option>
-                                    <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
+                                    <option v-for="profile in storageProfiles" :key="profile.id" :value="profile.id">
                                         {{ profile.id }} — {{ profile.vendor }} / {{ profile.model }}
                                     </option>
                                 </select>
@@ -89,7 +140,11 @@
                                 >
                                     {{ $t('profiles.MissingStorageProfile', { id: hemsConfig.storage.profile }) }}
                                 </div>
-                                <div v-else-if="!profiles.length" class="alert alert-warning mt-2 mb-0" role="alert">
+                                <div
+                                    v-else-if="!storageProfiles.length"
+                                    class="alert alert-warning mt-2 mb-0"
+                                    role="alert"
+                                >
                                     {{ $t('storage.NoProfilesHint') }}
                                 </div>
                             </div>
@@ -112,6 +167,22 @@
                             step="1"
                             wide
                         />
+                        <div class="row mb-3">
+                            <label for="hems-storage-control-mode" class="col-sm-4 col-form-label">{{
+                                $t('hems.ControlMode')
+                            }}</label>
+                            <div class="col-sm-8">
+                                <select
+                                    id="hems-storage-control-mode"
+                                    class="form-select"
+                                    v-model="hemsConfig.storage.control_mode"
+                                >
+                                    <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
+                                    <option value="hems">{{ $t('hems.ControlHems') }}</option>
+                                </select>
+                                <div class="form-text">{{ $t('hems.ControlModeHint') }}</div>
+                            </div>
+                        </div>
                         <div class="alert alert-secondary" role="alert">{{ $t('storage.SetupHint') }}</div>
                     </template>
                     <FormFooter @reload="getConfig" />
@@ -121,13 +192,17 @@
         <div v-else-if="!dataLoading && !loadFailed" class="alert alert-warning" role="alert">
             {{ $t('hems.UnsupportedVersion') }}
         </div>
-        <div v-if="!dataLoading && !loadFailed" class="mt-5">
-            <HemsProfilePanel @profiles-changed="refreshProfiles" />
-        </div>
+        <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
+            <summary>{{ $t('hemsUi.manualControls') }}</summary>
+            <HemsControlPanel />
+        </details>
+        <HemsProfilePanel v-if="!dataLoading && !loadFailed" class="mt-4" @profiles-changed="refreshProfiles" />
     </BasePage>
 </template>
 
 <script lang="ts">
+import HemsNav from '@/components/hems/HemsNav.vue';
+import HemsControlPanel from '@/components/HemsControlPanel.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -135,7 +210,7 @@ import FormFooter from '@/components/FormFooter.vue';
 import HemsProfilePanel from '@/components/HemsProfilePanel.vue';
 import InputElement from '@/components/InputElement.vue';
 import type { AlertResponse } from '@/types/AlertResponse';
-import type { HemsConfig } from '@/types/HemsConfig';
+import type { HemsConfig, HemsDeviceControlMode } from '@/types/HemsConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
@@ -146,21 +221,41 @@ type ProfileSummary = {
     capabilities: string[];
 };
 
+type EvseBinding = {
+    profile: string;
+    control_mode: HemsDeviceControlMode;
+};
+
 export default defineComponent({
-    components: { BasePage, BootstrapAlert, CardElement, FormFooter, HemsProfilePanel, InputElement },
+    components: {
+        HemsNav,
+        HemsControlPanel,
+        BasePage,
+        BootstrapAlert,
+        CardElement,
+        FormFooter,
+        HemsProfilePanel,
+        InputElement,
+    },
     data() {
         return {
             dataLoading: true,
             loadFailed: false,
             hemsConfig: {} as HemsConfig,
-            profiles: [] as ProfileSummary[],
+            evseBinding: { profile: '', control_mode: 'monitor' } as EvseBinding,
+            storageProfiles: [] as ProfileSummary[],
+            evseProfiles: [] as ProfileSummary[],
             alert: {} as AlertResponse,
         };
     },
     computed: {
         storageProfileUnavailable(): boolean {
             const profile = this.hemsConfig.storage?.profile;
-            return !!profile && !this.profiles.some((candidate) => candidate.id === profile);
+            return !!profile && !this.storageProfiles.some((candidate) => candidate.id === profile);
+        },
+        evseProfileUnavailable(): boolean {
+            const profile = this.evseBinding.profile;
+            return !!profile && !this.evseProfiles.some((candidate) => candidate.id === profile);
         },
     },
     created() {
@@ -178,24 +273,28 @@ export default defineComponent({
                 return (
                     parts.length === 4 &&
                     parts.every(
-                        (part) => /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
+                        (part) =>
+                            /^\d{1,3}$/.test(part) && Number.parseInt(part, 10) >= 0 && Number.parseInt(part, 10) <= 255
                     )
                 );
             }
 
-            return host.split('.').every(
-                (label) =>
-                    label.length >= 1 &&
-                    label.length <= 63 &&
-                    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
-            );
+            return host
+                .split('.')
+                .every(
+                    (label) =>
+                        label.length >= 1 &&
+                        label.length <= 63 &&
+                        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)
+                );
         },
         validInteger(value: unknown, minimum: number, maximum: number): boolean {
             const number = typeof value === 'number' ? value : Number(value);
             return Number.isInteger(number) && number >= minimum && number <= maximum;
         },
         applyProfiles(profileData: { profiles: ProfileSummary[] }) {
-            this.profiles = profileData.profiles.filter((profile) => profile.capabilities?.includes('storage'));
+            this.storageProfiles = profileData.profiles.filter((profile) => profile.capabilities?.includes('storage'));
+            this.evseProfiles = profileData.profiles.filter((profile) => profile.capabilities?.includes('evse'));
         },
         refreshProfiles() {
             fetch('/api/hems/profiles', { headers: authHeader() })
@@ -213,10 +312,18 @@ export default defineComponent({
                 fetch('/api/hems/profiles', { headers: authHeader() }).then((response) =>
                     handleResponse(response, this.$emitter, this.$router)
                 ),
+                fetch('/api/hems/profiles/evse-binding', { headers: authHeader() }).then((response) =>
+                    handleResponse(response, this.$emitter, this.$router)
+                ),
             ])
-                .then(([config, profileData]) => {
-                    this.hemsConfig = config as HemsConfig;
+                .then(([config, profileData, evseBinding]) => {
+                    const typedConfig = config as HemsConfig;
+                    if (!typedConfig.storage.control_mode) typedConfig.storage.control_mode = 'monitor';
+                    this.hemsConfig = typedConfig;
                     this.applyProfiles(profileData as { profiles: ProfileSummary[] });
+                    const typedBinding = evseBinding as EvseBinding;
+                    if (!typedBinding.control_mode) typedBinding.control_mode = 'monitor';
+                    this.evseBinding = typedBinding;
                     this.dataLoading = false;
                 })
                 .catch(() => {
@@ -225,20 +332,43 @@ export default defineComponent({
                     this.showError(this.$t('hems.ConfigLoadFailed'));
                 });
         },
-        postConfig(payload: object) {
-            const formData = new FormData();
-            formData.append('data', JSON.stringify(payload));
-            fetch('/api/hems/config', { method: 'POST', headers: authHeader(), body: formData })
-                .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data: AlertResponse) => {
-                    this.alert = data;
-                    this.alert.message = data.type === 'success' ? this.$t('apiresponse.' + data.code) : data.message;
-                    this.alert.show = true;
-                    if (data.type === 'success') this.getConfig();
-                })
-                .catch(() => this.showError(this.$t('hems.ConfigSaveFailed')));
+        async postConfig(payload: object): Promise<boolean> {
+            try {
+                const formData = new FormData();
+                formData.append('data', JSON.stringify(payload));
+                const data = (await fetch('/api/hems/config', {
+                    method: 'POST',
+                    headers: authHeader(),
+                    body: formData,
+                }).then((response) => handleResponse(response, this.$emitter, this.$router))) as AlertResponse;
+                this.alert = data;
+                this.alert.message = data.type === 'success' ? this.$t('apiresponse.' + data.code) : data.message;
+                this.alert.show = true;
+                return data.type === 'success';
+            } catch {
+                this.showError(this.$t('hems.ConfigSaveFailed'));
+                return false;
+            }
         },
-        saveWarp() {
+        async postEvseBinding(): Promise<boolean> {
+            try {
+                const formData = new FormData();
+                formData.append(
+                    'data',
+                    JSON.stringify({ profile: this.evseBinding.profile, control_mode: this.evseBinding.control_mode })
+                );
+                await fetch('/api/hems/profiles/evse-binding', {
+                    method: 'POST',
+                    headers: authHeader(),
+                    body: formData,
+                }).then((response) => handleResponse(response, this.$emitter, this.$router));
+                return true;
+            } catch (error) {
+                this.showError(error instanceof Error ? error.message : this.$t('hems.ConfigSaveFailed'));
+                return false;
+            }
+        },
+        async saveWarp() {
             if (this.hemsConfig.warp.enabled) {
                 if (!this.validHost(this.hemsConfig.warp.host)) {
                     this.showError(this.$t('hems.InvalidWallboxHost'));
@@ -248,17 +378,26 @@ export default defineComponent({
                     this.showError(this.$t('hems.InvalidWallboxPort'));
                     return;
                 }
+                if (!this.evseBinding.profile) {
+                    this.showError(this.$t('hems.EvseProfileRequired'));
+                    return;
+                }
+                if (this.evseProfileUnavailable) {
+                    this.showError(this.$t('hems.EvseProfileUnavailable'));
+                    return;
+                }
+            } else {
+                // A disabled EVSE owns no profile, exactly like disabled storage.
+                this.evseBinding.profile = '';
+                this.evseBinding.control_mode = 'monitor';
             }
 
-            const warp = this.hemsConfig.warp.enabled
-                ? this.hemsConfig.warp
-                : { enabled: false, host: '', port: 502 };
-            this.postConfig({
-                version: this.hemsConfig.version,
-                warp,
-            });
+            const warp = this.hemsConfig.warp.enabled ? this.hemsConfig.warp : { enabled: false, host: '', port: 502 };
+            if (!(await this.postConfig({ version: this.hemsConfig.version, warp }))) return;
+            if (!(await this.postEvseBinding())) return;
+            this.getConfig();
         },
-        saveStorage() {
+        async saveStorage() {
             if (this.hemsConfig.storage.enabled) {
                 if (!this.validHost(this.hemsConfig.storage.host)) {
                     this.showError(this.$t('storage.InvalidHost'));
@@ -282,12 +421,17 @@ export default defineComponent({
                 }
             } else {
                 this.hemsConfig.storage.profile = '';
+                this.hemsConfig.storage.control_mode = 'monitor';
             }
 
-            this.postConfig({
-                version: this.hemsConfig.version,
-                storage: this.hemsConfig.storage,
-            });
+            if (
+                await this.postConfig({
+                    version: this.hemsConfig.version,
+                    storage: this.hemsConfig.storage,
+                })
+            ) {
+                this.getConfig();
+            }
         },
     },
 });

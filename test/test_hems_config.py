@@ -19,12 +19,13 @@ end = source.index("void ConfigurationClass::serializeHttpRequestConfig(", start
 bindings = """
 #include <ArduinoJson.h>
 #include <hems/warp/Settings.h>
+#include <hems/Mode.h>
 #include <Arduino.h>
 #include <cassert>
 #include <cstring>
 #include <string>
 #define CONFIG_VERSION_HEMS 1
-struct HemsConfig { uint32_t Version; bool Enabled; WarpConfig Warp; };
+struct HemsConfig { uint32_t Version; bool Enabled; Hems::Mode Mode; WarpConfig Warp; };
 class ConfigurationClass {
 public:
     static void serializeHemsConfig(HemsConfig const&, JsonObject&);
@@ -66,6 +67,14 @@ int main() {
     assert(restored.Version == 1 && restored.Enabled && restored.Warp.Enabled);
     assert(strcmp(restored.Warp.Host, "warp.local") == 0 && restored.Warp.Port == 502);
 
+    load(R"({"version":1,"mode":"Active"})");
+    assert(config.Enabled && config.Mode == Hems::Mode::Active);
+    load(R"({"version":1,"enabled":false,"mode":"garbage"})");
+    assert(config.Enabled && config.Mode == Hems::Mode::Monitor);
+    load(R"({"version":1,"mode":99})");
+    assert(config.Mode == Hems::Mode::Monitor);
+    load(R"({"version":1,"mode":"Disabled"})");
+    assert(!config.Enabled && config.Mode == Hems::Mode::Disabled);
     WarpConfig candidate;
     assert(warpAccepted(R"({"enabled":true,"host":"warp.local","port":1})", candidate));
     assert(candidate.Enabled && candidate.Port == 1 && strcmp(candidate.Host, "warp.local") == 0);

@@ -2,6 +2,9 @@ import { createI18n } from 'vue-i18n';
 import messages from '@intlify/unplugin-vue-i18n/messages';
 import type { I18nOptions, IntlDateTimeFormat, IntlNumberFormat } from 'vue-i18n';
 import { hemsSupplementMessages } from './hemsMessages';
+import { hemsTariffMessages } from './hemsTariffMessages';
+import { firmwareSupplementMessages } from './firmwareMessages';
+import { profileMessages } from './profileMessages';
 
 export const allLocales = [
     { code: 'en', name: 'English' },
@@ -85,9 +88,9 @@ export const i18n = createI18n({
     numberFormats: numberFormats,
 });
 
-Object.entries(hemsSupplementMessages).forEach(([locale, supplemental]) => {
-    i18n.global.mergeLocaleMessage(locale, supplemental);
-});
+for (const supplement of [hemsSupplementMessages, hemsTariffMessages, firmwareSupplementMessages, profileMessages]) {
+    Object.entries(supplement).forEach(([locale, messages]) => i18n.global.mergeLocaleMessage(locale, messages));
+}
 
 const dynamicLocales = await loadAvailLocales();
 allLocales.push(...dynamicLocales);

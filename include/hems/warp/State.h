@@ -28,6 +28,9 @@ struct Snapshot {
     Sample sample;
     bool configured = false;
     bool enabled = false; // Effective: HEMS Monitor AND provider enabled.
+    bool profileConfigured = false;
+    bool profileLoaded = false;
+    bool profileDriven = false; // Imported profile is the active read path.
     bool reachable = false;
     bool valid = false;
     bool stale = false;

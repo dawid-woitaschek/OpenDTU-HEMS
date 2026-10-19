@@ -1,230 +1,64 @@
 # OpenDTU-HEMS current status
 
-> Snapshot date: 2026-10-14
->
-> This file is the short, authoritative hand-off for the current HEMS implementation state. `HEMS_Roadmap.md` remains the detailed historical/forward plan, but some of its older PR numbering and milestone text may lag behind the actual merged repository state.
+Snapshot: 2026-10-18. Foundation/productization [PR #23](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/23) merged normally into `integration/hems-next` as `3309804f77d1e882e705955827e89b619cb9bfab`. Policy PR #24 merged as `8348b7cddd91f428c9679b44a670fb698f4a8db6`. Current branch: `feature/hems-economic-dispatch`; runtime dispatch is an explicit default-off opt-in. See [dispatch](HEMS_Economic_Dispatch.md).
 
-## Current baseline
+## Usable control model
 
-`hems` baseline at this snapshot:
+| Global mode | Behavior |
+|---|---|
+| Disabled | Automatic control off; existing disabled polling semantics preserved |
+| Monitor | Telemetry, proposed policy decisions, manual semantic controls for writable targets |
+| Active | Monitor features plus automatic policies for writable targets |
 
-```text
-c21184658d6d46d11a24c7c6fdfc08b106af1f87
-```
+Independent **Storage control** and **EVSE control** permissions select **Monitor only** / **HEMS control**. Missing permissions default Monitor only. Both Monitor means observation only even in Active; either mixed configuration is supported. Manual commands do not require Active. Manual storage commands pause opted-in economic automation until explicit Resume; EV Protection retains priority.
 
-The repository had no open PRs at this baseline.
+Normal readiness requires configured/enabled device/profile, target permission, reachability, fresh valid telemetry, supported bounded operation and no conflicting worker/command. Generation checks, ordered bounded writes and readback remain. Manual and automatic commands share the same mailbox/worker/client. No raw Modbus write API exists.
 
-Recently merged implementation work includes:
+Durable journals, ownership reconstruction, attestation and temporary-session code/UI/tests are removed. Normal actuation never depends on LittleFS bookkeeping, stable identity or replay-safe release. Old `hems-recovery-*` files remain ignored and can be inspected/deleted using authenticated File Management. Known RAM ownership gets one best-effort old-endpoint release on permission/config changes; failure is diagnostic, then normal operation continues.
 
-- PR #5: generic Modbus storage telemetry;
-- PR #6: normalized HEMS state and constraint engine;
-- PR #7: OTA factory-image upload guard;
-- PR #8: EV protection policy in Shadow mode;
-- PR #9: repository-level importable device-profile catalog;
-- PR #10: `evse` capability for Modbus profile schema v1.
+## Active EV protection
 
-## Architecture currently implemented
+Fresh EV charging immediately proposes discharge protection. Protection clears only after 120 seconds of continuously fresh not-charging observations; resumed charging cancels debounce, and unknown/stale telemetry cannot clear it.
 
-```text
-Devices / providers
-    ↓
-read-only telemetry
-    ↓
-normalized HEMS state
-    ↓
-constraint model
-    ↓
-Shadow policies
-```
+Active plus Storage HEMS control rejects new discharge commands while allowing charge commands. Semantic Stop is sent only for fresh observed storage discharge; charging and idle storage are left alone. After debounce, release is attempted only after an actual protection intervention that has not been superseded by charging or a later manual operating command. Monitor-only EVSE telemetry remains fully usable. Proposed versus actionable constraints and actual command results are observable. No automatic EVSE policy is installed; its generic Active command path is permission-gated and tested.
 
-The intended later execution path remains:
+## Product UI
 
-```text
-Devices / providers
-    ↓
-normalized telemetry
-    ↓
-HEMS state / constraints
-    ↓
-optimizer / policies
-    ↓
-Safety Supervisor
-    ↓
-actuators
-```
+Four peer views use the existing OpenDTU visual language: Overview (`/hems`),
+Settings (`/hems/settings`), Devices (`/hems/devices`) and Advanced Diagnostics
+(`/hems/diagnostics`). Legacy aliases remain supported.
 
-Rule: one actuator, one boss. Existing DPL remains the fast physical regulation path and must not depend on slower HEMS network/policy work.
+Overview shows fresh energy values, effective tariff prices, interactive tariff/PV charts and provider readiness. The generated storage plan is now a first-class daily-use surface: the current planned action, the next action change, merged charge/hold/discharge blocks, expected SoC progression, modeled benefit and a compact strategy summary are presented directly instead of requiring users to interpret raw optimizer rows. The schedule remains a presentation of the authoritative optimizer result; it does not create a second rules/control path.
 
-## Implemented
+Settings owns configuration. The normal storage-strategy controls group reserve, maximum desired SoC, grid-charging permission, economic-discharge permission and the optional one-time target/deadline together. Battery/model parameters such as capacity, efficiencies, max powers, expected base load, planning horizon, SoC step, price basis and export value remain available under collapsed Advanced settings. Economic dispatch remains a separate explicit default-off opt-in. Devices owns endpoints, profiles and expandable manual semantic controls. Detailed provider/control/system diagnostics and paginated optimizer rows remain available in Advanced Diagnostics. English, German and French product copy is included. See [UI](HEMS_UI.md).
 
-### HEMS core
+Advanced Diagnostics also provides an on-demand browser-only support snapshot (`opendtu-hems-diagnostics/v1`). It sequentially combines existing firmware, system, HEMS, tariff, forecast and paginated optimizer APIs into one JSON download or clipboard payload. Passwords, tokens, keys, cookies and credential-like values are always redacted; network addresses/hostnames/URLs and PV coordinates remain redacted unless explicitly included. The snapshot is never persisted on LittleFS and adds no backend endpoint, worker or runtime history store.
 
-- HEMS configuration and Web UI exist;
-- runtime modes currently remain `Disabled` and `Monitor`;
-- no global Active mode exists yet;
-- `/api/hems/status` exposes diagnostics and normalized state.
+Tariff cheap/normal/expensive categories are presentation-only. The bounded DP
+optimizer uses exact numeric prices, explicit efficiencies, power/SoC bounds,
+optional usable PV and terminal reserve. The DP performs no device writes. A separate default-off dispatcher can issue
+current-slot semantic storage commands only with every live gate satisfied. Native Energy-Charts DE-LU and Forecast.Solar
+providers are included; live provider/TLS validation remains pending.
 
-### Modbus / providers
+## Validation and firmware
 
-- bounded Modbus TCP read path exists;
-- WARP integration remains read-only and uses its dedicated provider;
-- generic profile-driven storage telemetry exists;
-- missing, failed and stale telemetry is not fabricated as zero/false.
+Focused native coverage exercises the actual controller/policy/providers/mailboxes/executor with deterministic wire/task seams: all four permission combinations, Monitor manual commands, Active-only automatic commands, EV protection and debounce, failure/recovery, release/configuration races and profile capability replacement. Existing parser/catalog/planner/readback tests remain. Frontend type check/build pass. GitHub CI owns the complete matrix and channel publication. Exact tested-head CI, manifest/image verification, firmware size and delta are recorded in [PR #25](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/25).
 
-### Modbus profiles
+Reference: Fusion Board v2.1 / Shield v1.1, ESP32-S3, 8 MB flash, `generic_esp32s3_usb`. Policy baseline #24 normal OTA: **2,837,616 bytes**. Dispatch resource deltas and exact tested-head artifacts are recorded in PR #25. No local full firmware matrix, heavyweight dependencies or TCP/IP/AsyncTCP stack changes.
 
-Schema:
+No physical WARP/Marstek control or watchdog/reboot behavior is claimed as tested. Marstek identity absence and replay-safe=false no longer block manual or Active operation. Force-command watchdog reports remain unvalidated for V148.
 
-```text
-opendtu-hems-modbus-profile/v1
-```
+## After flashing the PR firmware
 
-Current profile properties:
+1. Select the verified `pr-25` firmware channel and `generic_esp32s3_usb`, or upload its normal OTA `.bin` (never the factory image).
+2. Log in. In HEMS → Devices / Profiles import the current repository WARP and Marstek JSON. Replace existing same-ID runtime profiles; bind the appropriate profile and configure endpoint/port/unit for each device.
+3. In HEMS → Settings choose Monitor. Set each desired device type to HEMS control; leave the other Monitor only if desired. Save each permission.
+4. Wait for reachable, fresh telemetry. Exercise WARP current/stop/release and storage bounded charge/discharge/stop/SoC/release. Inspect request, transport, verified readback and fresh observed telemetry separately.
+5. For EV protection choose Storage HEMS control, optionally EVSE Monitor only, then Active. Confirm fresh EV charging blocks new discharge requests, stops fresh observed storage discharge, and leaves charging/idle storage alone; fresh-false for 120 seconds permits release only after protection actually intervened. Returning to Monitor stops the automatic producer and attempts release.
+6. If a command fails, inspect exact error and telemetry. Once communication/freshness return, controls re-enable automatically. Device-side reset/disconnection remains available independently.
 
-- read-only;
-- bounded parser/storage model;
-- import/export support;
-- `storage` and `evse` capabilities;
-- no executable write/control/failsafe semantics in profile v1.
+Dynamic tariff and optional PV forecast now have bounded normalized models, authenticated JSON upload, local HTTP polling with one optional shared worker, persisted configuration, freshness/gap/error diagnostics and compact Settings cards. Native Energy-Charts (DE-LU) and Forecast.Solar adapters and pure economic shadow planning are now included; see [native energy and optimizer](HEMS_Native_Energy.md). See [Energy data contracts and API](HEMS_Energy_Data.md). Economic writes require the separate dispatch opt-in and every current gate.
 
-Repository profile catalog:
+The Admin EVSE false-save error is fixed: the endpoint returns success consistently, the shared HTTP handler is used, and a failed post-save reload produces a warning alongside saved status. Additional native coverage exercises Disabled/Monitor/Active across every device permission combination, stale/unreachable recovery, actual catalog actuator bounds and Marstek byte fixtures, and exact EV Protection debounce boundaries. EVSE telemetry enable/disable transitions now durably clear the old binding and permission before changing enablement, so an API re-enable/reboot cannot revive hidden HEMS control. The runtime no longer polls an implicit WARP mapping when no profile is bound. Disabled storage also resets its persisted control mode to Monitor only, including API payloads that still contain a hidden HEMS permission. Production EVSE/storage settings stores have native persistence/reload coverage.
 
-```text
-device-profiles/
-├── storage/
-│   └── Marstek-Venus-E-3.0.json
-└── evse/
-    └── Tinkerforge-WARP3-Smart.json
-```
-
-These JSON files are deliberately **not built into firmware** and are **not installed automatically**. Users download/import the profile they need.
-
-Current Marstek reference profile targets the observed Control V148 / Micro V119 setup. Important validated target semantics include:
-
-```text
-34002  SoC             uint16  × 0.01
-30006  AC power        int16   × -1   (normalized HEMS sign)
-30101  battery current int16   × 0.01
-```
-
-Public Venus E 3.0 mappings are not treated as universally interchangeable across firmware revisions.
-
-### Normalized state / constraints
-
-- Grid, PV, Storage and EVSE have normalized state;
-- data quality distinguishes `unknown`, `fresh` and `stale`;
-- fresh data is usable, stale data remains diagnostic-only;
-- storage constraints support charge/discharge permission and optional power ceilings;
-- constraints compose deterministically;
-- current effective constraints remain neutral unless a later active policy installs restrictions.
-
-### EV protection Shadow policy
-
-Current behavior:
-
-```text
-fresh EVSE charging=true continuously for 120 s
-    ↓
-would_block_storage_discharge
-```
-
-This is Shadow-only:
-
-- no storage write is issued;
-- no EVSE write is issued;
-- effective constraints remain neutral;
-- stale/unknown/false charging resets the Shadow proposal.
-
-The inactive/no-EVSE path has been validated on the reference ESP32-S3 hardware. The actual charging transition with a real WARP remains a later physical validation item.
-
-### OTA factory-image guard
-
-Merged behavior:
-
-- file selection no longer starts upload automatically;
-- explicit upload action is required;
-- `.factory.bin` / `.factory.bin.gz` are rejected by the UI;
-- backend independently rejects factory-image filenames before OTA writes begin;
-- original filename is preserved in the multipart upload.
-
-Dedicated on-device factory-file selection validation remains a useful hardware check, but the guard is already merged into `hems`.
-
-## Known deferred validation
-
-The following are deliberately not represented as completed hardware validation:
-
-- real WARP3 charging/vehicle telemetry against the reference DTU;
-- real WARP communication loss/recovery and packet-capture validation;
-- W5500-to-real-WARP path where applicable;
-- full live Marstek Venus E 3.0 telemetry validation through the imported repository profile;
-- any storage write/control behavior;
-- EV protection Active behavior.
-
-## Reference hardware
-
-Current staging/reference target:
-
-```text
-OpenDTU Fusion Board v2.1
-Fusion Shield v1.1
-ESP32-S3
-8 MB flash
-PIO environment: generic_esp32s3_usb
-PSRAM not required for HEMS core functionality
-```
-
-Later target hardware includes a 16 MB / 8 MB PSRAM ESP32-S3 build, W5500, Hoymiles inverter, Shelly Pro 3EM, WARP3 Smart and Marstek Venus E 3.0.
-
-## Not implemented yet
-
-- generic profile-driven EVSE runtime consumer;
-- migration/binding of imported WARP3 profiles to an EVSE consumer;
-- storage write layer;
-- manual storage control tests;
-- Safety Supervisor for actuator writes;
-- EV protection Active mode;
-- dynamic tariff provider;
-- economic optimizer Shadow mode;
-- economic optimizer Active mode;
-- PV forecast / forecast-aware policy.
-
-## Working mode for future development
-
-PRs remain the unit of work, but PR size is pragmatic rather than dogmatic.
-
-The preferred workflow is:
-
-1. identify the next coherent implementation chunk;
-2. create/update a PR for that chunk;
-3. explicitly state what is being put into that PR;
-4. run deterministic CI/native validation automatically;
-5. request hardware testing only at meaningful functional gates;
-6. merge when the chunk is sufficiently validated;
-7. continue with the next PR.
-
-The implementation may use small PRs when they reduce risk or simplify review, but it may also use broader PRs when several tightly coupled changes are faster to validate together.
-
-Avoid long stacked-PR chains unless there is a concrete benefit. Prefer one active implementation PR, with at most a short dependency stack when necessary.
-
-For interactive development, communication should be explicit and sequential, for example:
-
-```text
-Ich kippe <konkreter Umbau> in PR #<n> ein.
-```
-
-Then that PR is completed/tested before moving to the next chunk unless parallel work is clearly useful.
-
-## Likely next implementation order
-
-This order is intentionally flexible and may be regrouped into fewer/larger PRs where useful:
-
-1. generic profile-driven EVSE telemetry consumer and WARP3 profile binding;
-2. storage write primitives and manual-control path, Marstek first;
-3. write Safety Supervisor / execution gates;
-4. EV protection Active execution;
-5. dynamic tariff provider;
-6. economic optimizer Shadow mode;
-7. economic optimizer Active mode;
-8. PV forecast integration.
-
-Before the first real storage write, target-specific Marstek register semantics must be verified against the actual device/firmware rather than inferred from a single community source.
+Completed policies constrain the existing read-only DP. The current dispatch milestone adds opt-in runtime storage actuation, durable manual pause/Resume, plan authority and semantic cleanup. See [precise policy semantics](HEMS_Policies.md). Physical WARP/Marstek/EV Protection validation, live provider/TLS and ESP32 heap/stack/timing validation remain open. Software dispatch is ready for those tests; it does not require an identity/recovery journal. See [Roadmap](HEMS_Roadmap.md).

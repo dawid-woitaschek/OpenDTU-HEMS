@@ -4,6 +4,9 @@
 #include <Configuration.h>
 #include <defaults.h>
 #include <hems/Controller.h>
+#include <hems/actuation/Capabilities.h>
+#include <hems/evse/SettingsStore.h>
+#include <hems/evse/Telemetry.h>
 #include <hems/profiles/FlashStore.h>
 #include <hems/storage/SettingsStore.h>
 #include <hems/storage/Telemetry.h>
@@ -11,18 +14,20 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <mbedtls/sha256.h>
 
 namespace {
 using Hems::Profiles::Store;
 using Hems::Profiles::Profile;
 using Hems::Profiles::MaxImported;
 using Hems::Profiles::MaxJson;
-using Hems::Profiles::Schema;
 using Hems::Profiles::Type;
 using Hems::Profiles::parse;
 using Hems::Profiles::serialize;
 using Hems::Profiles::decode;
 using Hems::Profiles::typeName;
+using Hems::Profiles::schemaName;
+using Hems::Profiles::hasControl;
 Store& store() { return Hems::Profiles::runtimeStore(); }
 Hems::Profiles::Files& files() { return Hems::Profiles::runtimeFiles(); }
 std::mutex& operation() { return Hems::Profiles::runtimeStoreMutex(); }
@@ -34,20 +39,43 @@ void reply(AsyncWebServerRequest* request, int status, char const* error = nullp
     if (error) { response->getRoot()["message"] = error; }
     response->setCode(status); WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
-void replyInUse(AsyncWebServerRequest* request, char const* profileId) {
+void replyInUse(AsyncWebServerRequest* request, char const* profileId, bool storage, bool evse) {
     auto* response = new AsyncJsonResponse();
     auto& root = response->getRoot();
     root["ok"] = false;
-    root["message"] = "Profile is still referenced by the storage configuration";
+    root["message"] = "Profile is still referenced by HEMS configuration";
     root["profile"] = profileId;
     auto references = root["references"].to<JsonArray>();
-    auto reference = references.add<JsonObject>();
-    reference["consumer"] = "storage";
-    reference["location"] = "/hems/devices";
+    if (storage) {
+        auto reference = references.add<JsonObject>();
+        reference["consumer"] = "storage";
+        reference["location"] = "/hems/devices";
+    }
+    if (evse) {
+        auto reference = references.add<JsonObject>();
+        reference["consumer"] = "evse";
+        reference["location"] = "/hems/devices";
+    }
     response->setCode(409);
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 char const* id(AsyncWebServerRequest* r) { return r->hasParam("id") ? r->getParam("id")->value().c_str() : ""; }
+// Stored imports are normalized by the production serializer. Hash one bounded
+// file at a time; no catalog, duplicate store, or persistent digest allocation.
+void contentDigest(size_t slot, JsonObject out) {
+    size_t size = files().size(slot);
+    if (!size || size > MaxJson) { return; }
+    auto buffer = std::unique_ptr<char[]>(new (std::nothrow) char[size]);
+    if (!buffer || !files().read(slot, buffer.get(), size)) { return; }
+    unsigned char digest[32];
+    if (mbedtls_sha256_ret(reinterpret_cast<unsigned char const*>(buffer.get()), size, digest, 0)) { return; }
+    char hex[65] {};
+    char const* digits = "0123456789abcdef";
+    for (size_t i = 0; i < sizeof(digest); ++i) {
+        hex[i * 2] = digits[digest[i] >> 4]; hex[i * 2 + 1] = digits[digest[i] & 15];
+    }
+    out["content_sha256"] = hex;
+}
 std::unique_ptr<Profile> allocateProfile() { return std::unique_ptr<Profile>(new (std::nothrow) Profile()); }
 } // namespace
 void WebApiProfilesClass::init(AsyncWebServer& server) {
@@ -59,6 +87,8 @@ void WebApiProfilesClass::init(AsyncWebServer& server) {
     server.on("/api/hems/profiles/export", HTTP_GET, [this](auto* r) { exportProfile(r); });
     server.on("/api/hems/profiles/delete", HTTP_POST, [this](auto* r) { erase(r); });
     server.on("/api/hems/profiles/decode", HTTP_GET, [this](auto* r) { inspect(r); });
+    server.on("/api/hems/profiles/evse-binding", HTTP_GET, [this](auto* r) { bindingGet(r); });
+    server.on("/api/hems/profiles/evse-binding", HTTP_POST, [this](auto* r) { bindingPost(r); });
     for (bool persist : { false, true }) {
         server.on(persist ? "/api/hems/profiles/import" : "/api/hems/profiles/validate", HTTP_POST,
             [this, persist](auto* r) { finish(r, persist); }, nullptr,
@@ -97,15 +127,22 @@ void WebApiProfilesClass::finish(AsyncWebServerRequest* r, bool persist) {
     if (persist) {
         auto replace = r->hasParam("replace") ? r->getParam("replace")->value().c_str() : nullptr;
         auto storageConfig = Hems::Storage::StorageSettings.get();
-        if (replace && storageConfig.Profile[0] && !strcmp(storageConfig.Profile, replace)) {
+        auto evseConfig = Hems::Evse::BindingSettings.get();
+        bool storageInUse = replace && storageConfig.Profile[0] && !strcmp(storageConfig.Profile, replace);
+        bool evseInUse = replace && evseConfig.Profile[0] && !strcmp(evseConfig.Profile, replace);
+        if (storageInUse || evseInUse) {
             auto candidate = allocateProfile();
             if (!candidate || !parse(json, upload->received, *candidate, error)) {
                 if (!candidate) { error = "Insufficient memory"; }
                 reply(r, 400, error);
                 return;
             }
-            if (!Hems::Storage::supportsProfile(*candidate)) {
+            if (storageInUse && !Hems::Storage::supportsProfile(*candidate)) {
                 reply(r, 409, "Replacement profile is not compatible with storage telemetry");
+                return;
+            }
+            if (evseInUse && !Hems::Evse::supportsProfile(*candidate)) {
+                reply(r, 409, "Replacement profile is not compatible with EVSE telemetry");
                 return;
             }
         }
@@ -114,8 +151,8 @@ void WebApiProfilesClass::finish(AsyncWebServerRequest* r, bool persist) {
         auto p = allocateProfile(); ok = p && parse(json, upload->received, *p, error);
         if (!p) { error = "Insufficient memory"; }
     }
-    // The storage provider may hold the imported profile. Reload only after the
-    // store mutex is released, otherwise configure() would deadlock on the same store.
+    // Runtime providers may hold imported profiles. Reload only after the store
+    // mutex is released, otherwise configure() would deadlock on the same store.
     if (ok && persist) {
         lock.unlock();
         HemsController.updateSettings();
@@ -128,6 +165,7 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
     if (!lock.owns_lock()) { reply(r, 503, "Profile operation busy"); return; }
     auto p = allocateProfile(); if (!p) { reply(r, 503, "Insufficient memory"); return; }
     auto storageConfig = Hems::Storage::StorageSettings.get();
+    auto evseConfig = Hems::Evse::BindingSettings.get();
     auto* response = new AsyncJsonResponse(); auto& root = response->getRoot();
     auto profiles = root["profiles"].to<JsonArray>(); char const* error = nullptr; size_t corrupt = 0;
     for (size_t i = 0; i <= MaxImported; ++i) {
@@ -140,19 +178,27 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
         o["id"] = static_cast<char const*>(p->id);
         o["vendor"] = static_cast<char const*>(p->vendor);
         o["model"] = static_cast<char const*>(p->model);
+        if (!builtIn) { contentDigest(i - 1, o); }
         o["origin"] = builtIn ? "Built-in" : "Imported";
-        o["schema"] = Schema;
+        o["schema"] = schemaName(*p);
         o["source"] = static_cast<char const*>(p->source);
         o["source_revision"] = static_cast<char const*>(p->revision);
         o["author"] = static_cast<char const*>(p->author);
         o["license"] = static_cast<char const*>(p->license);
         o["telemetry_count"] = p->entryCount;
-        o["control_metadata"] = false;
-        o["read_only"] = true;
+        o["control_metadata"] = hasControl(*p);
+        auto info = Hems::Actuation::describeProfile(p.get());
+        o["read_only"] = !info.control;
+        o["control_supported"] = info.control;
+        o["control_reason"] = info.reason;
+        o["identity_metadata"] = info.identity;
+        o["recovery_metadata"] = info.recovery;
         auto capabilities = o["capabilities"].to<JsonArray>();
         if (Hems::Storage::supportsProfile(*p)) { capabilities.add("storage"); }
+        if (Hems::Evse::supportsProfile(*p)) { capabilities.add("evse"); }
         auto usedBy = o["used_by"].to<JsonArray>();
         if (storageConfig.Profile[0] && !strcmp(storageConfig.Profile, p->id)) { usedBy.add("storage"); }
+        if (evseConfig.Profile[0] && !strcmp(evseConfig.Profile, p->id)) { usedBy.add("evse"); }
         o["in_use"] = usedBy.size() != 0;
     }
     root["corrupt_slots"] = corrupt; root["max_json_bytes"] = MaxJson; root["max_imported"] = MaxImported;
@@ -175,8 +221,11 @@ void WebApiProfilesClass::erase(AsyncWebServerRequest* r) {
     if (!lock.owns_lock()) { reply(r, 503, "Profile operation busy"); return; }
     auto profileId = id(r);
     auto storageConfig = Hems::Storage::StorageSettings.get();
-    if (storageConfig.Profile[0] && !strcmp(storageConfig.Profile, profileId)) {
-        replyInUse(r, profileId);
+    auto evseConfig = Hems::Evse::BindingSettings.get();
+    bool storageInUse = storageConfig.Profile[0] && !strcmp(storageConfig.Profile, profileId);
+    bool evseInUse = evseConfig.Profile[0] && !strcmp(evseConfig.Profile, profileId);
+    if (storageInUse || evseInUse) {
+        replyInUse(r, profileId, storageInUse, evseInUse);
         return;
     }
     char const* error;

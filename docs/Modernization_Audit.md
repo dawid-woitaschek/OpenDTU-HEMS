@@ -1,0 +1,324 @@
+# Modernization audit
+
+Audit date: 2026-10-19. Base: `integration/hems-next` at
+`82a06f3e61028b5d47a6d369adc7bd9f72b020ca`.
+
+Official current provider specifications and bounded live responses were supplied
+on 2026-10-19 and inspected directly. Energy-Charts is migrated to the current v2
+contract. Forecast.Solar's public contract and successful external requests are
+verified. The specific undocumented `full=1` behavior and physical ESP32 operation
+remain separate validation limits. No raw private location/network capture is
+committed.
+
+Classification: A CURRENT, B OUTDATED—MIGRATE, C BLOCKED FROM MIGRATION,
+D UNCERTAIN, E NOT VERSIONED. "Current" below applies only to the stated
+interface and checked official evidence, not every function in a dependency.
+
+## External APIs
+
+| Area | Current interface at start | Newest suitable interface / official source | Status | Action |
+|------|---------------------------|--------------------------------------------|--------|--------|
+| Energy-Charts | Legacy `/price?bzn=DE-LU&start=<unix>&end=<unix>`; `unix_seconds`, `price`, `unit` | Supplied [OpenAPI 2.0](https://api.energy-charts.info/openapi.json), [full API description](https://api.energy-charts.info/llms-full.txt), live v2 response; stable release 2026-07-20 | B → migrated | Fixed `/v2/price`, strict uniform envelope, declared interval and ISO Berlin timestamps; no v1 parser or fallback. Provider generation and fetch time are distinct. |
+| Forecast.Solar public estimate | Public unversioned `/estimate/lat/lon/tilt/azimuth/kWp?time=utc&full=1`; `watt_hours_period` | Supplied [official Swagger](https://api.forecast.solar/swagger.yaml) v7.41.0.2515 (2026-09-04), plus three successful live captures | A for endpoint/parameters; E for URL versioning | Public endpoint requires no key. Parameter ranges, East-negative/West-positive convention, UTC query and ResponseFull verified. No API-version migration needed. |
+| Forecast.Solar `full=1` | Dense hourly timeline required by the gap-rejecting parser | Missing from supplied Swagger; exact live East query succeeds and changes sparse output into dense hourly output | D: undocumented behavior | Retain deliberately. Sanitized dense/sparse fixtures enforce the dependency and failure atomicity; no invented night or daytime values. |
+| GitHub REST source comparison | Unversioned request defaults to old calendar version | `2026-03-10`: [official version table](https://github.com/github/docs/blob/main/data/tables/rest-api-versions.yml), [official OpenAPI](https://github.com/github/rest-api-description/blob/main/descriptions/api.github.com/api.github.com.2026-03-10.json) | B → migrated | Explicit version and JSON Accept headers. Verified compare response still contains `ahead_by`, `behind_by`, `status`, `html_url`; test asserts headers. |
+| GitHub static firmware/profile assets | Raw anonymous HTTPS | [raw repository files](https://github.com/dawid-woitaschek/OpenDTU-HEMS) | E | Static catalog publication; no Contents API, account or token for browsing. Profile fetch pins immutable source SHA. |
+| GitHub Actions | checkout/setup-node/setup-python v7; cache v6; upload v7; download v8; github-script v9 | Official vendor tags: checkout 7.0.1, setup-node 7.1.0, setup-python 7.0.0, cache 6.1.0, upload 7.0.2, download 8.0.2, github-script 9.0.0 | A for these checked actions | Existing rolling major refs already resolve to current stable releases. Other third-party actions remain D below. |
+| PlatformIO platform | espressif32 6.10.0, Arduino 2.0.17 / bundled IDF 4.4 | [6.13.0 package contract](https://github.com/platformio/platform-espressif32/blob/v6.13.0/platform.json) is newest compatible 6.x; [8.0.0](https://github.com/platformio/platform-espressif32/blob/v8.0.0/platform.json) uses Arduino 3.3.12 | B → 6.13.0; C for 8.0.0 | Upgrade platform while retaining Arduino 2.0.17. Concrete Arduino-3/IDF-5 blocker below. Target remains ESP32-S3/8 MB/no PSRAM. |
+| PlatformIO Core / esptool Python | Core 6.1.19 locally; unpinned CI provisioning | Core 6.2.0, platform-packaged esptool 4.11.0; [official Core package](https://pypi.org/project/platformio/), [esptool](https://github.com/espressif/esptool/tree/v4.11.0) | B → migrated | Shared build requirements pin the current Core and matching packaged tool; fix missing `intelhex` dependency and import precedence. esptool 5.x is not substituted into a platform that packages 4.11. |
+| Native networking/MQTT/display/scheduler libraries | See version table below | Official vendor release tags and package manifests, checked 2026-10-19 | B → migrated | Upgrade compatible stable libraries and validate target build. No application control semantics/register changes. |
+| MQTT wire protocol | MQTT 3.1.1 through espMqttClient | MQTT 5 needs a client that implements level 5; [current vendor constants](https://github.com/bertmelis/espMqttClient/blob/v1.7.3/src/Packets/Constants.h) still emit protocol level 4 | C | Latest client installed. Changing the integer would produce invalid packets; MQTT-5 properties, parser/session semantics and broker matrix require a separate client migration. |
+| WARP Modbus | Profile v2; documented register table, functions 3/4/6/16 | [Current Tinkerforge implementation](https://github.com/Tinkerforge/esp32-firmware/blob/master/software/src/modules/modbus_tcp/modbus_tcp.cpp) still exposes referenced IEC/charging/current registers 1000/1002/1010 | E for these register contracts | No invented mapping migration. Firmware/register-table extensions are device capabilities, not a web API-version switch. Physical WARP3 validation remains mandatory. |
+| Marstek Modbus | Curated firmware-specific V148/Micro-V119 profile | No authoritative current vendor contract retrievable/established | D | Preserve mapping and safety boundaries. Reverse-engineered references are not promoted to vendor authority. |
+| OpenDTU / OnBattery inherited interfaces | Own REST/WebSocket endpoints, Hoymiles radio, CAN/BMS, VE.Direct, SML and configurable meter adapters | No single interchangeable newer external API | E for own endpoints; D for unchecked vendor contract revisions | Do not relabel local `/api` paths or radio revisions as an obsolete REST version. Hardware-facing changes deferred to vendor/device evidence. |
+| Browser APIs | Fetch, AbortSignal timeout, typed arrays, File/Blob; SHA-256 must work on local HTTP | Standards-based APIs; no meaningful REST version | E | Small current `@noble/hashes` 2.4.0 implementation verifies profiles when Web Crypto is unavailable on local HTTP. Keep clipboard/manual file fallbacks for insecure local contexts. |
+| Node / web tooling | Node 24, older Vue/Vite/lint/type tooling | [Node distribution index](https://nodejs.org/dist/index.json): stable 26.12.0; current official package metadata and vendor repositories below | B → migrated; C for TS7 | CI and local build use Node 26; current dependency releases installed. Migrate `__dirname`/CommonJS optional Vite config loading to native ESM. |
+| Yarn / package-manager setup | Classic 1.22.22 and bundled Corepack assumption | Stable Yarn 4.18.1; [official Yarn source](https://github.com/yarnpkg/berry), [Corepack distribution policy](https://github.com/nodejs/corepack#readme) | B → migrated | Keep node_modules linking, immutable installs, quote npm-run-all glob for the new shell, explicitly provision Corepack 0.36.0 and share cached Node/Yarn setup across CI. Node >=25 no longer bundles Corepack. |
+| JSON schemas | Own profile v1/v2, normalized energy v1, firmware manifest v1 | Repository-owned bounded contracts, not JSON Schema draft identifiers | E | v2 catalog entries remain backend validated; preserve v1 read-only profile and legacy firmware provenance compatibility. No unrelated `$schema` draft migration found. |
+
+### Native dependency migrations
+
+Official release source for each row is the linked vendor repository/tag; a newer
+stable tag was actually checked rather than inferred from a version-shaped URL.
+
+| Dependency | Before | Selected release | Migration implication |
+|------------|--------|------------------|-----------------------|
+| [ESPAsyncWebServer](https://github.com/ESP32Async/ESPAsyncWebServer/tree/v3.12.1) | 3.10.3 | 3.12.1 | Vendor manifest requires AsyncTCP ^3.5.0. |
+| [AsyncTCP](https://github.com/ESP32Async/AsyncTCP/tree/v3.5.0) | 3.4.10 | 3.5.0 | Matching maintained networking interface. |
+| [espMqttClient](https://github.com/bertmelis/espMqttClient/tree/v1.7.3) | 1.7.2 | 1.7.3 | Same MQTT 3.1.1 application contract; vendor manifest supports AsyncTCP >=3.4. |
+| [RF24](https://github.com/nRF24/RF24/tree/v1.6.2) | 1.5.0 | 1.6.2 | Compile existing radio integration; physical RF smoke test still needed. |
+| [U8g2 Arduino distribution](https://github.com/olikraus/U8g2_Arduino/tree/2.37.1) | registry 2.36.18 | tag 2.37.1 | Registry is behind vendor release. Use official Arduino repository tag; its stale library.json labels itself 2.36.19, so build output includes that version plus tag commit bb6ebd1. |
+| [TaskScheduler](https://github.com/arkhipenko/TaskScheduler/tree/v4.1.0) | 4.0.4 | 4.1.0 | Existing scheduling signatures preserved; native timing tests cover HEMS behavior. |
+| [MycilaNTP](https://github.com/mathieucarbou/MycilaNTP/tree/v6.0.6) | 6.0.5 | 6.0.6 | Preserve synchronized-UTC preflight. |
+| [ArduinoJson](https://github.com/bblanchon/ArduinoJson/tree/v7.4.3) | 7.4.3 | 7.4.3 | A: newest stable tag checked; same parser used for catalog generation and firmware imports. |
+| [sunset](https://github.com/buelowp/sunset/tree/1.1.7) / [EspSoftwareSerial](https://github.com/plerup/espsoftwareserial/tree/8.2.0) | 1.1.7 / ^8.2.0 | unchanged | A for checked stable package releases. |
+
+### Web tooling migrations
+
+Versions come from current package metadata linked to the vendor source; builds,
+lint, type checks and regression suites validate the selected graph. TypeScript 7
+was attempted and rejected for the concrete Vue compiler incompatibility below.
+
+| Package | Before | Selected | Vendor source |
+|---------|--------|----------|---------------|
+| @intlify/unplugin-vue-i18n | 11.0.7 | 11.2.7 | [Source](https://github.com/intlify/bundle-tools/blob/main/packages/unplugin-vue-i18n/README.md) |
+| @tsconfig/node26 | 24.0.4 | 26.0.1 | [Source](https://github.com/tsconfig/bases#readme) |
+| @types/bootstrap | 5.2.10 | 5.2.11 | [Source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/bootstrap) |
+| @types/node | 25.5.0 | 26.6.5 | [Source](https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node) |
+| @vitejs/plugin-vue | 6.0.5 | 6.0.10 | [Source](https://github.com/vitejs/vite-plugin-vue/tree/main/packages/plugin-vue#readme) |
+| @vue/eslint-config-typescript | 14.7.0 | 14.9.0 | [Source](https://github.com/vuejs/eslint-config-typescript#readme) |
+| eslint | 10.1.0 | 10.13.0 | [Source](https://eslint.org) |
+| eslint-plugin-oxlint | 1.50.0 | 1.89.0 | [Source](https://github.com/oxc-project/eslint-plugin-oxlint) |
+| eslint-plugin-vue | 10.8.0 | 10.11.1 | [Source](https://eslint.vuejs.org) |
+| oxlint | 1.50.0 | 1.89.0 | [Source](https://oxc.rs/docs/guide/usage/linter) |
+| prettier | 3.8.1 | 3.9.10 | [Source](https://prettier.io) |
+| sass | 1.98.0 | 1.105.2 | [Source](https://github.com/sass/dart-sass) |
+| terser | 5.46.1 | 5.51.2 | [Source](https://terser.org) |
+| typescript | 5.9.3 | 6.0.3 | [Source](https://www.typescriptlang.org/) |
+| vite | 8.0.3 | 8.3.4 | [Source](https://vite.dev) |
+| vite-plugin-css-injected-by-js | 4.0.1 | 5.0.2 | [Source](https://github.com/marco-prontera/vite-plugin-css-injected-by-js#readme) |
+| vue | 3.5.31 | 3.5.44 | [Source](https://vuejs.org/) |
+| vue-i18n | 11.3.0 | 11.4.16 | [Source](https://github.com/intlify/vue-i18n/tree/master/packages/vue-i18n#readme) |
+| vue-router | 5.0.4 | 5.4.0 | [Source](https://router.vuejs.org) |
+| vue-tsc | 3.2.6 | 3.3.13 | [Source](https://github.com/vuejs/language-tools#readme) |
+
+### Concrete migration blockers and uncertain findings
+
+| Area | Older/current interface | Newer candidate / official evidence | Actual blocker or uncertainty | Decision/action |
+|------|-------------------------|-------------------------------------|-------------------------------|-----------------|
+| Arduino / ESP-IDF | Arduino 2.0.17, bundled IDF 4.4.x | Arduino 3.3.12 / newer IDF; [official migration guide](https://github.com/espressif/arduino-esp32/blob/3.3.12/docs/en/migration_guides/2.x_to_3.0.rst), [IDF SPI-Ethernet migration](https://github.com/espressif/esp-idf/blob/v5.0/docs/en/migration-guides/release-5.x/networking.rst) | Current W5500 code passes an externally allocated shared SPI device to ETH_W5500_DEFAULT_CONFIG and esp_eth_mac_new_w5500. New driver allocates SPI internally and changes constructor/config signatures; private Arduino netif registration and mbedTLS _ret APIs also require porting. This is a real compatibility blocker affecting transport/hardware ownership, not "still supported". | C: latest compatible platform 6.13.0 now; separate network-driver port and Ethernet/Wi-Fi/TLS/resource tests required. |
+| TypeScript | 6.0.3 after upgrade from 5.9.3 | 7.0.2; [vue-tsc 3.3.13 source](https://github.com/vuejs/language-tools/blob/v3.3.13/packages/tsc/index.ts) | Actual production build with TS7 fails ERR_PACKAGE_PATH_NOT_EXPORTED for typescript/lib/tsc; current vue-tsc resolves that JS compiler path. | C: 6.0.3 is newest compatible stable compiler; build passes. Retest when Vue supports the TS7 interface. |
+| Transitive vue-i18n | Latest unplugin-vue-i18n 11.2.7 pulls vue-i18n-extensions with vue-i18n 10 | [Official plugin package](https://github.com/intlify/bundle-tools/tree/main/packages/unplugin-vue-i18n) | Current vendor dependency graph still pulls unsupported v10; top-level runtime is current v11. Overriding an internal compiler dependency requires upstream compatibility evidence. | C/D: expose inherited transitive baggage; no unsafe resolution override. |
+| Other third-party Actions | stale@v11, lock-threads@v6, release-changelog-builder@v6.4.0, action-gh-release@v3, pinned dynamic-badges SHA | Vendor releases not comprehensively verified | D: cannot claim newest suitable versions from rolling labels alone. | Keep exact finding open; no fabricated current classification. |
+| MCP_CAN_lib | Unpinned default Git ref | [Official repository](https://github.com/coryjfowler/MCP_CAN_lib) | D: reproducibility gap; no validated newest release pin/hardware comparison. | Explicitly deferred; don't invent CAN behavior during HEMS cleanup. |
+| Vendored libraries/contracts | Frozen 1.1.1, SDM, VeDirectFrameHandler, SMLParser, CpuTemperature and internal helpers | Vendor repositories/documentation linked in source | D: latest upstream equivalence/licensing and local modifications not established. VE.Direct cites protocol 3.34 without a current official revision check. | No blanket current claim and no blind vendor subtree replacement. |
+| User-configured HTTP/MQTT meters/bridges | Local JSON/SML and device-specific URLs | Depends on configured hardware/server | E/D: no fixed vendor URL/version to upgrade globally | Keep configurable transport; per-device migrations need actual configured contract. |
+| Legacy local HTTP / optional MQTT TLS | User-selectable HTTP and CA configuration | HTTPS-capable device endpoints vary | D: no safe global switch for arbitrary local hardware; native providers remain verified HTTPS only. | No TLS weakening. Broader inherited transport hardening requires compatibility work. |
+| Provider source metadata / East-plane incident | See provider rows | Supplied official schemas and externally successful bounded captures | Contracts verified; physical device incident remains unverified | V2 migrated; retain specific `full=1` uncertainty and reproduce device failure if it recurs. |
+
+## Firmware update state and provenance
+
+Root cause: lookup start already cleared data, but input edits did not. The old
+manifest could remain visible under a newly typed channel. There was no generation
+check across fetch/body parsing, and all image inequality used "newer or different".
+
+The explicit state machine is idle → loading → found/current or found/different,
+not_found, invalid, or error. The state type reserves newer/older only for proven
+ordering; no unproven ordering is emitted. A synchronous channel watcher detaches
+manifest/build/error state immediately; each request captures channel/repository
+and a generation. Late success, error and body-decode results cannot publish.
+Returned channel identity must match the normalized request. Unmount invalidates
+in-flight results. Install requires a current accepted different-image result and
+captures its channel/build before downloading. 404 and network failures show no
+remote metadata, install action or availability banner. Installed metadata stays
+visible because it describes the running image, not a failed remote lookup.
+
+Build commit, source commit and tested merge commit stay distinct. Same source with
+a different tested build is a different image, not a newer source. Old PR channel
+publication dates do not establish ancestry. Regression coverage executes the real
+Vue methods and rendered page, including pr-25 → deinemutter and both race orders.
+
+## Energy-Charts v2 contract
+
+The supplied OpenAPI identifies stable v2.0 (2026-07-20); the official full
+self-description explicitly says to prefer `/v2/...`. Public key-free
+`/v2/price?bzn=DE-LU&start=<unix>&end=<unix>` replaces `/price`. Existing German
+local-day UTC boundaries and DST logic remain unchanged; inclusive request end
+is the end of tomorrow minus one second.
+
+The filtered parser requires schema `2.0`, endpoint `price`, bidding zone DE-LU,
+Europe/Berlin, EUR / MWh, explicit non-deprecated status and license text. It
+finds `day_ahead_price` by stable ID (exactly one match, <=16 descriptors) and
+rejects an incompatible per-series unit override. Country, if present, must be
+de. PT15M/15 and PT1H/60 are the only supported metadata pairs; PT1H is retained
+as a declared uniform-schema resolution for hourly/historical compatibility,
+not claimed as the current live DE-LU response. The supplied live response has
+192 PT15M records over today and tomorrow and is 15,465 bytes.
+
+Each of 1..256 rows must carry an explicit price key, a parseable ISO timestamp
+and a consecutive UTC step matching the declared interval. Berlin UTC offsets
+must match CET/CEST at that instant, including repeated/skipped local DST hours.
+Explicit null skips an unpublished interval; a missing key or row is malformed.
+Availability bounds are checked against row timestamps and published price
+bounds. They describe envelope availability, not continuous planning coverage:
+`available_until` labels the last interval start, not its end. Only accepted,
+non-null intervals determine coverage. Partial tomorrow stays partial.
+
+`generated_at` is provider **response-generation time**, never electricity-market
+publication time. Cached responses keep their true generation time. The model
+stores it separately from successful local fetch time; existing `source_*` API
+fields retain compatibility and mean provider-generation metadata. UI labels in
+EN/DE/FR say provider response/generation. Fractional generation timestamps are
+stored at the existing second precision. Price conversion remains
+`llround(EUR_per_MWh * 1000)` to signed int32 micro-EUR/kWh, with finite/overflow
+checks before conversion. No floating-point price enters optimizer/dispatch.
+
+All validation precedes destination mutation, using two bounded passes without a
+second Series. Failure (including deprecated=true, malformed payload or HTTP 429)
+retains accepted data and exposes a stable error. Still-covered tariff intervals
+remain planning-usable independently of transport/provider response age; null,
+uncovered or expired intervals never become invented prices. No v1 fallback is
+implemented. `energy_charts_deprecated` is explicitly localized and rejected.
+
+The documented price rate limit is an upper bound of 2/minute, burst 2, with
+possible dynamic reduction. Automatic cadence remains >=1 hour. Manual/transport
+spacing is >=30 seconds. Retry-After on all HTTP responses (seconds or HTTP date)
+is honored without shortening a longer hold; HTTP 429 uses >=60 seconds for
+Energy-Charts (>=2 hours for Forecast.Solar), and 503 retains its >=15-minute
+floor. No aggressive multi-request retry is added.
+
+Deterministic tests cover the supplied shape, 15-minute/hourly intervals,
+negative/tie/boundary money, null/partial/full coverage, 23/25-hour days, malformed
+metadata/timestamps/values, ordering/duplicates, count/overflow bounds,
+deprecation, atomic rejection, retained planning data and quota holds. Production
+HTTPS filtering is exercised at 192 and 256 records; host JSON allocator peaks
+are 33,047 and 43,799 bytes under the 49,152-byte cap (including an ignored 8 KB
+field on the wire). These are host measurements, not ESP32 TLS peak headroom.
+
+## Forecast.Solar investigation
+
+Code review covers fixed-origin HTTPS/CA/SNI, DNS/TLS/memory codes, source time,
+UTC keys, tilt/azimuth/kWp conversion, six-plane bound, enabled ordering, 5-second
+spacing, >=2-hour ordinary cadence, quota/server holds, config generations,
+atomic aggregate replacement and retained source/transport freshness.
+
+Proven bug: later unattempted planes retained old error/transport metadata after
+an earlier plane stopped a subsequent refresh. Per-cycle attempted_at/state now
+separates not-attempted, loading, success, failure and disabled. Last successful
+fetch time stays available. Aggregate errors attach to the plane being combined;
+overview errors name each failed plane and include bounded HTTP/TLS detail.
+
+The supplied external East and West captures both return HTTP 200, code 0 and
+success; the exact East `time=utc&full=1` request also succeeds. All verify the
+public TLS certificate and hostname using TLS 1.2, with Let's Encrypt YR2 as
+issuer. East parameters are valid; provider rejection, global outage and rejection
+of `full=1` are not general explanations for this incident. West was deliberately
+requested twice: remaining 11 → 9 → 8 is explained, with no missing requester.
+Observed quota is 12 requests per 3600 seconds, not an invented fixed entitlement.
+
+The supplied Swagger does not list `full`. Without it, both captures have a
+48,849-second overnight gap and irregular sunrise/sunset boundaries. With it,
+the East capture has 47 continuous hourly boundaries, explicit night zeros, and
+46 parsed intervals. Removing the option alone would break the current parser's
+maximum-one-hour gap rule. Repository history introduced it with the native
+adapter and supplies no independent authoritative guarantee. Retaining it is the
+lowest-risk option; sparse gaps still fail atomically rather than being filled.
+
+Per-plane diagnostics additionally expose last successful provider generation
+and fetch timestamps/ages, quota period/limit/remaining and request retry delay.
+Provider generation is not market publication time. Loading no longer reuses a
+previous success label. HTTP-body rate-limit errors retain longer quota periods
+and never shorten an existing Retry-After. Dense/sparse/irregular-boundary and
+East-first failure regressions use sanitized deterministic data.
+
+Firmware trust includes ISRG Root X1/X2, and hostname/SNI, CA-chain and clock
+checks stay intact. Let's Encrypt's [official chain documentation](https://letsencrypt.org/certificates/)
+identifies the default YR2 → Root YR → ISRG Root X1 chain. The official YR2
+intermediate and cross-signed Root YR verify successfully with the existing
+bundled roots using OpenSSL. The existing anchors should therefore validate the
+default chain. This does not prove the exact chain served to ESP32 or its mbedTLS
+handshake/resource behavior. No roots or verification settings are changed.
+The physical East-plane failure remains unresolved: check live ESP32 DNS/TLS,
+heap/stack, scheduling/quota, transient failures and pre-fix stale diagnostics.
+Desktop curl success does not establish device success. No successful aggregate
+is fabricated and no additional live requests are required for these tests.
+
+## Repository catalog
+
+Canonical source: `dawid-woitaschek/OpenDTU-HEMS`, `integration/hems-next`.
+Distribution: `device-profile-catalog/catalog.json` on raw.githubusercontent.com.
+The independent catalog workflow compiles the production parser, validates every
+profile and automatically publishes deterministic metadata for additions, changes
+and deletions. PR tests reject malformed files, category mismatches, duplicate IDs
+and drift. Profile-only publication does not depend on a firmware build.
+
+Normal listing: one bounded static catalog request, zero full-profile requests.
+Import/update: one selected immutable-SHA profile GET, exact size/raw SHA-256
+verification, then existing authenticated backend import (explicit replace query
+and confirmation for installed IDs). A second normalized SHA permits installed
+current/different detection from lightweight backend summaries. No remote catalog
+lives on ESP32; backend parsing, in-use compatibility, persistence and runtime
+reload remain authoritative. The list and consumer selectors refresh after success.
+Repository failure leaves local administration/manual import usable. Catalog 404,
+malformed/index-size errors, selected 404, integrity and profile-shape failures are
+separate translated states. First live catalog publication necessarily follows
+merging/running its workflow on the canonical ref.
+
+## Legacy / baggage / redundancy findings
+
+| Area | Finding | Classification | Action |
+|------|---------|----------------|--------|
+| Firmware view | Stale typed-channel result, request races, unproved newer wording | REMOVE | Explicit authoritative state machine and neutral difference wording. |
+| HEMS navigation | Global and local menus duplicated destination definitions and used different labels | CONSOLIDATE | Shared four-entry navigation; RouterLink handles alias-active state. Global entry points and local page navigation retained as distinct purposes. |
+| Profile hierarchy | Repository import would remain hidden inside Advanced profiles disclosure | REMOVE | Profile administration is directly visible on Devices; only manual file import is a fallback disclosure. |
+| Profile imports | Manual/repository persistence, refresh and notification could drift | CONSOLIDATE | Shared submitProfile path with backend validation and profiles-changed event. |
+| Locale initialization | Three repeated supplement merge loops | CONSOLIDATE | One loop also merges synchronized profile messages. |
+| Diagnostic cross-link | Manual-control link pointed at Settings although controls live on Devices | REMOVE | Correct destination and synchronized labels. |
+| Labels | German-only firmware hint, English-only profile preview/metadata/invalid JSON and diagnostic link/labels | REMOVE | EN/DE/FR translations synchronized; concise Devices label shared. |
+| Locale keys | Advanced deviceProfiles and duplicated menu HemsInfo/HemsSettings keys became unused | REMOVE | Remove only these proven-unused keys in EN/DE/FR. |
+| Docs | Old feature-branch energy-doc URL, no-unit-tests claim, old Node/platform setup and Retry-After statement | REMOVE | Canonical ref link and current test/setup/transport behavior. |
+| Vite | CommonJS require/dirname in ESM config; native-loader warning | REMOVE | Dynamic ESM optional config import and import.meta.dirname. |
+| CI/tooling duplication | Repeated Node/Corepack setup; Copilot setup lacked checkout before repository requirements | CONSOLIDATE | Shared setup-web composite explicitly provisions current package manager, caches dependencies, and requires checkout first. No legacy Yarn-1 retention. |
+| Factory build | Global esptool could win over platform package; missing Python dependency after tool upgrade | REMOVE | Prioritize packaged tool and centralize reproducible build requirements. |
+| Profile schemas v1/v2 | Read-only import compatibility versus bounded optional control metadata | KEEP — DISTINCT PURPOSE | Removing v1 would strand installed read-only profiles; it never grants writes. |
+| Firmware legacy manifests | Exact image versus recoverable source provenance | KEEP — DISTINCT PURPOSE | Mandatory compatibility remains covered; no shortened SHA identity adoption. |
+| Config migration defaults | Old persisted installations require safe mode/permission defaults | KEEP — DISTINCT PURPOSE | Keep fail-closed migration and documented legacy policy defaults. |
+| Support snapshot clipboard fallback | Clipboard API unavailable on insecure local HTTP | KEEP — DISTINCT PURPOSE | Manual fallback remains necessary on ESP32-local pages. |
+| Overview/settings/diagnostics/manual controls | Same domain appears with different action and detail depth | KEEP — DISTINCT PURPOSE | Inspectable energy/plans, editable settings, raw support data and intentional device commands are not equivalent functions. |
+| Historical docs/DeviceProfiles | DTU board/build definitions resemble Modbus profile catalog names | KEEP — DISTINCT PURPOSE | Document distinction; do not feed them to catalog generator. |
+
+## Deferred findings
+
+| Area | Reason deferred | Required decision/validation |
+|------|-----------------|------------------------------|
+| ESP32 Energy-Charts v2 runtime | Official contract, external HTTP 200 shape and deterministic parser/transport checks pass | Verify physical HTTPS/parser/heap/stack operation and retained coverage on ESP32-S3 without PSRAM. |
+| Forecast.Solar physical East failure | External East/West/full queries succeed; no live ESP32 incident capture | Reproduce on updated physical firmware if it recurs; inspect named-plane HTTP/DNS/TLS, quota and heap/stack. `full=1` remains specifically undocumented. |
+| Arduino 3 / IDF driver port | Changed shared SPI ownership and network initialization | Port W5500/netif/mbedTLS without hardware semantics change; test Ethernet/Wi-Fi, TLS, stack/heap, CAN/UART/radio and firmware size. |
+| Broad vendor/dependency inventory D rows | No verified current authoritative mapping/release comparison | Resolve each named uncertainty, not just a deprecation search. |
+| Permission editors | Settings and Devices both edit storage/EVSE permission, with different surrounding context | Product decision before removing a permission-editing entry point; keep control semantics and persistence intact. |
+| HEMS profile naming / manual control placement | Broader consolidation risks moving safety-sensitive actions | Product decision and accessibility/usage review; preserve explicit manual action boundaries. |
+| Local profile summary requests | Devices and profile administration separately fetch the same lightweight local summary | Consolidate summary ownership in a focused follow-up; current lists have different consumers and the four-slot bound limits work. |
+| Duplicate backend error translations | Backend uses English diagnostic messages across inherited endpoints | Stable error-code/API/i18n migration; touched repository errors are translated now. |
+| Tests/artifact ignore list | Native executables and __pycache__ clutter git status | Keep generated output out of commits; consolidating Makefile outputs/ignore rules is separate low-value housekeeping. |
+| Full-tree dead code removal | A search hit is not proof of unreachable runtime/hardware paths | No speculative removal; actual removed redundancy is listed above. |
+
+## Validation and physical limits
+
+Validation results and final resource measurements are recorded in the PR/report.
+Native tests include the strict v2 conformance suite and sanitized Forecast.Solar
+sparse/dense captures. Address/undefined-behavior sanitizer checks also pass for
+v2 (LeakSanitizer is unavailable under the environment tracer). Native tests
+exercise real parsers, profile validation/import constraints, energy
+retention, quota/generation handling, firmware contracts and safety/control paths.
+Browser suites run the built gzip web assets through a local static server with
+firmware-style Content-Encoding; API responses are deterministic fixtures, not an
+ESP32 HTTP server. Web production
+build includes TypeScript checks. Target build is generic_esp32s3_usb, 8 MB,
+without PSRAM. No firmware was flashed and no physical device command was sent.
+Remaining physical validation: WARP3, Marstek, EV Protection timing, live bound
+profile reload, Ethernet/radio after dependency updates, provider TLS/DNS/clock,
+heap/worker-stack pressure and actual provider failure/quota behavior. Energy-Charts
+v2 HTTPS/parser/heap behavior and actual East-plane reproduction remain physical
+validation items; desktop captures do not establish those outcomes.
+
+Validated locally: complete `make test` native suite; targeted final energy-service
+rebuild; HEMS configuration and firmware channel/provenance Python tests; four
+catalog-generation tests; frontend unit tests including EN/DE/FR key parity;
+rendered modernization (360/1440), HEMS and economic suites (320/360/768/1440);
+full production C++ lint, frontend lint, Prettier, Vue/TypeScript and production
+build; workflow YAML syntax and whitespace checks. All passed.
+
+Final target build: **generic_esp32s3_usb SUCCESS**. Static RAM **116512 / 327680
+bytes (35.6%)**; linked flash **2864229 / 3932160 bytes (72.8%)**; OTA binary
+**2864592 bytes**. No PSRAM flag/dependency was added. These are static/linker
+measurements, not proof of worst-case live TLS heap/stack headroom.
+
+Bounded network checks: generated public catalog URL returned **404**, expected
+before first canonical publication; one pinned official profile returned **200**,
+4457 bytes, SHA-256 equal to the repository source. Supplied official provider
+schemas and external HTTP 200 captures are now verified. No direct live ESP32 provider validation is claimed. No raw private
+provider captures are committed or logged.
+
+Yarn 4 validation additionally uses a fresh empty node_modules installation from
+the immutable lockfile with network disabled and dependency lifecycle scripts
+disabled. This checks that the build does not depend on previous install scripts.

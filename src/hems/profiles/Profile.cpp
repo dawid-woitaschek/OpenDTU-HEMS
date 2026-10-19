@@ -8,8 +8,8 @@
 namespace Hems::Profiles {
 namespace {
 // A lexical gate rejects duplicate object keys, trailing input, escapes and
-// non-ASCII strings before ArduinoJson allocates. v1 deliberately uses printable
-// ASCII metadata. Fixed key lists and depth bound also bound scanner stack use.
+// non-ASCII strings before ArduinoJson allocates. Fixed key lists and depth
+// bounds also keep scanner stack and transient memory use predictable.
 class Gate {
 public:
     Gate(char const* text, size_t size) : p(text), end(text + size) {}
@@ -30,7 +30,7 @@ private:
         return p < end && (++p, true);
     }
     bool value(unsigned depth) {
-        ws(); if (p == end || depth > 4) { return false; }
+        ws(); if (p == end || depth > 6) { return false; }
         if (*p == '"') { char const* start; size_t length; return string(start, length); }
         if (*p == '{') {
             ++p; ws(); if (take('}')) { return true; }
@@ -90,9 +90,6 @@ bool text(JsonVariantConst value, char* dest, size_t capacity, bool optional = f
 bool numeric(JsonVariantConst value, double& out) {
     if (!value.is<double>() || value.is<bool>()) { return false; }
     if (!std::isfinite(value.as<double>()) || std::abs(value.as<double>()) > 1e12) { return false; }
-    // ArduinoJson stores short decimals as float. Use its canonical decimal
-    // representation, then convert to double, rather than promoting binary float
-    // noise (e.g. 0.1 -> 0.10000000149 and rejecting a legitimate 100% boundary).
     char decimal[48];
     size_t length = serializeJson(value, decimal, sizeof(decimal));
     if (length == 0 || length >= sizeof(decimal)) { return false; }
@@ -117,11 +114,93 @@ bool parseCapabilities(JsonVariantConst value, Profile& profile) {
     }
     return true;
 }
+bool controlType(JsonVariantConst value, Type& type) {
+    if (equals(value, "uint16")) { type = Type::Uint16; return true; }
+    if (equals(value, "int16")) { type = Type::Int16; return true; }
+    if (equals(value, "uint32")) { type = Type::Uint32; return true; }
+    if (equals(value, "int32")) { type = Type::Int32; return true; }
+    return false;
+}
+bool parseControlWrites(JsonVariantConst value, Profile& profile, uint8_t& first, uint8_t& count,
+        bool allowInput, bool& sawInput, char const*& error) {
+    first = profile.controlWriteCount; count = 0; sawInput = false;
+    if (value.isUnbound()) { return true; }
+    auto writes = value.as<JsonArrayConst>();
+    error = "Control write list must contain at least one step";
+    if (writes.isNull() || writes.size() == 0 || writes.size() > MaxControlWrites) { return false; }
+    for (auto item : writes) {
+        if (profile.controlWriteCount >= MaxControlWrites) { error = "Too many control write steps"; return false; }
+        auto obj = item.as<JsonObjectConst>();
+        auto& write = profile.controlWrites[profile.controlWriteCount];
+        error = "Invalid control write fields";
+        if (!fields(obj, { "address", "type", "value", "scale", "offset" })
+                || !obj["address"].is<uint32_t>() || !controlType(obj["type"], write.type)) { return false; }
+        uint32_t address = obj["address"];
+        uint8_t width = write.type == Type::Uint32 || write.type == Type::Int32 ? 2 : 1;
+        if (address < profile.addressBase || address - profile.addressBase > 65535
+                || address - profile.addressBase + width > 65536) { return false; }
+        write.address = address - profile.addressBase;
+        if (equals(obj["value"], "input")) {
+            error = "Input-backed write is not allowed here";
+            if (!allowInput) { return false; }
+            write.usesInput = true; sawInput = true;
+            error = "Invalid control input scale/offset";
+            if (!obj["scale"].isUnbound() && (!numeric(obj["scale"], write.scale) || write.scale == 0)) { return false; }
+            if (!obj["offset"].isUnbound() && !numeric(obj["offset"], write.offset)) { return false; }
+        } else {
+            error = "Control constant does not fit declared type";
+            if (!obj["scale"].isUnbound() || !obj["offset"].isUnbound()) { return false; }
+            switch (write.type) {
+                case Type::Uint16:
+                    if (!obj["value"].is<uint16_t>()) { return false; }
+                    write.constant = obj["value"].as<uint16_t>();
+                    break;
+                case Type::Int16:
+                    if (!obj["value"].is<int16_t>()) { return false; }
+                    write.constant = obj["value"].as<int16_t>();
+                    break;
+                case Type::Uint32:
+                    if (!obj["value"].is<uint32_t>()) { return false; }
+                    write.constant = obj["value"].as<uint32_t>();
+                    break;
+                case Type::Int32:
+                    if (!obj["value"].is<int32_t>()) { return false; }
+                    write.constant = obj["value"].as<int32_t>();
+                    break;
+                default:
+                    return false;
+            }
+        }
+        ++profile.controlWriteCount; ++count;
+    }
+    return true;
+}
+void serializeControlWrites(Profile const& profile, uint8_t first, uint8_t count, JsonArray writes) {
+    for (size_t i = 0; i < count; ++i) {
+        auto const& write = profile.controlWrites[first + i];
+        auto obj = writes.add<JsonObject>();
+        obj["address"] = static_cast<uint32_t>(write.address) + profile.addressBase;
+        obj["type"] = typeName(write.type);
+        if (write.usesInput) {
+            obj["value"] = "input";
+            if (write.scale != 1) { obj["scale"] = write.scale; }
+            if (write.offset != 0) { obj["offset"] = write.offset; }
+        } else {
+            switch (write.type) {
+                case Type::Uint16: obj["value"] = static_cast<uint16_t>(write.constant); break;
+                case Type::Int16: obj["value"] = static_cast<int16_t>(write.constant); break;
+                case Type::Uint32: obj["value"] = static_cast<uint32_t>(write.constant); break;
+                case Type::Int32: obj["value"] = static_cast<int32_t>(write.constant); break;
+                default: break;
+            }
+        }
+    }
+}
 struct alignas(std::max_align_t) Allocation { size_t size; };
 } // namespace
 
 void* BoundedAllocator::allocate(size_t size) {
-    if (size > MaxJsonMemory - used) { return nullptr; }
+    if (size > _maximum - used) { return nullptr; }
     auto p = static_cast<Allocation*>(malloc(sizeof(Allocation) + size));
     if (!p) { return nullptr; }
     p->size = size; used += size; if (used > peak) { peak = used; } return p + 1;
@@ -133,7 +212,7 @@ void BoundedAllocator::deallocate(void* pointer) {
 void* BoundedAllocator::reallocate(void* pointer, size_t size) {
     if (!pointer) { return allocate(size); }
     auto p = static_cast<Allocation*>(pointer) - 1; size_t old = p->size;
-    if (size > MaxJsonMemory - (used - old)) { return nullptr; }
+    if (size > _maximum - (used - old)) { return nullptr; }
     auto replacement = static_cast<Allocation*>(realloc(p, sizeof(Allocation) + size));
     if (!replacement) { return nullptr; }
     replacement->size = size; used = used - old + size; if (used > peak) { peak = used; } return replacement + 1;
@@ -157,6 +236,9 @@ char const* spaceName(Modbus::ReadFunction f) {
     }
     return "unsupported";
 }
+char const* schemaName(Profile const& profile) {
+    return profile.schemaVersion >= 2 ? SchemaV2 : SchemaV1;
+}
 bool validId(char const* id) {
     if (!id || !*id || strlen(id) > MaxId || id[0] < 'a' || id[0] > 'z') { return false; }
     for (auto p = id; *p; ++p) {
@@ -170,7 +252,7 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
     BoundedAllocator allocator;
     JsonDocument doc(&allocator);
     error = "Invalid JSON or JSON allocation limit exceeded";
-    auto parseError = deserializeJson(doc, json, size, DeserializationOption::NestingLimit(4));
+    auto parseError = deserializeJson(doc, json, size, DeserializationOption::NestingLimit(6));
     if (parseError) {
         if (parseError == DeserializationError::NoMemory) { error = "Insufficient memory"; }
         return false;
@@ -179,9 +261,13 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
     error = "Insufficient memory"; if (!candidate) { return false; }
     auto& p = *candidate;
     auto root = doc.as<JsonObjectConst>();
-    error = "Unknown schema/fields or invalid profile id";
-    if (!fields(root, { "schema", "id", "capabilities", "metadata", "transport", "telemetry", "provenance" })
-            || !equals(root["schema"], Schema) || !text(root["id"], p.id, sizeof(p.id)) || !validId(p.id)) { return false; }
+    if (equals(root["schema"], SchemaV1)) { p.schemaVersion = 1; }
+    else if (equals(root["schema"], SchemaV2)) { p.schemaVersion = 2; }
+    else { error = "Unsupported profile schema"; return false; }
+    error = "Unknown fields or invalid profile id";
+    if (!fields(root, { "schema", "id", "capabilities", "metadata", "transport", "telemetry", "provenance", "control", "identity", "recovery" })
+            || !text(root["id"], p.id, sizeof(p.id)) || !validId(p.id)) { return false; }
+    if (p.schemaVersion == 1 && !root["control"].isUnbound()) { error = "Control metadata requires profile schema v2"; return false; }
     error = "Invalid or unsupported profile capabilities";
     if (!parseCapabilities(root["capabilities"], p)) { return false; }
     auto meta = root["metadata"].as<JsonObjectConst>();
@@ -201,6 +287,45 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
             || transport["unit_id"].as<uint8_t>() == 0 || transport["unit_id"].as<uint8_t>() > 247
             || !transport["address_base"].is<uint8_t>() || transport["address_base"].as<uint8_t>() > 1) { return false; }
     p.port = transport["default_port"]; p.unit = transport["unit_id"]; p.addressBase = transport["address_base"];
+    error = "Identity/recovery metadata requires schema v2";
+    if (p.schemaVersion != 2 && (!root["identity"].isUnbound() || !root["recovery"].isUnbound())) { return false; }
+    if (!root["identity"].isUnbound()) {
+        auto identity = root["identity"].as<JsonObjectConst>();
+        error = "Identity requires documented stable device_instance register_bytes fields";
+        if (!fields(identity, { "kind", "source", "fields" })
+                || !equals(identity["kind"], "device_instance")
+                || !text(identity["source"], p.identitySource, sizeof(p.identitySource))) { return false; }
+        auto reads = identity["fields"].as<JsonArrayConst>();
+        if (reads.isNull() || reads.size() == 0 || reads.size() > MaxIdentityFields) { return false; }
+        for (auto item : reads) {
+            auto obj = item.as<JsonObjectConst>();
+            if (!fields(obj, { "space", "address", "count", "encoding" })
+                    || !equals(obj["encoding"], "register_bytes")
+                    || !obj["address"].is<uint32_t>() || !obj["count"].is<uint8_t>()) { return false; }
+            auto& field = p.identityFields[p.identityFieldCount];
+            if (equals(obj["space"], "input")) { field.space = Modbus::ReadFunction::InputRegisters; }
+            else if (equals(obj["space"], "holding")) { field.space = Modbus::ReadFunction::HoldingRegisters; }
+            else { return false; }
+            uint32_t address = obj["address"];
+            field.count = obj["count"];
+            if (field.count == 0 || field.count > MaxIdentityRegisters || address < p.addressBase
+                    || address - p.addressBase + field.count > 65536) { return false; }
+            field.address = address - p.addressBase;
+            for (size_t i = 0; i < p.identityFieldCount; ++i) {
+                auto const& previous = p.identityFields[i];
+                if (field.space == previous.space && field.address < previous.address + previous.count
+                        && previous.address < field.address + field.count) { return false; }
+            }
+            ++p.identityFieldCount;
+        }
+    }
+    if (!root["recovery"].isUnbound()) {
+        auto recovery = root["recovery"].as<JsonObjectConst>();
+        error = "Invalid recovery metadata";
+        if (!fields(recovery, { "release_replay_safe" }) || !recovery["release_replay_safe"].is<bool>()) { return false; }
+        p.recoveryMetadata = true;
+        p.releaseReplaySafe = recovery["release_replay_safe"];
+    }
     auto entries = root["telemetry"].as<JsonArrayConst>();
     error = "Telemetry must contain 1..24 entries";
     if (entries.isNull() || entries.size() == 0 || entries.size() > MaxEntries) { return false; }
@@ -254,7 +379,38 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
         if (e.type == Type::Bool && (e.scale != 1 || e.offset != 0 || e.hasMinimum || e.hasMaximum || e.hasInvalidRaw)) { return false; }
         ++p.entryCount;
     }
-    // Ensure normalization can be exported within the same hard bounds.
+    if (p.schemaVersion == 2 && !root["control"].isUnbound()) {
+        auto control = root["control"].as<JsonObjectConst>();
+        error = "Invalid control object";
+        if (!fields(control, { "acquire", "release", "operations" })) { return false; }
+        bool sawInput = false;
+        if (!parseControlWrites(control["acquire"], p, p.acquireFirstWrite, p.acquireWriteCount, false, sawInput, error)) { return false; }
+        if (!parseControlWrites(control["release"], p, p.releaseFirstWrite, p.releaseWriteCount, false, sawInput, error)) { return false; }
+        auto operations = control["operations"].as<JsonArrayConst>();
+        error = "Control operations must contain 1..4 entries";
+        if (operations.isNull() || operations.size() == 0 || operations.size() > MaxControlOperations) { return false; }
+        for (auto item : operations) {
+            auto obj = item.as<JsonObjectConst>(); auto& op = p.controlOperations[p.controlOperationCount];
+            error = "Invalid control operation fields";
+            if (!fields(obj, { "key", "input", "writes" }) || !text(obj["key"], op.key, sizeof(op.key)) || !validId(op.key)) { return false; }
+            for (size_t i = 0; i < p.controlOperationCount; ++i) {
+                if (!strcmp(op.key, p.controlOperations[i].key)) { error = "Duplicate control operation key"; return false; }
+            }
+            op.hasInput = !obj["input"].isUnbound();
+            if (op.hasInput) {
+                auto input = obj["input"].as<JsonObjectConst>();
+                error = "Invalid control input range";
+                if (!fields(input, { "unit", "min", "max", "step" })
+                        || !numeric(input["min"], op.minimum) || !numeric(input["max"], op.maximum)
+                        || !numeric(input["step"], op.step) || op.minimum > op.maximum || op.step <= 0
+                        || !text(input["unit"], op.unit, sizeof(op.unit), input["unit"].isUnbound())) { return false; }
+            }
+            bool operationUsesInput = false;
+            if (!parseControlWrites(obj["writes"], p, op.firstWrite, op.writeCount, op.hasInput, operationUsesInput, error)) { return false; }
+            if (op.hasInput != operationUsesInput) { error = "Control input must be consumed by exactly this operation"; return false; }
+            ++p.controlOperationCount;
+        }
+    }
     doc.clear(); serialize(p, doc.to<JsonObject>());
     error = "Normalized profile exceeds JSON memory/export limit";
     if (doc.overflowed()) { error = "Insufficient memory"; return false; }
@@ -262,7 +418,7 @@ bool parse(char const* json, size_t size, Profile& output, char const*& error) {
     output = p; error = nullptr; return true;
 }
 void serialize(Profile const& p, JsonObject root) {
-    root["schema"] = Schema; root["id"] = static_cast<char const*>(p.id);
+    root["schema"] = schemaName(p); root["id"] = static_cast<char const*>(p.id);
     if (p.capabilities) {
         auto capabilities = root["capabilities"].to<JsonArray>();
         if (hasCapability(p, Capability::Storage)) { capabilities.add("storage"); }
@@ -274,6 +430,23 @@ void serialize(Profile const& p, JsonObject root) {
     auto provenance = root["provenance"].to<JsonObject>(); provenance["author"] = static_cast<char const*>(p.author); provenance["license"] = static_cast<char const*>(p.license);
     auto t = root["transport"].to<JsonObject>(); t["protocol"] = "modbus_tcp"; t["default_port"] = p.port;
     t["unit_id"] = p.unit; t["address_base"] = p.addressBase;
+    if (p.identityFieldCount) {
+        auto identity = root["identity"].to<JsonObject>();
+        identity["kind"] = "device_instance";
+        identity["source"] = static_cast<char const*>(p.identitySource);
+        auto reads = identity["fields"].to<JsonArray>();
+        for (size_t i = 0; i < p.identityFieldCount; ++i) {
+            auto const& field = p.identityFields[i];
+            auto obj = reads.add<JsonObject>();
+            obj["space"] = spaceName(field.space);
+            obj["address"] = static_cast<uint32_t>(field.address) + p.addressBase;
+            obj["count"] = field.count;
+            obj["encoding"] = "register_bytes";
+        }
+    }
+    if (p.schemaVersion == 2) {
+        if (p.recoveryMetadata) { root["recovery"]["release_replay_safe"] = p.releaseReplaySafe; }
+    }
     auto entries = root["telemetry"].to<JsonArray>();
     for (size_t i = 0; i < p.entryCount; ++i) {
         auto const& e = p.entries[i]; auto o = entries.add<JsonObject>();
@@ -285,6 +458,22 @@ void serialize(Profile const& p, JsonObject root) {
         if (e.hasMinimum) { o["min"] = e.minimum; }
         if (e.hasMaximum) { o["max"] = e.maximum; }
         if (e.hasInvalidRaw) { o["invalid_raw"] = e.invalidRaw; }
+    }
+    if (p.schemaVersion >= 2 && hasControl(p)) {
+        auto control = root["control"].to<JsonObject>();
+        if (p.acquireWriteCount) { serializeControlWrites(p, p.acquireFirstWrite, p.acquireWriteCount, control["acquire"].to<JsonArray>()); }
+        if (p.releaseWriteCount) { serializeControlWrites(p, p.releaseFirstWrite, p.releaseWriteCount, control["release"].to<JsonArray>()); }
+        auto operations = control["operations"].to<JsonArray>();
+        for (size_t i = 0; i < p.controlOperationCount; ++i) {
+            auto const& op = p.controlOperations[i]; auto obj = operations.add<JsonObject>();
+            obj["key"] = static_cast<char const*>(op.key);
+            if (op.hasInput) {
+                auto input = obj["input"].to<JsonObject>();
+                if (*op.unit) { input["unit"] = static_cast<char const*>(op.unit); }
+                input["min"] = op.minimum; input["max"] = op.maximum; input["step"] = op.step;
+            }
+            serializeControlWrites(p, op.firstWrite, op.writeCount, obj["writes"].to<JsonArray>());
+        }
     }
 }
 Value decode(Entry const& e, uint8_t const* payload, size_t size) {
