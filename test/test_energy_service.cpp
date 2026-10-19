@@ -57,12 +57,23 @@ int main()
     assert(api["config"]["pricing"]["grid_micros_per_kwh"] == 123400);
     assert(api["config"]["pricing"]["markup_micros_per_kwh"] == 1234);
     assert(api["config"]["pricing"]["monthly_micros"] == 9990000);
-    doc.clear(); doc["unit"] = "EUR / MWh";
-    for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
+    doc.clear();
+    doc["schema_version"] = "2.0"; doc["endpoint"] = "price"; doc["bidding_zone"] = "DE-LU";
+    doc["timezone"] = "Europe/Berlin"; doc["interval_minutes"] = 15; doc["unit"] = "EUR/MWh";
+    doc["deprecated"] = false;
+    char generated[32]; time_t generatedTime = time(nullptr); struct tm generatedUtc {}; gmtime_r(&generatedTime, &generatedUtc);
+    strftime(generated, sizeof(generated), "%Y-%m-%dT%H:%M:%SZ", &generatedUtc); doc["generated_at"] = generated;
+    auto priceSeries = doc["series"].add<JsonObject>(); priceSeries["id"] = "day_ahead_price";
+    auto priceRows = doc["data"].to<JsonArray>();
+    for (unsigned i = 0; i < 8; ++i) {
+        time_t slot = generatedTime + i * 900; struct tm slotUtc {}; gmtime_r(&slot, &slotUtc); char timestamp[32];
+        strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &slotUtc);
+        auto row = priceRows.add<JsonObject>(); row["timestamp"] = timestamp; row["values"]["day_ahead_price"] = i ? 200.0 : -50.0;
+    }
     httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && data.intervals[0].value == -50000);
     api.clear(); service.serialize(Domain::Tariff, api.to<JsonObject>());
-    assert(api["source_fresh"].isNull() && api["source_age_seconds"].isNull());
+    assert(api["source_fresh"] == true && api["source_age_seconds"] == 0);
     assert(api["transport_fresh"] == true && api["planning_usable"] == true);
     assert(!service.requestRefresh(Domain::Tariff)); // Short request spacing still applies; the ordinary interval does not block manual refresh.
     testNow += 3600000; httpAvailable = false; scheduler.execute(); runWorkers();
