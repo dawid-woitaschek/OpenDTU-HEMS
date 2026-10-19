@@ -190,6 +190,7 @@ assert.equal(h.feedFreshness({ ...ages, source_fresh: false, source_age_seconds:
 assert.equal(h.feedFreshness({ ...ages, transport_fresh: false }, 'transport'), 'outdated');
 assert.equal(h.feedReadiness({ ...ages, fresh: false }, false, 'forecast'), 'outdated');
 assert.equal(h.providerMessage('provider_tls_error'), 'transportFailed');
+assert.equal(h.providerMessage('energy_charts_deprecated'), 'providerDeprecated');
 assert.equal(h.providerMessage('provider_http_error'), 'updateFailed');
 // Storage schedule presentation merges only true command-equivalent slots, keeps power changes, exposes gaps,
 // and never labels a future slot as the current action.

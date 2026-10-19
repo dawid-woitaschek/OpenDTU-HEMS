@@ -7,6 +7,7 @@ on:
       - integration/hems-next
     paths-ignore:
       - docs/**
+      - device-profiles/**
       - '**/*.md'
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
       - integration/hems-next
     paths-ignore:
       - docs/**
+      - device-profiles/**
       - '**/*.md'
   workflow_dispatch:
 
@@ -63,22 +65,13 @@ jobs:
       - name: Install PlatformIO
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade platformio setuptools
+          pip install -r pio-scripts/requirements.txt
 
-      - name: Enable Corepack
-        working-directory: webapp
-        run: corepack enable
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: yarn
-          cache-dependency-path: webapp/yarn.lock
+      - uses: ./.github/actions/setup-web
 
       - name: Install WebApp dependencies
         working-directory: webapp
-        run: yarn install --frozen-lockfile
+        run: yarn install --immutable
 
       - name: Build WebApp
         working-directory: webapp
@@ -91,6 +84,7 @@ jobs:
           node test/test_tariff_units.mjs
           node test/test_hems_presentation.mjs
           node test/test_firmware_provenance.mjs
+          node test/test_firmware_lookup.mjs
 
       - name: Build firmware
         run: pio run -e ${{ matrix.environment }}
@@ -135,14 +129,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
+      - uses: ./.github/actions/setup-web
       - name: Install UI and isolated browser test dependencies
         run: |
-          corepack enable
-          yarn --cwd webapp install --frozen-lockfile
+          yarn --cwd webapp install --immutable
           npm install --prefix work/browser --no-package-lock playwright@1.64.1
+      - uses: actions/checkout@v7
+        with:
+          repository: bblanchon/ArduinoJson
+          ref: v7.4.3
+          path: work/ArduinoJson
+      - name: Prepare validated profile catalog fixture
+        run: |
+          g++ -std=c++17 -Iinclude -Iwork/ArduinoJson/src pio-scripts/profile_catalog_validator.cpp src/hems/profiles/Profile.cpp -o work/profile-catalog-validator
+          python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator
+          node test/test_profile_catalog.mjs
       - name: Exercise product and economic dispatch flows without hardware
         env:
           CHROMIUM_PATH: /usr/bin/google-chrome
@@ -157,6 +158,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$GITHUB_WORKSPACE/work/browser/node_modules/playwright"
           node test/test_hems_browser.mjs
           node test/test_economic_browser.mjs
+          node test/test_modernization_browser.mjs
       - name: Keep browser evidence
         if: always()
         uses: actions/upload-artifact@v7

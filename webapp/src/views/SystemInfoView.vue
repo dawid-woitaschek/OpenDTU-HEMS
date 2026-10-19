@@ -139,7 +139,8 @@ export default defineComponent({
                 installed.source_commit = installedSourceCommit(installed, manifest);
                 const repository = installed.update_repository || 'dawid-woitaschek/OpenDTU-HEMS';
                 const response = await fetch(
-                    `https://api.github.com/repos/${repository}/compare/${encodeURIComponent(base)}...${encodeURIComponent(installed.git_branch)}`
+                    `https://api.github.com/repos/${repository}/compare/${encodeURIComponent(base)}...${encodeURIComponent(installed.git_branch)}`,
+                    { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10' } }
                 );
                 if (!response.ok) throw new Error(this.$t('systeminfo.VersionError'));
                 const data = await response.json();

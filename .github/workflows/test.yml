@@ -50,3 +50,9 @@ jobs:
           python3 test/test_hems_config.py work/ArduinoJson/src
           python3 test/test_firmware_channels.py
           python3 test/test_firmware_provenance.py
+
+      - name: Verify generated repository profile catalog
+        run: |
+          g++ -std=c++17 -Iinclude -Iwork/ArduinoJson/src pio-scripts/profile_catalog_validator.cpp src/hems/profiles/Profile.cpp -o work/profile-catalog-validator
+          python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator
+          python3 test/test_profile_catalog_generation.py

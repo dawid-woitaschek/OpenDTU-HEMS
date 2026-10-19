@@ -34,7 +34,7 @@ private:
     bool (*_backgroundDue)(void*) = nullptr;
     void (*_backgroundRun)(void*) = nullptr;
     void* _backgroundContext = nullptr;
-    struct PlaneStatus { uint32_t fetchedAt = 0; char const* error = nullptr; NativeInfo info; };
+    struct PlaneStatus { uint32_t fetchedAt = 0, attemptedAt = 0, generatedAt = 0; char const* error = nullptr; NativeInfo info; };
     PlaneStatus _planes[MaxPlanes] {};
     NativeInfo _native[2];
     uint8_t _failures[2] {};

@@ -1,4 +1,5 @@
 #include "energy_harness.h"
+#include "provider_fixtures.h"
 int main()
 {
     Service service; Scheduler scheduler; service.init(scheduler);
@@ -57,12 +58,12 @@ int main()
     assert(api["config"]["pricing"]["grid_micros_per_kwh"] == 123400);
     assert(api["config"]["pricing"]["markup_micros_per_kwh"] == 1234);
     assert(api["config"]["pricing"]["monthly_micros"] == 9990000);
-    doc.clear(); doc["unit"] = "EUR / MWh";
-    for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(uint32_t(time(nullptr)) + i * 900); doc["price"].add(i ? 200.0 : -50.0); }
+    doc = ProviderFixtures::prices(8, currentUtc);
+    for (unsigned i = 0; i < 8; ++i) { doc["data"][i]["values"]["day_ahead_price"] = i ? 200.0 : -50.0; }
     httpBody.clear(); serializeJson(doc, httpBody); scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && data.intervals[0].value == -50000);
     api.clear(); service.serialize(Domain::Tariff, api.to<JsonObject>());
-    assert(api["source_fresh"].isNull() && api["source_age_seconds"].isNull());
+    assert(api["source_fresh"] == true && api["source_age_seconds"] == 0 && api["generated_at"] == currentUtc);
     assert(api["transport_fresh"] == true && api["planning_usable"] == true);
     assert(!service.requestRefresh(Domain::Tariff)); // Short request spacing still applies; the ordinary interval does not block manual refresh.
     testNow += 3600000; httpAvailable = false; scheduler.execute(); runWorkers();
@@ -74,23 +75,25 @@ int main()
     testNow += 3600000; httpAvailable = true; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.planningUsable && !status.error);
     settings = {}; settings.enabled = true; settings.source = Source::ForecastSolar; settings.planeCount = 2;
-    for (size_t i = 0; i < 2; ++i) { settings.planes[i].enabled = true; strcpy(settings.planes[i].name, "configured plane"); settings.planes[i].peakW = 1000; }
+    for (size_t i = 0; i < 2; ++i) { settings.planes[i].enabled = true; strcpy(settings.planes[i].name, i ? "East" : "West"); settings.planes[i].peakW = 1000; }
     assert(service.configure(Domain::Forecast, settings));
     doc.clear(); doc["message"]["code"] = 0; doc["message"]["type"] = "success";
     time_t now = time(nullptr); struct tm utc {}; gmtime_r(&now, &utc); char key[32]; strftime(key, sizeof(key), "%Y-%m-%dT%H:%M:%S+00:00", &utc);
     doc["message"]["info"]["time_utc"] = key;
+    doc["message"]["ratelimit"]["limit"] = 12; doc["message"]["ratelimit"]["period"] = 3600;
     for (unsigned i = 0; i < 5; ++i) { time_t t = now + i * 3600; gmtime_r(&t, &utc); strftime(key, sizeof(key), "%Y-%m-%d %H:%M:%S", &utc); doc["result"]["watt_hours_period"][key] = i ? 1000 : 0; }
     httpBody.clear(); serializeJson(doc, httpBody);
     // One, two and six configured planes all use the same serial worker.
     for (unsigned count : {1U, 2U, 6U}) {
         settings.planeCount = count;
         for (auto& plane : settings.planes) { plane.enabled = true; strcpy(plane.name, "PV"); plane.peakW = 1000; }
-        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; testNow += 15000;
+        assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; delays.clear(); testNow += 15000;
         scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
         assert(data.count == 4 && data.intervals[0].value == int(count * 1000) && status.planningUsable);
         assert(solarRequests == count && tasks.size() == 1);
+        assert(delays.size() == count - 1); for (auto delay : delays) { assert(delay >= 5000); }
     }
-    settings.planeCount = 2; assert(service.configure(Domain::Forecast, settings));
+    settings.planeCount = 2; strcpy(settings.planes[0].name, "West"); strcpy(settings.planes[1].name, "East"); assert(service.configure(Domain::Forecast, settings));
     solarRequests = 0; testNow += 15000; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(data.intervals[0].value == 2000);
     auto accepted = data; auto fetchedAt = status.fetchedAt;
@@ -101,6 +104,31 @@ int main()
     for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
     api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
     assert(api["plane_status"][0]["http_status"] == 200 && api["plane_status"][1]["http_status"] == -1);
+    assert(api["plane_status"][1]["name"] == "East");
+    assert(api["plane_status"][1]["state"] == "failed" && api["plane_status"][1]["attempted_at"].as<uint32_t>() > 0);
+    assert(api["plane_status"][0]["generated_at"] == now && api["plane_status"][0]["provider_age_seconds"] == 0);
+    assert(api["plane_status"][0]["transport_age_seconds"] == 0);
+    assert(api["plane_status"][0]["rate_limit"] == 12);
+    assert(api["plane_status"][0]["request"]["rate_period_seconds"] == 3600);
+    failSolarRequest = 0;
+    // A failure on East before West is attempted cannot present West's prior
+    // successful transport as a result of the current refresh.
+    strcpy(settings.planes[0].name, "East"); strcpy(settings.planes[1].name, "West");
+    assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; testNow += 15000;
+    assert(service.requestRefresh(Domain::Forecast));
+    scheduler.execute(); runWorkers();
+    service.snapshot(Domain::Forecast, data, status); accepted = data; fetchedAt = status.fetchedAt;
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    auto westFetched = api["plane_status"][1]["fetched_at"].as<uint32_t>();
+    testNow += 7200000; solarRequests = 0; failSolarRequest = 1;
+    scheduler.execute(); runWorkers();
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    assert(solarRequests == 1 && api["plane_status"][0]["name"] == "East" && api["plane_status"][0]["state"] == "failed");
+    assert(api["plane_status"][1]["name"] == "West" && api["plane_status"][1]["state"] == "not_attempted");
+    assert(api["plane_status"][1]["attempted_at"] == 0 && api["plane_status"][1]["http_status"] == 0);
+    assert(api["plane_status"][1]["fetched_at"] == westFetched && api["plane_status"][1]["generated_at"] == now);
+    assert(api["plane_status"][1]["rate_limit"] == -1 && api["plane_status"][1]["last_error"].isNull());
+    assert(!service.requestRefresh(Domain::Forecast)); // A failed cycle cannot spin immediately.
     failSolarRequest = 0;
     // A server hold on HTTP 200 also stops the remaining planes and retains the
     // complete previously accepted site. It cannot be bypassed manually.
@@ -111,6 +139,10 @@ int main()
     for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
     auto held = service.requestRefresh(Domain::Forecast);
     assert(!held && !strcmp(held.reason, "provider_backoff") && held.retryAfterSeconds == 900);
+    api.clear(); service.serialize(Domain::Forecast, api.to<JsonObject>());
+    assert(api["plane_status"][0]["request"]["retry_after_seconds"] == 900);
+    assert(api["plane_status"][1]["state"] == "not_attempted");
+    assert(api["plane_status"][1]["last_error"].isNull() && api["plane_status"][1]["http_status"] == 0);
     nativeRetrySeconds = 0;
     testNow += 7200000; solarRequests = 0; solarRemaining = 0;
     testNow += 15000; scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);

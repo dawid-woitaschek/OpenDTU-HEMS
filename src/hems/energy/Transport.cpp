@@ -94,7 +94,10 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     int code = http->GET(); info.httpStatus = code; info.durationMs = millis() - started;
     if (code > 0) {
         info.retrySeconds = retryAfterSeconds(http->header("Retry-After").c_str(), time(nullptr));
-        if (code == 429 || code == 503) { info.retrySeconds = std::max(info.retrySeconds, static_cast<uint32_t>(code == 429 ? 7200 : 900)); }
+        if (code == 429 || code == 503) {
+            uint32_t floor = code == 503 ? 900 : source == Source::ForecastSolar ? 7200 : 60;
+            info.retrySeconds = std::max(info.retrySeconds, floor);
+        }
     }
     if (code != 200) {
         if (code < 0) { snprintf(info.httpError, sizeof(info.httpError), "%s", HTTPClient::errorToString(code).c_str()); }
@@ -104,7 +107,12 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     if (http->getSize() > static_cast<int>(MaxPayload)) { error = "provider_payload_too_large"; http->end(); return false; }
     // Filter out unrelated fields before allocation. Neither cap reserves a payload buffer.
     JsonDocument filter;
-    if (source == Source::EnergyCharts) { filter["unix_seconds"] = true; filter["price"] = true; filter["unit"] = true; }
+    if (source == Source::EnergyCharts) {
+        for (auto field : { "schema_version", "endpoint", "country", "bidding_zone", "timezone", "resolution",
+                "interval_minutes", "unit", "generated_at", "available_from", "available_until", "license", "deprecated" }) { filter[field] = true; }
+        filter["series"][0]["id"] = true; filter["series"][0]["unit"] = true;
+        filter["data"][0]["timestamp"] = true; filter["data"][0]["values"]["day_ahead_price"] = true;
+    }
     else {
         filter["result"]["watt_hours_period"] = true; filter["message"]["code"] = true;
         filter["message"]["type"] = true; filter["message"]["info"]["time_utc"] = true;

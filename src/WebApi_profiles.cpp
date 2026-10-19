@@ -14,6 +14,7 @@
 #include <cstring>
 #include <memory>
 #include <mutex>
+#include <mbedtls/sha256.h>
 
 namespace {
 using Hems::Profiles::Store;
@@ -59,6 +60,22 @@ void replyInUse(AsyncWebServerRequest* request, char const* profileId, bool stor
     WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
 }
 char const* id(AsyncWebServerRequest* r) { return r->hasParam("id") ? r->getParam("id")->value().c_str() : ""; }
+// Stored imports are normalized by the production serializer. Hash one bounded
+// file at a time; no catalog, duplicate store, or persistent digest allocation.
+void contentDigest(size_t slot, JsonObject out) {
+    size_t size = files().size(slot);
+    if (!size || size > MaxJson) { return; }
+    auto buffer = std::unique_ptr<char[]>(new (std::nothrow) char[size]);
+    if (!buffer || !files().read(slot, buffer.get(), size)) { return; }
+    unsigned char digest[32];
+    if (mbedtls_sha256_ret(reinterpret_cast<unsigned char const*>(buffer.get()), size, digest, 0)) { return; }
+    char hex[65] {};
+    char const* digits = "0123456789abcdef";
+    for (size_t i = 0; i < sizeof(digest); ++i) {
+        hex[i * 2] = digits[digest[i] >> 4]; hex[i * 2 + 1] = digits[digest[i] & 15];
+    }
+    out["content_sha256"] = hex;
+}
 std::unique_ptr<Profile> allocateProfile() { return std::unique_ptr<Profile>(new (std::nothrow) Profile()); }
 } // namespace
 void WebApiProfilesClass::init(AsyncWebServer& server) {
@@ -161,6 +178,7 @@ void WebApiProfilesClass::list(AsyncWebServerRequest* r) {
         o["id"] = static_cast<char const*>(p->id);
         o["vendor"] = static_cast<char const*>(p->vendor);
         o["model"] = static_cast<char const*>(p->model);
+        if (!builtIn) { contentDigest(i - 1, o); }
         o["origin"] = builtIn ? "Built-in" : "Imported";
         o["schema"] = schemaName(*p);
         o["source"] = static_cast<char const*>(p->source);

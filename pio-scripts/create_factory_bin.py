@@ -28,7 +28,7 @@ import shutil
 from os.path import join, getsize, exists, isdir
 from os import listdir
 
-sys.path.append(join(platform.get_package_dir("tool-esptoolpy")))
+sys.path.insert(0, join(platform.get_package_dir("tool-esptoolpy")))
 import esptool
 
 def esp32_build_filesystem(fs_name, fs_size):

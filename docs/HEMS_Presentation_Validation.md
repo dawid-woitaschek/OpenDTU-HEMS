@@ -33,7 +33,7 @@ are neutral display terms. All three locale explanations describe the same rule.
 
 ## Availability, freshness and requests
 
-Provider contracts and control semantics are unchanged. Tariff planning usability
+Display levels and control semantics remain independent of provider parsing. Tariff planning usability
 follows authoritative current coverage even when source or transport age exceeds
 the configured maximum. Forecast usability still requires both ages within that
 maximum and current coverage. A partial future horizon does not imply a missing
@@ -65,13 +65,14 @@ origins, CA/hostname wiring, redirects disabled, bounded parsing, hourly/two-hou
 ordinary cadence, serial requests with five-second plane spacing, backoff/quota
 holds and generation changes.
 
-On 2026-10-18, one bounded HTTPS smoke request per provider was attempted through
-the Codex environment's configured proxy, using the existing fixed origins and
-native endpoint shapes. Both CONNECT requests were denied with **403 Forbidden**
-before reaching Energy-Charts or Forecast.Solar. No retries, TLS bypass, custom
-origins or provider policy changes were used. Live response/TLS validation was
-therefore unavailable in this environment. Successful native requests on the
-reference board are user-reported; this work performs no physical board access.
+Official provider specifications and bounded external HTTP 200 captures supplied
+on 2026-10-19 supersede the earlier environment-access limitation. Energy-Charts
+uses strict `/v2/price` parsing with provider response-generation time distinct
+from fetch time and interval coverage. Forecast.Solar's public contract is
+verified; exact East `full=1` and sparse East/West requests succeed externally.
+The specific `full=1` behavior remains undocumented in the supplied Swagger.
+See [the modernization audit](Modernization_Audit.md) for evidence and limits.
+This work performs no physical board access.
 
 Physical checks remain: `generic_esp32s3_usb` on the no-PSRAM ESP32-S3/8 MB board,
 native TLS heap/stack under multi-plane load and network recovery, flashed UI

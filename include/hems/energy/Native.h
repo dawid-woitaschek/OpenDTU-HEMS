@@ -6,7 +6,7 @@ namespace Hems::Energy {
 struct NativeInfo {
     int16_t httpStatus = 0;
     int32_t rateLimit = -1, rateRemaining = -1;
-    uint32_t retrySeconds = 0;
+    uint32_t retrySeconds = 0, ratePeriodSeconds = 0;
     int32_t tlsError = 0; // WiFiClientSecure connect result, when negative; -1 is ambiguous.
     int8_t dns = -1; // -1: not attempted, 0: resolution failed, 1: resolved.
     char httpError[40] {}, tlsErrorText[96] {};
@@ -15,7 +15,7 @@ struct NativeInfo {
 };
 uint32_t retryAfterSeconds(char const* text, uint32_t now);
 bool parseUtc(char const* text, uint32_t& utc, bool bareUtc = false);
-bool parseEnergyCharts(JsonVariantConst json, uint32_t fetchedAt, Series& output, char const*& error);
+bool parseEnergyCharts(JsonVariantConst json, Series& output, char const*& error);
 bool parseForecastSolar(JsonVariantConst json, Series& output, NativeInfo& info, char const*& error);
 bool aggregate(Series const& first, Series const& second, Series& output, char const*& error);
 // Fixed native origins. HTTPS implementation validates CA chain and DNS identity; no redirects.

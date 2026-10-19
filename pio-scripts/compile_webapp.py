@@ -52,7 +52,7 @@ def check_files(directories, filepaths, hash_file):
 
     # if these commands fail, an exception will prevent us from
     # persisting the current hashes => commands will be executed again
-    subprocess.run(yarn + " install --frozen-lockfile",
+    subprocess.run(yarn + " install --immutable",
                    cwd="webapp", check=True, shell=True)
 
     subprocess.run(yarn + " build", cwd="webapp", check=True, shell=True)

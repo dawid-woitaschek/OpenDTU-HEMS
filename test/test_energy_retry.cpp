@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "energy_harness.h"
+#include "provider_fixtures.h"
 void rejected(Service& s, Domain domain, char const* reason, uint32_t wait = 0)
 {
     auto result = s.requestRefresh(domain);
@@ -7,8 +8,7 @@ void rejected(Service& s, Domain domain, char const* reason, uint32_t wait = 0)
 }
 void fixture()
 {
-    JsonDocument doc; doc["unit"] = "EUR / MWh";
-    for (unsigned i = 0; i < 8; ++i) { doc["unix_seconds"].add(currentUtc + i * 900); doc["price"].add(100); }
+    auto doc = ProviderFixtures::prices(8, currentUtc);
     httpBody.clear(); serializeJson(doc, httpBody);
 }
 int main()
@@ -39,23 +39,23 @@ int main()
     testNow += 4999; scheduler.execute(); runWorkers(); assert(httpRequests == 0);
     ++testNow; scheduler.execute(); runWorkers(); assert(httpRequests == 1 && tasks.size() == 1);
     service.snapshot(Domain::Tariff, data, status); assert(status.hasData && !status.error && status.nextRefresh == currentUtc + 3600);
-    rejected(service, Domain::Tariff, "transport_backoff", 15);
-    testNow += 15000; assert(service.requestRefresh(Domain::Tariff)); // Bypasses the 1-hour auto interval.
+    rejected(service, Domain::Tariff, "transport_backoff", 30);
+    testNow += 30000; assert(service.requestRefresh(Domain::Tariff)); // Bypasses the 1-hour auto interval.
     rejected(service, Domain::Tariff, "busy");
     duringHttp = [&] { rejected(service, Domain::Tariff, "busy"); scheduler.execute(); }; // Cannot enqueue a duplicate while running.
     scheduler.execute(); runWorkers(); assert(httpRequests == 2);
     scheduler.execute(); runWorkers(); assert(httpRequests == 2);
     // DNS/transport failure uses bounded exponential retry, not ordinary cadence.
-    testNow += 15000; httpAvailable = false; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
-    rejected(service, Domain::Tariff, "transport_backoff", 15);
-    auto before = httpRequests; for (unsigned i = 0; i < 5; ++i) { scheduler.execute(); runWorkers(); rejected(service, Domain::Tariff, "transport_backoff", 15); }
+    testNow += 30000; httpAvailable = false; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
+    rejected(service, Domain::Tariff, "transport_backoff", 30);
+    auto before = httpRequests; for (unsigned i = 0; i < 5; ++i) { scheduler.execute(); runWorkers(); rejected(service, Domain::Tariff, "transport_backoff", 30); }
     assert(httpRequests == before);
-    testNow += 15000; scheduler.execute(); runWorkers(); rejected(service, Domain::Tariff, "transport_backoff", 30);
+    testNow += 30000; scheduler.execute(); runWorkers(); rejected(service, Domain::Tariff, "transport_backoff", 30);
     testNow += 30000; httpAvailable = true; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Tariff, data, status); assert(status.hasData && !status.error && status.nextRefresh == currentUtc + 3600);
-    testNow += 15000; httpAvailable = false;
+    testNow += 30000; httpAvailable = false;
     assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
-    for (auto delay : {15U, 30U, 60U, 120U, 240U, 300U, 300U}) {
+    for (auto delay : {30U, 30U, 60U, 120U, 240U, 300U, 300U}) {
         rejected(service, Domain::Tariff, "transport_backoff", delay);
         testNow += delay * 1000; scheduler.execute(); runWorkers();
     }
@@ -68,7 +68,7 @@ int main()
     provider.defer(900000, 7200, RetryKind::RateLimited); provider.defer(900000, 300);
     assert(!strcmp(provider.retryDecision(900000).reason, "rate_limited"));
     // Exercise a successful HTTP Retry-After through the production Service path.
-    testNow += 15000; nativeRetrySeconds = 120; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
+    testNow += 30000; nativeRetrySeconds = 120; assert(service.requestRefresh(Domain::Tariff)); scheduler.execute(); runWorkers();
     rejected(service, Domain::Tariff, "provider_backoff", 120);
     testNow += 119000; rejected(service, Domain::Tariff, "provider_backoff", 1);
     testNow += 1000; nativeRetrySeconds = 0;

@@ -52,9 +52,11 @@ for (const [firmware, channel, ahead] of [[installed, manifest, 0], [old, manife
     const state = { ...options.data(), allowVersionInfo: true, systemDataList: { ...firmware, git_hash: 'g' + merge.slice(0, 7) }, $t: key => key };
     const base = p.sourceComparisonBase(firmware, channel);
     const calls = [];
-    fetcher = async url => {
+    fetcher = async (url, options) => {
         calls.push(url);
         if (url.endsWith('manifest.json')) return new Response(JSON.stringify(channel));
+        assert.equal(options.headers['X-GitHub-Api-Version'], '2026-03-10');
+        assert.equal(options.headers.Accept, 'application/vnd.github+json');
         assert.ok(url.includes(`/compare/${base}...${encodeURIComponent(firmware.git_branch)}`), url);
         return new Response(JSON.stringify({ ahead_by: ahead, total_commits: ahead, html_url: 'compare-url' }));
     };

@@ -91,7 +91,11 @@
                             ? $t('hemsUi.disabled')
                             : statuses?.[index]?.last_error
                               ? $t('hemsUi.' + providerMessage(statuses[index]!.last_error!))
-                              : $t(statuses?.[index]?.fetched_at ? 'hemsUi.ready' : 'hemsUi.waitingData')
+                              : statuses?.[index]?.state === 'not_attempted'
+                                ? $t('hemsUi.planeNotAttempted')
+                                : statuses?.[index]?.state === 'loading'
+                                  ? $t('hemsUi.loadingEnergy')
+                                  : $t(statuses?.[index]?.fetched_at ? 'hemsUi.ready' : 'hemsUi.waitingData')
                     }}
                 </p>
                 <p v-else class="small text-body-secondary mt-3 mb-0">{{ $t('hemsUi.unsavedPlane') }}</p>
@@ -113,12 +117,12 @@
     </button>
 </template>
 <script setup lang="ts">
-import type { PvPlane } from '@/types/HemsEnergy';
+import type { PvPlane, PlaneStatus } from '@/types/HemsEnergy';
 import { providerMessage } from '@/utils/hemsPresentation';
 const props = defineProps<{
     planes: PvPlane[];
     saved: PvPlane[];
-    statuses?: { fetched_at: number; last_error: string | null }[];
+    statuses?: PlaneStatus[];
 }>();
 const emit = defineEmits<{ 'update:planes': [planes: PvPlane[]] }>();
 const coordinates = [

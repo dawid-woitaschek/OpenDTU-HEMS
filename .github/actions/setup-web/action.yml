@@ -1,0 +1,23 @@
+name: Set up web tooling
+description: Current Node and explicitly provisioned Corepack with the repository-pinned Yarn.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: '26'
+    - name: Provision package manager
+      shell: bash
+      run: |
+        npm install --global corepack@0.36.0
+        corepack enable
+    - name: Resolve Yarn cache
+      id: yarn
+      shell: bash
+      working-directory: webapp
+      run: echo "cache-dir=$(yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v6
+      with:
+        path: ${{ steps.yarn.outputs.cache-dir }}
+        key: ${{ runner.os }}-yarn4-${{ hashFiles('webapp/yarn.lock', 'webapp/.yarnrc.yml') }}
+        restore-keys: ${{ runner.os }}-yarn4-

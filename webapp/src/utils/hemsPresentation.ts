@@ -196,6 +196,7 @@ export function nextPeriod(intervals: ChartInterval[], category: TariffClass, no
 }
 // Stable identifiers observed in Provider.cpp, Service.cpp, Native.cpp and Transport.cpp.
 export function providerMessage(state: string): string {
+    if (state === 'energy_charts_deprecated') return 'providerDeprecated';
     if (['provider_rate_limited', 'rate_limited'].includes(state)) return 'rateLimited';
     if (['waiting_for_time', 'clock_invalid', 'clock_or_source_time_invalid'].includes(state)) return 'waitingTime';
     if (state === 'network_unavailable') return 'waitingNetwork';

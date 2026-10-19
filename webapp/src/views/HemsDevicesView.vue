@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="'HEMS — ' + $t('menu.DeviceManager') + ' / ' + $t('profiles.Title')" :isLoading="dataLoading">
+    <BasePage :title="$t('hemsUi.devices')" :isLoading="dataLoading">
         <HemsNav />
         <BootstrapAlert
             v-model="alert.show"
@@ -196,10 +196,7 @@
             <summary>{{ $t('hemsUi.manualControls') }}</summary>
             <HemsControlPanel />
         </details>
-        <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
-            <summary>{{ $t('hemsUi.deviceProfiles') }}</summary>
-            <HemsProfilePanel class="mt-3" @profiles-changed="refreshProfiles" />
-        </details>
+        <HemsProfilePanel v-if="!dataLoading && !loadFailed" class="mt-4" @profiles-changed="refreshProfiles" />
     </BasePage>
 </template>
 

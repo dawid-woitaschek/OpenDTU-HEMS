@@ -64,8 +64,6 @@
         }
     },
     "menu": {
-        "HemsSettings": "HEMS-Einstellungen",
-        "HemsInfo": "HEMS-Informationen",
         "LiveView": "Live-Ansicht",
         "Settings": "Einstellungen",
         "NetworkSettings": "Netzwerk",
@@ -1462,7 +1460,7 @@
         "freshnessUnknown": "Aktualität unbekannt",
         "transportFailed": "Die letzte Verbindung zum Anbieter ist fehlgeschlagen.",
         "transportFreshness": "Letzter erfolgreicher Empfang",
-        "sourceFreshness": "Aktualität der Quelle",
+        "sourceFreshness": "Aktualität der Anbieterantwort",
         "coveredData": "Aktuelle Preise abgedeckt",
         "currentChargeLimit": "Aktuelle Ladegrenze im ersten Intervall",
         "currentDischargeLimit": "Aktuelle Entladegrenze im ersten Intervall",
@@ -1707,7 +1705,6 @@
             "insufficient_memory": "Nicht genügend Speicher für die Berechnung.",
             "too_many_soc_states": "SoC-Planungsschritt vergrößern."
         },
-        "deviceProfiles": "Erweitert · Geräteprofile",
         "modeSummaryDisabled": "Die HEMS-Steuerung ist deaktiviert.",
         "modeSummaryMonitor": "Automatische Zugriffe sind gesperrt. Manuelle Befehle benötigen die Berechtigung HEMS-Steuerung.",
         "modeSummaryActive": "Automatische Richtlinien dürfen nur auf Kategorien mit der Berechtigung HEMS-Steuerung zugreifen.",
@@ -1727,8 +1724,8 @@
         "autoRetry": "Aktualisierungen werden automatisch fortgesetzt.",
         "receivedAt": "Zuletzt empfangen",
         "energyDetails": "Details und erweiterte Informationen",
-        "sourceUpdated": "Quelle aktualisiert",
-        "sourceTimeUnknown": "Zeitstempel der Quelle nicht verfügbar",
+        "sourceUpdated": "Anbieterantwort erzeugt",
+        "sourceTimeUnknown": "Erzeugungszeit der Anbieterantwort nicht verfügbar",
         "coverageUntil": "Daten enden",
         "nextUpdate": "Nächster Aktualisierungsversuch",
         "month": "Monat",

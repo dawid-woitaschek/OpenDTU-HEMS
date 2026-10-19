@@ -2,7 +2,7 @@
 
 This directory is a user-facing catalog of downloadable Modbus profiles for OpenDTU-HEMS.
 
-These files are **not built into the firmware** and are **not installed automatically**. OpenDTU-HEMS ships with an empty runtime profile store. Download the JSON file for the device you use and import it through the HEMS profile administration UI.
+These files are **not built into the firmware** and are **not installed automatically**. OpenDTU-HEMS ships with an empty runtime profile store. Open HEMS → Devices → Repository profiles and import the selected profile. Manual file import remains available as a fallback.
 
 Directory layout:
 
@@ -44,3 +44,46 @@ No profile in this directory may add executable write logic.
 Manual control requires device-type HEMS control permission and normal profile/reachability/freshness readiness. Automatic policy writes also require global Active. Identity/recovery metadata is optional diagnostic information; WARP's eFuse identity and both profiles' `release_replay_safe=false` never block normal control. Marstek does not need stable identity. Watchdog behavior reported by the community remains unvalidated for V148 and is not an actuation prerequisite.
 
 Import the current JSON explicitly. In Devices / Profiles, select a file with the same ID and leave replacement enabled to update the runtime copy. Capability changes are previewed; bound providers reload without firmware reboot after validation. Old schema-v1 or control-metadata-free runtime copies show a concrete explanation and remain readable until replaced.
+
+## Live repository catalog
+
+The canonical profile source is the permanent `integration/hems-next` ref in
+`dawid-woitaschek/OpenDTU-HEMS`. On changes to that ref, `profile-catalog.yml`
+validates **every** category JSON with the production firmware parser, then
+publishes a generated `catalog.json` on the `device-profile-catalog` distribution
+branch. Nothing edits that manifest by hand. Adds, edits and deletions are reflected
+in each generated snapshot. PRs validate generation and drift before publication;
+profile-only changes do not require the firmware build. Until the first canonical
+merge/workflow run, the UI reports that the catalog is not yet published.
+
+The version-1 manifest contains `source_commit` and lightweight entries: ID,
+category, vendor/model, schema, source revision, relative path, byte size, raw-file
+SHA-256 and `installed_sha256` of the production parser's normalized JSON. No full
+profiles are embedded. No wall-clock field is used, making a source snapshot
+reproducible. Generate locally:
+
+```sh
+g++ -std=c++17 -Iinclude -Iwork/ArduinoJson/src pio-scripts/profile_catalog_validator.cpp src/hems/profiles/Profile.cpp -o work/profile-catalog-validator
+python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator
+python3 pio-scripts/create_profile_catalog.py --validator work/profile-catalog-validator --check
+python3 test/test_profile_catalog_generation.py
+```
+
+The browser makes one catalog GET to the fixed official raw GitHub origin. Import
+makes one selected-profile GET pinned to the catalog's immutable `source_commit`,
+checks exact byte size and SHA-256 (also on local HTTP pages), and sends the JSON
+to authenticated `POST /api/hems/profiles/import`. The backend remains authoritative
+for schema, bounds, operation metadata, replacement and in-use compatibility. It
+stores no remote catalog. Installed summaries expose a digest of the normalized
+stored file, allowing current/different comparison without downloading all local
+or remote profiles. Older backends without a digest show comparison unavailable.
+
+An installed ID requires explicit Update / Replace and confirmation. Successful
+imports refresh the installed list and storage/EVSE selectors; existing backend
+reload behavior updates bound consumers without reboot. No permissions change.
+Repository, selected-file, schema and integrity failures are separate visible
+states. Installed management and manual import stay available during outages.
+Catalogs are bounded to 256 entries/256 KiB; profiles remain bounded to 6144 bytes.
+
+Historical `docs/DeviceProfiles/` files describe DTU build/hardware configurations;
+they are unrelated to this HEMS Modbus catalog.
