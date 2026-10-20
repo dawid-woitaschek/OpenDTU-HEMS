@@ -83,7 +83,7 @@ void serializeHeap(JsonObject out, bool history)
     out["debug_heap_integrity_failures"] = count;
 #endif
 }
-}
+} // namespace
 void init()
 {
     journal.boot(retained, mayRetain(esp_reset_reason()));
