@@ -19,7 +19,7 @@ namespace {
 // Do not use the IP-only connect overload: it loses hostname verification/SNI.
 class DiagnosticClient final : public WiFiClientSecure {
 public:
-    explicit DiagnosticClient(NativeInfo& info) : _info(info) {}
+    explicit DiagnosticClient(NativeInfo& info, Diagnostics::HeapProvider provider) : _info(info), _provider(provider) {}
     int connect(char const* host, uint16_t port, int32_t timeout) override {
         _timeout = timeout;
         IPAddress address;
@@ -27,17 +27,20 @@ public:
         _info.dns = WiFi.hostByName(host, address) ? 1 : 0;
         if (!_info.dns) { _info.connected = memorySample(); return 0; }
         Diagnostics::workerPhase(Diagnostics::Phase::Connect);
+        Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::BeforeConnect, _provider);
         auto result = WiFiClientSecure::connect(address, port, host, ProviderRoots, nullptr, nullptr);
         // lastError() is the connect result, not a reliable read/write/socket errno.
         auto code = lastError(_info.tlsErrorText, sizeof(_info.tlsErrorText));
         if (code < 0) { _info.tlsError = code; }
         else { _info.tlsErrorText[0] = 0; }
         _info.connected = memorySample();
+        Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::Connected, _provider);
         if (result) { Diagnostics::workerPhase(Diagnostics::Phase::TlsHttp); }
         return result;
     }
 private:
     NativeInfo& _info;
+    Diagnostics::HeapProvider _provider;
 };
 struct Reader {
     WiFiClient& stream;
@@ -75,10 +78,12 @@ char const* transportError(int code, NativeInfo const& info)
 bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& info, char const*& error)
 {
     info = {}; info.before = memorySample();
+    auto provider = source == Source::EnergyCharts ? Diagnostics::HeapProvider::EnergyCharts : Diagnostics::HeapProvider::ForecastSolar;
+    Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::BeforeRequest, provider);
     error = "provider_begin_failed";
     char const* prefix = source == Source::EnergyCharts ? "https://api.energy-charts.info/" : "https://api.forecast.solar/";
     if (strncmp(url, prefix, strlen(prefix))) { error = "invalid_provider_origin"; return false; }
-    auto client = std::unique_ptr<DiagnosticClient>(new (std::nothrow) DiagnosticClient(info));
+    auto client = std::unique_ptr<DiagnosticClient>(new (std::nothrow) DiagnosticClient(info, provider));
     auto http = std::unique_ptr<HTTPClient>(new (std::nothrow) HTTPClient());
     if (!client || !http) { error = "insufficient_memory"; return false; }
     client->setCACert(ProviderRoots);
@@ -92,6 +97,7 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     uint32_t started = millis();
     Diagnostics::workerPhase(Diagnostics::Phase::TlsHttp);
     int code = http->GET(); info.httpStatus = code; info.durationMs = millis() - started;
+    if (code > 0) { Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::Response, provider); }
     if (code > 0) {
         info.retrySeconds = retryAfterSeconds(http->header("Retry-After").c_str(), time(nullptr));
         if (code == 429 || code == 503) {
@@ -127,6 +133,7 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     int c; bool trailing = false;
     while (!decoded && (c = reader.read()) >= 0) { if (c > 32) { trailing = true; break; } }
     info.payloadBytes = reader.consumed; info.decoded = memorySample(); info.durationMs = millis() - started;
+    Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::Parsed, provider);
     bool truncated = http->getSize() >= 0 && reader.consumed != static_cast<size_t>(http->getSize());
     bool ok = !decoded && !doc.overflowed() && reader.remaining && !trailing && !reader.expired && !reader.timedOut && !truncated;
     if (decoded == DeserializationError::NoMemory || doc.overflowed()) { error = "insufficient_memory"; }

@@ -37,6 +37,19 @@ int main()
     assert(result["state"]=="ready" && result["shadow_only"]==true && result["device_writes"]==false);
     assert(result["modeled_savings_nano"].as<int64_t>()>0 && result["schedule"].size()==16);
     assert(result["tariff_source"] == "service fixture" && result["currency"] == "EUR");
+    // Repeated unchanged replans preserve the published current interval and
+    // schedule while advancing revisions. Publication never exposes scratch.
+    auto view = Optimizer::ShadowOptimizer.dispatchPlan();
+    auto revision = result["plan_revision"].as<uint32_t>();
+    for (unsigned i = 0; i < 10; ++i) {
+        assert(Optimizer::ShadowOptimizer.requestRecalculate());
+        testNow += 5000; scheduler.execute(); workers();
+        auto next = Optimizer::ShadowOptimizer.dispatchPlan();
+        assert(next.valid == view.valid && next.start == view.start && next.end == view.end && next.batteryW == view.batteryW);
+        result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+        assert(result["state"] == "ready" && result["schedule"].size() == 16);
+        assert(result["plan_revision"].as<uint32_t>() == ++revision);
+    }
     storage.socPct=Model::Signal<double>::stale(50); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="stale_inputs" && result["schedule"].size()==0);
     assert(Optimizer::ShadowOptimizer.requestRecalculate()); testNow += 5000; scheduler.execute(); workers();

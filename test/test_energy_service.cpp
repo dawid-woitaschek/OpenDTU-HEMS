@@ -1,5 +1,14 @@
 #include "energy_harness.h"
 #include "provider_fixtures.h"
+#include <new>
+// Inject only request/aggregation Series allocation failures, leaving JSON and
+// the task/configuration seams unchanged.
+static unsigned failSeriesAllocation = 0;
+void* operator new(std::size_t size, std::nothrow_t const&) noexcept
+{
+    if (size == sizeof(Hems::Energy::Series) && failSeriesAllocation && !--failSeriesAllocation) { return nullptr; }
+    try { return ::operator new(size); } catch (std::bad_alloc const&) { return nullptr; }
+}
 int main()
 {
     Service service; Scheduler scheduler; service.init(scheduler);
@@ -97,6 +106,17 @@ int main()
     solarRequests = 0; testNow += 15000; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(data.intervals[0].value == 2000);
     auto accepted = data; auto fetchedAt = status.fetchedAt;
+    // HTTP succeeds but the now-deferred destination allocation fails on the
+    // first or second plane: preserve the last complete aggregate atomically.
+    Settings disabledTariff; assert(service.configure(Domain::Tariff, disabledTariff));
+    for (unsigned plane : { 1U, 2U }) {
+        testNow += 7200000; solarRequests = 0; failSeriesAllocation = plane;
+        scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
+        assert(!failSeriesAllocation && solarRequests == plane);
+        assert(status.hasData && !strcmp(status.error, "insufficient_memory") && status.fetchedAt == fetchedAt);
+        assert(data.count == accepted.count && data.generatedAt == accepted.generatedAt);
+        for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }
+    }
     testNow += 7200000; solarRequests = 0; failSolarRequest = 2;
     scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
     assert(solarRequests == 2 && status.hasData && !strcmp(status.error, "provider_connect_failed"));

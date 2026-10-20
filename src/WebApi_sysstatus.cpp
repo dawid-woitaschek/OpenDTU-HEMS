@@ -31,6 +31,9 @@ void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
         return;
     }
 
+    // Sample before constructing the diagnostic JSON response. This still
+    // includes the inbound API connection; compare identical observation paths.
+    if (request->hasParam("heap_history")) { Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::Observer); }
     AsyncJsonResponse* response = new AsyncJsonResponse();
     auto& root = response->getRoot();
 
@@ -90,7 +93,7 @@ void WebApiSysstatusClass::onSystemStatus(AsyncWebServerRequest* request)
 #else
     root["resetreason_1_raw"] = nullptr;
 #endif
-    Diagnostics::serialize(root["reset_diagnostics"].to<JsonObject>());
+    Diagnostics::serialize(root["reset_diagnostics"].to<JsonObject>(), request->hasParam("heap_history"));
 
     root["cfgsavecount"] = Configuration.get().Cfg.SaveCount;
     root["runtime_savecount"] = RuntimeData.getWriteCountAndTimeString();
