@@ -79,6 +79,21 @@ void ChannelChangeCommand::setBandBytes(const uint8_t profile, const uint8_t sta
     }
 }
 
+bool ChannelChangeCommand::areSameParameter(CommandAbstract* other)
+{
+    if (!CommandAbstract::areSameParameter(other)) {
+        return false;
+    }
+
+    // A corrected retry is enqueued while the rejected command is still active.
+    const auto* command = static_cast<ChannelChangeCommand*>(other);
+    return getFrequency() == command->getFrequency()
+        && _payload[9] == command->_payload[9]
+        && _payload[10] == command->_payload[10]
+        && _payload[11] == command->_payload[11]
+        && getChannel() == command->getChannel();
+}
+
 /*
 Answer of the RF module (mainCmd 0xD6), payload after the address header:
 

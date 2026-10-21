@@ -21,5 +21,7 @@ public:
 
     virtual uint8_t getMaxResendCount() const;
 
+    bool areSameParameter(CommandAbstract* other) override;
+
     bool usesBootFrequency() const override { return getFrequency() == 0; }
 };
