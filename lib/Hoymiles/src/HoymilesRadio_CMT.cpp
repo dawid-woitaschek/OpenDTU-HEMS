@@ -6,6 +6,7 @@
 #include "Hoymiles.h"
 #include "Utils.h"
 #include "crc.h"
+#include "inverters/InverterAbstract.h"
 #include <FunctionalInterrupt.h>
 #include <frozen/map.h>
 #include <esp_log.h>
@@ -86,6 +87,13 @@ bool HoymilesRadio_CMT::cmtSwitchDtuFreq(const uint32_t to_frequency)
     _radio->setChannel(toChannel);
 
     return true;
+}
+
+uint32_t HoymilesRadio_CMT::getInvBootRingFrequency(const uint8_t startChannel) const
+{
+    const CountryFrequencyDefinition_t& def = countryDefinition.at(_countryMode);
+    const uint8_t channel = (startChannel != 0) ? startChannel : ((def.Band == FrequencyBand_t::BAND_860) ? 33 : 60);
+    return getFrequencyFromChannel(channel);
 }
 
 void HoymilesRadio_CMT::init(const int8_t pin_sdio, const int8_t pin_clk, const int8_t pin_cs, const int8_t pin_fcs, const int8_t pin_gpio2, const int8_t pin_gpio3)
@@ -272,8 +280,23 @@ void HoymilesRadio_CMT::sendEsbPacket(CommandAbstract& cmd)
 
     _radio->stopListening();
 
-    if (cmd.getDataPayload()[0] == 0x56) { // @todo(tbnobody) Bad hack to identify ChannelChange Command
-        cmtSwitchDtuFreq(getInvBootFrequency());
+    uint32_t rxFrequency = cmd.getFrequency();
+    if (rxFrequency == 0 && cmd.getInverter() != nullptr) {
+        rxFrequency = cmd.getInverter()->CmtLink.frequency;
+    }
+    if (rxFrequency == 0) {
+        rxFrequency = _inverterTargetFrequency;
+    }
+
+    uint32_t txFrequency = rxFrequency;
+    if (cmd.usesBootFrequency()) {
+        txFrequency = getInvBootFrequency();
+        rxFrequency = getInvBootRingFrequency(cmd.getInverter() != nullptr ? cmd.getInverter()->CmtLink.startChannel : 0);
+    }
+    if (!cmtSwitchDtuFreq(txFrequency)) {
+        txFrequency = _inverterTargetFrequency;
+        rxFrequency = _inverterTargetFrequency;
+        cmtSwitchDtuFreq(txFrequency);
     }
 
     ESP_LOGD(TAG, "TX %s %.2f MHz --> %s",
@@ -282,7 +305,7 @@ void HoymilesRadio_CMT::sendEsbPacket(CommandAbstract& cmd)
     if (!_radio->write(cmd.getDataPayload(), cmd.getDataSize())) {
         ESP_LOGE(TAG, "TX SPI Timeout");
     }
-    cmtSwitchDtuFreq(_inverterTargetFrequency);
+    cmtSwitchDtuFreq(rxFrequency);
     _radio->startListening();
     _busyFlag = true;
     _rxTimeout.set(cmd.getTimeout());
