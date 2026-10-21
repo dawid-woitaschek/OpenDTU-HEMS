@@ -94,9 +94,16 @@ void WebApiHemsClass::onOptimizer(AsyncWebServerRequest* request)
         else if (request->hasParam("data", true) && request->getParam("data", true)->value().length() <= 2048) {
             Hems::Profiles::BoundedAllocator allocator(4096); JsonDocument doc(&allocator);
             Hems::Optimizer::Config config;
-            if (!deserializeJson(doc, request->getParam("data", true)->value(), DeserializationOption::NestingLimit(3))
-                    && Hems::Optimizer::parseConfig(doc.as<JsonVariantConst>(), config)) {
-                ok = ShadowOptimizer.configure(config); code = ok ? 200 : 500;
+            if (!deserializeJson(doc, request->getParam("data", true)->value(), DeserializationOption::NestingLimit(3))) {
+                // Intent-only EV updates preserve all storage settings and the durable manual pause.
+                if (doc.size() == 1 && !doc["ev_shadow"].isUnbound()) {
+                    Hems::Optimizer::EvConfig ev;
+                    if (Hems::Optimizer::parseEvConfig(doc["ev_shadow"], ev)) {
+                        ok = ShadowOptimizer.configureEv(ev); code = ok ? 200 : 500;
+                    }
+                } else if (Hems::Optimizer::parseConfig(doc.as<JsonVariantConst>(), config)) {
+                    ok = ShadowOptimizer.configure(config); code = ok ? 200 : 500;
+                }
             }
         }
         output["ok"] = ok; output["type"] = ok ? "success" : "warning";

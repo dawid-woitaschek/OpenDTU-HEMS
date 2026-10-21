@@ -309,5 +309,46 @@ console.log(`HEMS presentation passed: ${checks} timezone/day cases, robust pric
     assert.equal(partial.optimizer.snapshot_truncated, true);
     assert.equal(calls.filter(path => path.includes('/optimizer?')).length, 16);
     assert.equal(snapshot.busy.value, false);
+    responder = path => {
+        if (path.includes('/optimizer?')) {
+            const offset = Number(new URL(path, 'http://test.invalid').searchParams.get('offset'));
+            return { plan_revision: 7, schedule: offset === 0 ? Array.from({ length: 24 }, (_, n) => ({ start: n })) : [{ start: 24 }], has_more: offset < 48,
+                ev_shadow: { plan_revision: 7, schedule: [{ start: offset, current_a: 6 }], has_more: offset < 48 } };
+        }
+        return {};
+    };
+    const evExport = JSON.parse(await snapshot.buildSnapshot());
+    assert.equal(evExport.optimizer.ev_shadow.schedule.length, 3);
+    assert.equal(evExport.optimizer.ev_shadow.schedule[1].start, 24);
+    assert.equal(evExport.optimizer.ev_shadow.schedule[2].start, 48);
+    responder = path => path.includes('/optimizer?') ? { plan_revision: calls.length, schedule: [], has_more: true } : {};
+    const changed = JSON.parse(await snapshot.buildSnapshot());
+    assert.equal(changed.optimizer, null);
+    assert.match(changed.collection_errors.optimizer, /revision changed/);
     console.log('Support snapshot passed: bounded heap history, sequential authenticated GETs, redaction, partial failure and pagination bound');
 }
+
+// The EV departure UI resolves repeated local times explicitly, including 30-minute folds.
+const evCode = ts.transpileModule(readFileSync(new URL('../webapp/src/utils/hemsEv.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const ev = await import('data:text/javascript;base64,' + Buffer.from(evCode).toString('base64'));
+for (const [zone, local, count, separation] of [
+    ['Europe/Berlin', '2026-10-25T02:30', 2, 3600],
+    ['Europe/Berlin', '2026-03-29T02:30', 0, 0],
+    ['America/New_York', '2026-11-01T01:30', 2, 3600],
+    ['Australia/Lord_Howe', '2026-04-05T01:45', 2, 1800],
+    ['UTC', '2026-10-25T02:30', 1, 0],
+]) {
+    process.env.TZ = zone;
+    const candidates = ev.evDeadlineCandidates(local);
+    assert.equal(candidates.length, count, zone);
+    if (count === 2) assert.equal(candidates[1] - candidates[0], separation);
+}
+if (originalZone === undefined) delete process.env.TZ; else process.env.TZ = originalZone;
+const evCopyCode = ts.transpileModule(readFileSync(new URL('../webapp/src/hemsEvMessages.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+const { evMessages } = await import('data:text/javascript;base64,' + Buffer.from(evCopyCode).toString('base64'));
+for (const copy of [evMessages.de, evMessages.fr]) assert.deepEqual(paths(copy), paths(evMessages.en));
+console.log('EV departure DST candidates and translated reason-code parity passed');

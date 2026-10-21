@@ -79,6 +79,7 @@
         </template>
         <HemsEnergyPanel view="overview" @health="providerIssue = $event" />
         <HemsStorageSchedulePanel />
+        <HemsEvPlanPanel view="overview" />
     </BasePage>
 </template>
 <script setup lang="ts">
@@ -88,6 +89,7 @@ import { useRouter } from 'vue-router';
 import { BIconPlug, BIconSun, BIconBatteryHalf, BIconEvStation } from 'bootstrap-icons-vue';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
+import HemsEvPlanPanel from '@/components/hems/HemsEvPlanPanel.vue';
 import HemsNav from '@/components/hems/HemsNav.vue';
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
 import HemsStorageSchedulePanel from '@/components/hems/HemsStorageSchedulePanel.vue';

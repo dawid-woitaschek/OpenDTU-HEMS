@@ -70,8 +70,18 @@ bool Service::configure(Config const& c)
     Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Write);
     std::lock_guard<std::mutex> lock(_mutex);
     if (!persistLocked(c, _manualPaused)) { return false; }
-    _config = c; ++_generation; ++_planRevision; _result.reset(); _pending = c.enabled; _error = nullptr;
+    _config = c; ++_generation; ++_planRevision; _result.reset(); _evResult.reset(); _pending = c.enabled || c.ev.enabled; _error = nullptr;
     _replanReason = "configuration_changed";
+    return true;
+}
+bool Service::configureEv(EvConfig const& c)
+{
+    Diagnostics::Scope activity(Diagnostics::Component::Configuration, Diagnostics::Operation::Write);
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto candidate = _config; candidate.ev = c;
+    if (!persistLocked(candidate, _manualPaused)) { return false; }
+    _config = candidate; ++_generation; ++_planRevision; _result.reset(); _evResult.reset();
+    _pending = _config.enabled || c.enabled; _error = nullptr; _replanReason = "ev_configuration_changed";
     return true;
 }
 bool Service::persistLocked(Config const& c, bool paused)
@@ -97,7 +107,7 @@ bool Service::pauseForManual()
     if (!persistLocked(_config, true)) { _error = "manual_pause_persist_failed"; return false; }
     _manualPaused = true; ++_generation; ++_planRevision;
     _error = nullptr;
-    _pending = _config.enabled; _replanReason = "manual_pause";
+    _pending = _config.enabled || _config.ev.enabled; _replanReason = "manual_pause";
     return true;
 }
 bool Service::resume()
@@ -106,7 +116,7 @@ bool Service::resume()
     if (!_config.dispatchEnabled || !_config.enabled) { return false; }
     if (!_manualPaused) { return true; }
     if (!persistLocked(_config, false)) { _error = "resume_persist_failed"; return false; }
-    _manualPaused = false; ++_generation; ++_planRevision; _result.reset();
+    _manualPaused = false; ++_generation; ++_planRevision; _result.reset(); _evResult.reset();
     _error = nullptr;
     _pending = true; _replanReason = "manual_resume";
     return true;
@@ -114,11 +124,11 @@ bool Service::resume()
 void Service::invalidate(char const* reason)
 {
     std::lock_guard<std::mutex> lock(_mutex);
-    ++_generation; ++_planRevision; _result.reset(); _pending = _config.enabled; _replanReason = reason;
+    ++_generation; ++_planRevision; _result.reset(); _evResult.reset(); _pending = _config.enabled || _config.ev.enabled; _replanReason = reason;
 }
 bool Service::requestRecalculate()
 {
-    std::lock_guard<std::mutex> lock(_mutex); if (!_config.enabled) { return false; }
+    std::lock_guard<std::mutex> lock(_mutex); if (!_config.enabled && !_config.ev.enabled) { return false; }
     // An explicit recalculation does not revoke an unchanged, still valid
     // interval. Live input changes revoke it independently in dispatchPlan().
     _pending = true; _replanReason = "requested"; return true;
@@ -130,16 +140,17 @@ char const* Service::changedLocked(Inputs const& inputs, uint32_t revision) cons
     if (inputs.controlRevision != _result->inputs.controlRevision) { return "control_changed"; }
     if (!sameStorage(inputs, _result->inputs)) { return "storage_or_constraints_changed"; }
     if (!sameStatus(inputs.tariffStatus, _result->inputs.tariffStatus)
-            || (_result->plan.pvIncluded && !sameStatus(inputs.forecastStatus, _result->inputs.forecastStatus))) { return "input_freshness_changed"; }
+            || ((_result->plan.pvIncluded || _config.ev.enabled) && !sameStatus(inputs.forecastStatus, _result->inputs.forecastStatus))) { return "input_freshness_changed"; }
     if (inputs.now < _result->plan.generatedAt || (_result->plan.count && inputs.now >= _result->plan.steps[0].end)
             || inputs.now / 900 != _result->inputs.now / 900) { return "current_interval_changed"; }
+    if (_config.ev.enabled && inputs.now >= _config.ev.deadline && _result->inputs.now < _config.ev.deadline) { return "ev_deadline_passed"; }
     return nullptr;
 }
 bool Service::due()
 {
     auto revision = Energy::EnergyData.revision(); auto inputs = liveInputs();
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_config.enabled) {
+    if (_config.enabled || _config.ev.enabled) {
         if (auto reason = changedLocked(inputs, revision)) { _pending = true; _replanReason = reason; }
     }
     return _pending && (!_attempted || millis() - _lastRunMs >= 5000);
@@ -149,35 +160,42 @@ void Service::run()
     Config c; uint32_t generation;
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (!_pending || !_config.enabled || (_attempted && millis() - _lastRunMs < 5000)) { return; }
+        if (!_pending || (!_config.enabled && !_config.ev.enabled) || (_attempted && millis() - _lastRunMs < 5000)) { return; }
         _pending = false; c = _config; generation = _generation; _lastRunMs = millis(); _attempted = true;
     }
     Diagnostics::Scope activity(Diagnostics::Component::Optimizer, Diagnostics::Operation::Calculate);
     auto result = std::unique_ptr<Result>(new (std::nothrow) Result());
     if (!result) {
         std::lock_guard<std::mutex> lock(_mutex);
-        if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); }
+        if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); _evResult.reset(); }
         return;
     }
+    std::unique_ptr<EvPlan> ev;
+    char const* evError = nullptr;
     result->config = c; result->inputs = liveInputs(); result->energyRevision = Energy::EnergyData.revision();
     {
         auto tariff = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
         auto forecast = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
         if (!tariff || !forecast) {
             std::lock_guard<std::mutex> lock(_mutex);
-            if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); }
+            if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); _evResult.reset(); }
             return;
         }
         Energy::EnergyData.snapshot(Energy::Domain::Tariff, *tariff, result->inputs.tariffStatus);
         Energy::EnergyData.snapshot(Energy::Domain::Forecast, *forecast, result->inputs.forecastStatus);
         result->inputs.tariff = tariff.get(); result->inputs.forecast = forecast.get();
         uint32_t start = micros(); calculate(c, result->inputs, result->plan); result->plan.runtimeUs = micros() - start;
+        if (c.ev.enabled) {
+            ev.reset(new (std::nothrow) EvPlan());
+            if (ev) { calculateEv(c, result->inputs, result->plan, *ev); }
+            else { evError = "insufficient_memory"; } // EV memory failure never removes the storage plan.
+        }
         result->inputs.tariff = result->inputs.forecast = nullptr;
     }
     auto latestRevision = Energy::EnergyData.revision(); auto latestInputs = liveInputs();
     std::lock_guard<std::mutex> lock(_mutex);
     if (generation != _generation || latestRevision != result->energyRevision || !sameStorage(result->inputs, latestInputs)
-            || latestInputs.now / 900 != result->inputs.now / 900) { _pending = _config.enabled; return; }
+            || latestInputs.now / 900 != result->inputs.now / 900) { _pending = _config.enabled || _config.ev.enabled; return; }
     // Readers hold _mutex and no Result address escapes. Keep the published
     // allocation in place rather than moving this large, long-lived heap island
     // between short-lived allocations on every replan. Candidate validation and
@@ -186,6 +204,9 @@ void Service::run()
     _energyRevision = latestRevision;
     if (_result) { *_result = *result; }
     else { _result = std::move(result); }
+    if (ev && _evResult) { *_evResult = *ev; }
+    else { _evResult = std::move(ev); }
+    _evError = evError;
     _error = nullptr; ++_planRevision;
 }
 PlanView Service::dispatchPlan() const
@@ -221,17 +242,30 @@ void Service::serialize(JsonObject output, bool all, size_t offset) const
     output["last_error"] = _error;
     output["last_run_ms"] = _lastRunMs;
     output["plan_energy_revision"] = _result ? _result->energyRevision : 0;
+    auto ev = output["ev_shadow"].to<JsonObject>();
+    static EvPlan const empty;
+    bool evStale = _result && changedLocked(inputs, revision) != nullptr;
+    serializeEv(_config, inputs, _evResult ? *_evResult : empty, ev, inputs.now, _planRevision, offset, evStale);
+    ev["currency"] = _result ? static_cast<char const*>(_result->plan.currency) : "";
+    ev["tariff_source"] = _result ? static_cast<char const*>(_result->plan.tariffSource) : "";
+    ev["forecast_source"] = _result && _evResult && _evResult->pvIncluded
+        ? static_cast<char const*>(_result->plan.forecastSource) : "excluded";
+    ev["input_revision"] = revision; ev["configuration_generation"] = _generation;
+    ev["plan_input_revision"] = _result ? _result->energyRevision : 0;
+    if (_config.ev.enabled && !_evResult && _result) { ev["reason"] = _evError ? _evError : "waiting_for_calculation"; }
+    if (!_result && _config.ev.enabled) { ev["reason"] = _error ? _error : "waiting_for_calculation"; }
     if (!_result) {
         serializeConfig(_config, output["config"].to<JsonObject>()); output["shadow_only"] = true; output["device_writes"] = false;
         output["state"] = _config.enabled ? "not_ready" : "disabled";
         auto blockers = output["blockers"].to<JsonArray>();
-        if (_config.enabled) { blockers.add(_error ? _error : "waiting_for_calculation"); }
+        if (_config.enabled || _config.ev.enabled) { blockers.add(_error ? _error : "waiting_for_calculation"); }
         output["storage_soc_fresh"] = inputs.storage.socPct.usable() && inputs.storage.device.reachable;
         output["current_discharge_allowed"] = inputs.currentConstraints.dischargeAllowed;
-        output["schedule"].to<JsonArray>(); return;
+        output["schedule"].to<JsonArray>(); output["has_more"] = false; return;
     }
     bool stale = changedLocked(inputs, revision) != nullptr;
     serializePlan(_result->config, _result->inputs, _result->plan, output, stale ? 0 : all ? 24 : 12, offset);
+    output["has_more"] = output["has_more"].as<bool>() || ev["has_more"].as<bool>();
     output["stale_inputs"] = stale;
     if (stale) { output["state"] = "stale_inputs"; output["blockers"].as<JsonArray>().add("inputs_changed_recalculation_required"); }
 }

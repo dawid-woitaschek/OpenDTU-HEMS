@@ -3,6 +3,7 @@
         <HemsNav />
         <HemsEnergyPanel view="diagnostics" />
         <HemsOptimizerPanel view="diagnostics" />
+        <HemsEvPlanPanel view="diagnostics" />
         <SystemDiagnostics />
         <CardElement :text="$t('hemsUi.controlDiagnostics')" textVariant="text-bg-primary" add-space>
             <details>
@@ -421,6 +422,7 @@
 
 <script lang="ts">
 import { controlText } from '@/hemsControl';
+import HemsEvPlanPanel from '@/components/hems/HemsEvPlanPanel.vue';
 import HemsNav from '@/components/hems/HemsNav.vue';
 import SystemDiagnostics from '@/components/hems/SystemDiagnostics.vue';
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
@@ -432,7 +434,15 @@ import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
-    components: { BasePage, CardElement, HemsNav, HemsEnergyPanel, HemsOptimizerPanel, SystemDiagnostics },
+    components: {
+        HemsEvPlanPanel,
+        BasePage,
+        CardElement,
+        HemsNav,
+        HemsEnergyPanel,
+        HemsOptimizerPanel,
+        SystemDiagnostics,
+    },
     data() {
         return {
             dataLoading: true,

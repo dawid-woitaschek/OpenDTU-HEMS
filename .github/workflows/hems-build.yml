@@ -158,6 +158,7 @@ jobs:
           export PLAYWRIGHT_MODULE="$GITHUB_WORKSPACE/work/browser/node_modules/playwright"
           node test/test_hems_browser.mjs
           node test/test_economic_browser.mjs
+          node test/test_ev_shadow_browser.mjs
           node test/test_modernization_browser.mjs
       - name: Keep browser evidence
         if: always()

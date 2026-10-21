@@ -4,6 +4,7 @@
 #include <hems/model/State.h>
 #include <hems/constraints/Constraints.h>
 #include <hems/policies/StorageEconomic.h>
+#include <hems/optimizer/EvConfig.h>
 namespace Hems::Optimizer {
 constexpr size_t MaxSteps = 256, MaxStates = 54;
 struct Config {
@@ -14,6 +15,7 @@ struct Config {
     uint16_t minSoc = 0, maxSoc = 100, chargePermille = 0, dischargePermille = 0, socStepPct = 5;
     int32_t exportMicros = 0;
     Policies::StorageEconomicPolicy policies;
+    EvConfig ev;
 };
 bool parseConfig(JsonVariantConst json, Config& config);
 void serializeConfig(Config const& config, JsonObject output);
