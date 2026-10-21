@@ -7,6 +7,7 @@
 #include <string>
 inline std::string transportBody, transportUrl, tlsHost;
 inline bool caInstalled = false, dnsAvailable = true, bodyStalled = false;
+inline bool beginAvailable = true;
 inline int transportCode = 200, redirectPolicy = -1, contentLength = -1, tlsCode = 0;
 inline int activeClients = 0, activeHttp = 0;
 inline long retryAfter = 0;

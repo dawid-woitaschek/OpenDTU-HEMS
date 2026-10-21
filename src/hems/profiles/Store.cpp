@@ -66,6 +66,7 @@ bool Store::import(char const* json, size_t size, char const* replaceId, char co
     error = "Replacement profile not found"; if (replaceId && !matches) { return false; }
     size_t slot = matches ? match : free;
     error = "Imported profile count limit reached"; if (slot == MaxImported) { return false; }
+    stored.reset(); // Slot discovery is complete; do not overlap this copy with export/commit scratch.
     BoundedAllocator allocator; JsonDocument doc(&allocator); serialize(*candidate, doc.to<JsonObject>());
     size_t normalizedSize = measureJson(doc);
     error = "Export size/memory limit exceeded";
