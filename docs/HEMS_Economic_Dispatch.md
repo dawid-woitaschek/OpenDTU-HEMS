@@ -1,8 +1,9 @@
 # Economic storage dispatch
 
-Software milestone after policy PR #24 (normal integration merge
-`8348b7cddd91f428c9679b44a670fb698f4a8db6`). Hardware-free validation does not
-establish physical battery behavior. The new dispatch PR remains Draft.
+Implemented in merged PR #25 after policy PR #24 and included in `hems` through
+PR #28. Hardware-free validation does not establish physical battery behavior.
+Use the [hardware validation runbook](HEMS_Hardware_Validation.md) for the remaining
+device and end-to-end dispatch gates. Economic dispatch remains default-off.
 
 ## Authorization and opt-in
 
