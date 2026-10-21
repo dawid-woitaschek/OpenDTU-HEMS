@@ -68,6 +68,16 @@ If you encounter `HTTPClientError` during `pio run`, this indicates network rest
 
 ## Development and Validation
 
+### HEMS Project-State Maintenance
+
+`docs/HEMS_Roadmap.md` and `docs/HEMS_Current_Status.md` are the authoritative HEMS project-state documents.
+
+- Review both files for every HEMS-relevant PR.
+- If implementation, validation, hardware status, open work, branches/PRs, firmware channels or known risks change, update both files in the same PR.
+- Before merge or promotion to `hems`, ensure both files accurately describe the resulting `hems` state and remove stale information.
+- Explicitly mark unmerged work and work that has not been physically validated.
+- Never claim CI, merge or hardware validation that has not actually occurred.
+
 ### Linting and Code Quality
 Run these commands to validate code quality:
 

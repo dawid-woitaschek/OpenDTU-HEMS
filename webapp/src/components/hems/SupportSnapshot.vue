@@ -215,7 +215,8 @@ async function buildSnapshot(): Promise<string> {
     try {
         // Deliberately sequential: do not make the ESP32 serialize several large diagnostic responses at once.
         const firmware = await collect('/api/firmware/status');
-        const system = await collect('/api/system/status');
+        // Preserve bounded heap checkpoints and allocation failures in the on-demand export.
+        const system = await collect('/api/system/status?heap_history=1');
         const hems = await collect('/api/hems/status');
         const tariff = await collect('/api/hems/energy/tariff?all=1');
         const forecast = await collect('/api/hems/energy/forecast?all=1');
