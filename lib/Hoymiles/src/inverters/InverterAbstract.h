@@ -6,6 +6,7 @@
 #include "../parser/DevInfoParser.h"
 #include "../parser/GridProfileParser.h"
 #include "../parser/PowerCommandParser.h"
+#include "../parser/RfInfoParser.h"
 #include "../parser/StatisticsParser.h"
 #include "../parser/SystemConfigParaParser.h"
 #include "CmtLinkState.h"
@@ -132,6 +133,7 @@ public:
     DevInfoParser* DevInfo();
     GridProfileParser* GridProfile();
     PowerCommandParser* PowerCommand();
+    RfInfoParser* RfInfo();
     StatisticsParser* Statistics();
     SystemConfigParaParser* SystemConfigPara();
 
@@ -166,6 +168,7 @@ private:
     std::unique_ptr<DevInfoParser> _devInfoParser;
     std::unique_ptr<GridProfileParser> _gridProfileParser;
     std::unique_ptr<PowerCommandParser> _powerCommandParser;
+    std::unique_ptr<RfInfoParser> _rfInfoParser;
     std::unique_ptr<StatisticsParser> _statisticsParser;
     std::unique_ptr<SystemConfigParaParser> _systemConfigParaParser;
 };
