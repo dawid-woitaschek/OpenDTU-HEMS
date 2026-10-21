@@ -50,6 +50,34 @@ int main()
         assert(result["state"] == "ready" && result["schedule"].size() == 16);
         assert(result["plan_revision"].as<uint32_t>() == ++revision);
     }
+    // EV intent shares production persistence, snapshots and storage-plan revisions.
+    Optimizer::EvConfig ev; ev.enabled = true; ev.voltage = 230; ev.phases = 1;
+    ev.requiredWh = 500; ev.deadline = Now + 3600;
+    assert(Optimizer::ShadowOptimizer.configureEv(ev));
+    assert(!Optimizer::ShadowOptimizer.dispatchPlan().valid);
+    testNow += 5000; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["ev_shadow"]["reason"] == "planned");
+    auto evRevision = result["ev_shadow"]["plan_revision"].as<uint32_t>();
+    for (unsigned i = 0; i < 10; ++i) { testNow += 1000; scheduler.execute(); workers(); }
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["ev_shadow"]["plan_revision"] == evRevision);
+    ev.requiredWh = 700; assert(Optimizer::ShadowOptimizer.configureEv(ev));
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["ev_shadow"]["schedule"].size() == 0 && result["ev_shadow"]["required_wh"] == 700);
+    testNow += 5000; scheduler.execute(); workers();
+    Optimizer::ShadowOptimizer.invalidate("storage_revision_test");
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["ev_shadow"]["schedule"].size() == 0);
+    testNow += 5000; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["ev_shadow"]["plan_revision"].as<uint32_t>() > evRevision);
+    assert(result["ev_shadow"]["plan_revision"] == result["ev_shadow"]["storage_plan_revision"]);
+    failCommit = true; ev.requiredWh = 999; assert(!Optimizer::ShadowOptimizer.configureEv(ev)); failCommit = false;
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["ev_shadow"]["required_wh"] == 700);
+    ev.enabled = false; assert(Optimizer::ShadowOptimizer.configureEv(ev));
+    testNow += 5000; scheduler.execute(); workers();
     storage.socPct=Model::Signal<double>::stale(50); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="stale_inputs" && result["schedule"].size()==0);
     assert(Optimizer::ShadowOptimizer.requestRecalculate()); testNow += 5000; scheduler.execute(); workers();
@@ -78,6 +106,8 @@ int main()
     legacy["config"]["dispatch_enabled"] = "true"; Optimizer::Config rejected;
     assert(!Optimizer::parseConfig(legacy["config"], rejected));
     assert(Optimizer::ShadowOptimizer.configure(config)); assert(!Optimizer::ShadowOptimizer.requestRecalculate());
+    // Legacy files have no EV intent and cannot resurrect a schedule or actuation.
+    assert(result["config"]["ev_shadow"]["enabled"] == false);
     for(auto t:tasks) delete t;
     std::cout<<"Production shared-worker optimizer settings, read-only integration, stale-input suppression, recalculation and persistence passed\n";
 }

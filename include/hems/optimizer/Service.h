@@ -2,6 +2,7 @@
 #pragma once
 #include <hems/optimizer/Planner.h>
 #include <hems/optimizer/PlanView.h>
+#include <hems/optimizer/EvPlanner.h>
 #include <memory>
 #include <mutex>
 namespace Hems::Optimizer {
@@ -9,6 +10,7 @@ class Service {
 public:
     void init();
     bool configure(Config const& config);
+    bool configureEv(EvConfig const& config);
     bool requestRecalculate();
     void serialize(JsonObject output, bool all, size_t offset = 0) const;
     bool due();
@@ -35,6 +37,8 @@ private:
     char const* _replanReason = "startup";
     char const* _error = nullptr;
     std::unique_ptr<Result> _result;
+    std::unique_ptr<EvPlan> _evResult;
+    char const* _evError = nullptr;
 };
 extern Service ShadowOptimizer;
 } // namespace Hems::Optimizer

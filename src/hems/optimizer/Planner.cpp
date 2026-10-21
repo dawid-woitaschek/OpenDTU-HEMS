@@ -85,10 +85,12 @@ bool parseConfig(JsonVariantConst j, Config& out)
         if (c.policies.targetEnabled && (c.policies.targetSoc < c.minSoc || c.policies.targetSoc > c.maxSoc
                 || c.policies.targetDeadline < Energy::MinUtc)) { return false; }
     }
+    if (!j["ev_shadow"].isUnbound() && !parseEvConfig(j["ev_shadow"], c.ev)) { return false; }
     out = c; return true;
 }
 void serializeConfig(Config const& c, JsonObject j)
 {
+    serializeEvConfig(c.ev, j["ev_shadow"].to<JsonObject>());
     j["soc_bounds_configured"] = c.socBoundsConfigured; j["enabled"] = c.enabled; j["effective_price"] = c.effectivePrice; j["export_configured"] = c.exportConfigured;
     j["dispatch_enabled"] = c.dispatchEnabled;
     j["export_micros_per_kwh"] = c.exportMicros; j["horizon_seconds"] = c.horizonSeconds; j["capacity_wh"] = c.capacityWh;
