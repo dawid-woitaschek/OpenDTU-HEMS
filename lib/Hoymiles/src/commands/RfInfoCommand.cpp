@@ -38,7 +38,12 @@ the answer as a fragment id. Should an inverter ever put 0x00 or a value
 this command.
 */
 #include "RfInfoCommand.h"
+#include "../CmtLinkRecovery.h"
 #include "inverters/InverterAbstract.h"
+#include <esp_log.h>
+
+#undef TAG
+static const char* TAG = "hoymiles";
 
 // Command id, and the flag the inverter sets on it to mark its answer
 constexpr uint8_t CommandId = 0x06;
@@ -66,6 +71,7 @@ void RfInfoCommand::setProbeFrequency(const uint32_t frequency)
     setFrequency(frequency);
     setTimeout(ProbeTimeoutMs);
     _probe = true;
+    ESP_LOGD(TAG, "%s: probe %.3f MHz", _inv->serialString().c_str(), frequency / 1000000.0);
 }
 
 uint8_t RfInfoCommand::getMaxResendCount() const
@@ -95,6 +101,10 @@ bool RfInfoCommand::handleResponse(const fragment_t fragment[], const uint8_t ma
     }
 
     _inv->RfInfo()->setLastUpdate(millis());
+
+    if (_probe) {
+        CmtLinkRecovery::onProbeHit(_inv, getFrequency());
+    }
 
     return true;
 }
