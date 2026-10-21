@@ -8,6 +8,7 @@
 #include "crc.h"
 #include "inverters/InverterAbstract.h"
 #include <FunctionalInterrupt.h>
+#include <algorithm>
 #include <frozen/map.h>
 #include <esp_log.h>
 
@@ -102,26 +103,52 @@ bool HoymilesRadio_CMT::getProbeFrequency(const uint16_t step, uint32_t& frequen
 
     const int16_t startChannel = (moduleStartChannel != 0) ? moduleStartChannel : ((def.Band == FrequencyBand_t::BAND_860) ? 33 : 60);
 
-    const int16_t candidates[] = {
+    // Channels of the legal band. The minimum is rounded up, the maximum down,
+    // so that both lie on the channel grid and inside the legal band.
+    const uint32_t base = _radio->getBaseFrequency();
+    const int16_t minChannel = static_cast<int16_t>(std::max<int32_t>(1,
+        (static_cast<int32_t>(def.Freq_Legal_Min) - static_cast<int32_t>(base) + static_cast<int32_t>(getChannelWidth()) - 1) / static_cast<int32_t>(getChannelWidth())));
+    const int16_t maxChannel = static_cast<int16_t>(std::min<int32_t>(0xFE,
+        (static_cast<int32_t>(def.Freq_Legal_Max) - static_cast<int32_t>(base)) / static_cast<int32_t>(getChannelWidth())));
+    if (minChannel > maxChannel) {
+        return false;
+    }
+
+    // Preferred candidates around the start channel of the module. A candidate
+    // outside the legal band (e.g. the "8 channels lower" ones in Brazil, whose
+    // band starts right at the start channel) is skipped, not reported as the
+    // end of the list: that would make the caller restart the search at step 0
+    // and never reach the full sweep below.
+    const int16_t preferred[] = {
         startChannel, static_cast<int16_t>(startChannel - 8),
         static_cast<int16_t>(startChannel + 1), static_cast<int16_t>(startChannel - 1),
         static_cast<int16_t>(startChannel - 7), static_cast<int16_t>(startChannel - 9)
     };
-    constexpr uint16_t candidateCount = sizeof(candidates) / sizeof(candidates[0]);
+    int16_t candidates[sizeof(preferred) / sizeof(preferred[0])];
+    uint16_t candidateCount = 0;
+    for (const int16_t c : preferred) {
+        if (c < minChannel || c > maxChannel) {
+            continue;
+        }
+        bool duplicate = false;
+        for (uint16_t i = 0; i < candidateCount; i++) {
+            duplicate = duplicate || (candidates[i] == c);
+        }
+        if (!duplicate) {
+            candidates[candidateCount++] = c;
+        }
+    }
 
-    int16_t channel;
+    int16_t channel = -1;
     if (step < candidateCount) {
         channel = candidates[step];
     } else {
-        const int16_t minChannel = static_cast<int16_t>((def.Freq_Legal_Min - _radio->getBaseFrequency()) / getChannelWidth());
-        const int16_t maxChannel = static_cast<int16_t>((def.Freq_Legal_Max - _radio->getBaseFrequency()) / getChannelWidth());
-
+        // Full sweep over the legal band, leaving out the candidates probed above
         uint16_t remaining = step - candidateCount;
-        channel = -1;
         for (int16_t c = minChannel; c <= maxChannel; c++) {
             bool isCandidate = false;
-            for (const int16_t candidate : candidates) {
-                isCandidate = isCandidate || (candidate == c);
+            for (uint16_t i = 0; i < candidateCount; i++) {
+                isCandidate = isCandidate || (candidates[i] == c);
             }
             if (isCandidate) {
                 continue;
@@ -132,17 +159,15 @@ bool HoymilesRadio_CMT::getProbeFrequency(const uint16_t step, uint32_t& frequen
             }
             remaining--;
         }
-        if (channel < 0) {
-            return false;
-        }
     }
 
-    if (channel < 0 || channel > 0xFE) {
+    if (channel < minChannel || channel > maxChannel) {
+        // Only reached when the whole legal band has been probed
         return false;
     }
 
     frequency = getFrequencyFromChannel(static_cast<uint8_t>(channel));
-    return frequency >= def.Freq_Legal_Min && frequency <= def.Freq_Legal_Max;
+    return true;
 }
 
 bool HoymilesRadio_CMT::rxRingContains(const uint8_t c) const
