@@ -8,6 +8,7 @@
 #include "../parser/PowerCommandParser.h"
 #include "../parser/StatisticsParser.h"
 #include "../parser/SystemConfigParaParser.h"
+#include "CmtLinkState.h"
 #include "HoymilesRadio.h"
 #include "types.h"
 #include <Arduino.h>
@@ -79,6 +80,8 @@ public:
     bool getClearEventlogOnMidnight() const;
 
     int8_t getLastRssi() const;
+
+    CmtLinkState CmtLink;
 
     void clearRxFragmentBuffer();
     void addRxFragment(const uint8_t fragment[], const uint8_t len, const int8_t rssi);

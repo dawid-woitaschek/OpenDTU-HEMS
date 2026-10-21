@@ -61,6 +61,8 @@ public:
 
     uint32_t getInvBootFrequency() const;
 
+    uint32_t getInvBootRingFrequency(const uint8_t startChannel = 0) const;
+
     uint32_t getFrequencyFromChannel(const uint8_t channel) const;
     uint8_t getChannelFromFrequency(const uint32_t frequency) const;
 
