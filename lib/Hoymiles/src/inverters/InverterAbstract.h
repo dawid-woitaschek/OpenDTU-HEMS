@@ -85,7 +85,7 @@ public:
     CmtLinkState CmtLink;
 
     void clearRxFragmentBuffer();
-    void addRxFragment(const uint8_t fragment[], const uint8_t len, const int8_t rssi);
+    void addRxFragment(const uint8_t fragment[], const uint8_t len, const int8_t rssi, const uint8_t expectedMainCmd = 0);
     uint8_t verifyAllFragments(CommandAbstract& cmd);
 
     void performDailyTask();

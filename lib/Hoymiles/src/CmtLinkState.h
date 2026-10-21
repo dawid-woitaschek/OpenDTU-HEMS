@@ -20,4 +20,5 @@ struct CmtLinkState {
     uint8_t ringState = 0;
     uint8_t lastRxChannel = 0;
     uint32_t lastRxMs = 0;
+    uint32_t lastHeardMs = 0;
 };
