@@ -61,6 +61,7 @@ public:
 
     bool isProducing();
     bool isReachable();
+    bool wasHeardRecently(const uint32_t pollCycles) const;
 
     void setEnablePolling(const bool enabled);
     bool getEnablePolling() const;

@@ -23,6 +23,13 @@ void CmtLinkRecovery::onUnreachable(InverterAbstract* inv)
 
     CmtLinkState& link = inv->CmtLink;
 
+    if (isHeard(inv)) {
+        link.failCount = 0;
+        ESP_LOGD(TAG, "%s: not answering but heard %u ms ago, no search",
+            inv->serialString().c_str(), static_cast<unsigned>(millis() - link.lastHeardMs));
+        return;
+    }
+
     if (link.frequency != 0 && ++link.failCount >= FAILS_BEFORE_RESCAN) {
         ESP_LOGD(TAG, "%s: no answer on %.3f MHz any more, searching again",
             inv->serialString().c_str(), link.frequency / 1000000.0);
@@ -45,6 +52,11 @@ void CmtLinkRecovery::onUnreachable(InverterAbstract* inv)
         cmd->setProbeFrequency(frequency);
         inv->getRadio()->enqueCommand(cmd);
     }
+}
+
+bool CmtLinkRecovery::isHeard(const InverterAbstract* inv)
+{
+    return inv != nullptr && inv->wasHeardRecently(HEARD_POLL_CYCLES);
 }
 
 void CmtLinkRecovery::onProbeHit(InverterAbstract* inv, const uint32_t frequency)

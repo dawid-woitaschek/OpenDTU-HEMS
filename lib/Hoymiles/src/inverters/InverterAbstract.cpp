@@ -3,6 +3,7 @@
  * Copyright (C) 2022-2026 Thomas Basler and others
  */
 #include "InverterAbstract.h"
+#include "Hoymiles.h"
 #include "crc.h"
 #include <cstring>
 #include <esp_log.h>
@@ -78,7 +79,23 @@ bool InverterAbstract::isProducing()
 
 bool InverterAbstract::isReachable()
 {
-    return _enablePolling && Statistics()->getRxFailureCount() <= _reachableThreshold;
+    if (!_enablePolling) {
+        return false;
+    }
+    if (Statistics()->getRxFailureCount() <= _reachableThreshold) {
+        return true;
+    }
+    return wasHeardRecently(static_cast<uint32_t>(_reachableThreshold) + 1);
+}
+
+bool InverterAbstract::wasHeardRecently(const uint32_t pollCycles) const
+{
+    if (_radio != Hoymiles.getRadioCmt() || CmtLink.lastHeardMs == 0) {
+        return false;
+    }
+    // HEMS/OnBattery already stores the poll interval in milliseconds.
+    const uint32_t window = pollCycles * Hoymiles.PollInterval() + 2000;
+    return millis() - CmtLink.lastHeardMs < window;
 }
 
 void InverterAbstract::setEnablePolling(const bool enabled)
