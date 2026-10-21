@@ -184,12 +184,24 @@ async function collectOptimizer(): Promise<Collected> {
         let offset = 0;
         let page = (await request('/api/hems/optimizer?all=1&offset=0')) as JsonObject;
         const schedule = Array.isArray(page.schedule) ? [...page.schedule] : [];
+        const firstRevision = page.plan_revision;
+        const evSchedule = Array.isArray((page.ev_shadow as JsonObject | undefined)?.schedule)
+            ? [...((page.ev_shadow as JsonObject).schedule as unknown[])]
+            : [];
         let pages = 1;
         while (page.has_more === true && pages < 16) {
-            const advance = Array.isArray(page.schedule) && page.schedule.length ? page.schedule.length : 24;
+            const advance = page.ev_shadow
+                ? 24
+                : Array.isArray(page.schedule) && page.schedule.length
+                  ? page.schedule.length
+                  : 24;
             offset += advance;
             page = (await request(`/api/hems/optimizer?all=1&offset=${offset}`)) as JsonObject;
+            if (firstRevision !== undefined && page.plan_revision !== firstRevision)
+                throw new Error('Optimizer revision changed during support snapshot');
             if (Array.isArray(page.schedule)) schedule.push(...page.schedule);
+            const ev = page.ev_shadow as JsonObject | undefined;
+            if (Array.isArray(ev?.schedule)) evSchedule.push(...ev.schedule);
             pages += 1;
         }
         return {
@@ -197,6 +209,16 @@ async function collectOptimizer(): Promise<Collected> {
             data: {
                 ...page,
                 schedule,
+                ...(page.ev_shadow
+                    ? {
+                          ev_shadow: {
+                              ...(page.ev_shadow as JsonObject),
+                              schedule: evSchedule,
+                              schedule_offset: 0,
+                              has_more: (page.ev_shadow as JsonObject).has_more === true && pages >= 16,
+                          },
+                      }
+                    : {}),
                 schedule_offset: 0,
                 has_more: page.has_more === true && pages >= 16,
                 snapshot_pages: pages,
