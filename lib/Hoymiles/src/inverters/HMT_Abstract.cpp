@@ -21,7 +21,9 @@ bool HMT_Abstract::sendChangeChannelRequest()
         return false;
     }
 
-    CmtLinkRecovery::enqueueChannelChange(this);
+    if (!CmtLinkRecovery::isHeard(this)) {
+        CmtLinkRecovery::enqueueChannelChange(this);
+    }
 
     CmtLinkRecovery::onUnreachable(this);
 
