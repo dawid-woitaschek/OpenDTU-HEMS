@@ -1,11 +1,17 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-21. Current development baseline: `hems` at
+Snapshot: 2026-10-22. Current development baseline: `hems` at
 `617ef19a3af6e64b81a349a867c16facaae6aa04` (merged PR #30).
 The architecture, device profiles, semantic control, permission/safety gates,
 optimizer, storage policies and Economic Storage Dispatch are substantially
-implemented. Physical device validation is the next step; Economic EV Charging
-is intentionally not implemented.
+implemented. This unmerged development package adds deterministic HEMS scenarios
+and **Economic EV Charging shadow planning only**. Automatic economic EVSE dispatch
+is **not implemented**. Physical device validation remains pending.
+
+This feature is stacked on open [PR #32](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/32)
+head `59e5b22d`, targeting `feature/hems-validation-readiness`; it is not yet in `hems`.
+After #32 merges it can be rebased/retargeted onto `hems`. See the
+[EV shadow contract](HEMS_Economic_EV_Charging.md).
 
 ## Merged baseline and separate open work
 
@@ -25,7 +31,7 @@ those instructions. PR #26 was superseded by #27.
 [PR #31](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/31) is **open/unmerged**
 as of this snapshot. It is the separate `feature/cmt-radio-rework` port of OpenDTU
 #3296 and still requires hardware validation. Its commits are not in this baseline.
-This validation-readiness work uses no #31 APIs or implementation and remains valid
+This scenario/EV-shadow package uses no #31 APIs or implementation and remains valid
 whether the radio PR is merged later or never merged.
 
 ## Control and planning behavior
@@ -78,6 +84,15 @@ Devices (`/hems/devices`) owns profiles, endpoints and manual controls. Advanced
 Diagnostics (`/hems/diagnostics`) exposes raw control/provider/optimizer details.
 English, German and French copy and legacy navigation aliases are included.
 
+Overview now also presents an explicitly shadow-only EV proposal, next change,
+charging windows, required/planned energy, completion/shortfall, modeled cost and
+storage conflicts. Settings adds remaining-energy/departure/current/price/PV intent;
+voltage and phase count stay under Advanced. Diagnostics and the normal support
+snapshot expose EV inputs, revisions, coverage and paginated intervals. DST-fold
+inputs require an explicit UTC choice. No vehicle SoC or physical delivery is invented.
+The staged residual planner preserves the storage DP schedule, excludes storage
+discharge intervals and does not claim global joint-home optimality.
+
 The on-demand browser support snapshot (`opendtu-hems-diagnostics/v1`) sequentially
 collects existing firmware, system, HEMS, tariff, forecast and paginated optimizer
 APIs. It now requests `/api/system/status?heap_history=1` to preserve #29's bounded
@@ -90,6 +105,7 @@ across time, not an atomic record or proof of physical behavior.
 | --- | --- | --- |
 | Profiles and semantic control | Deterministic parser/catalog, bounds, readback, mailbox/worker, permissions, config-generation and failure/recovery coverage | WARP3 and Marstek telemetry/actuation/reconnect still require physical validation |
 | EV Protection | Production controller/policy/provider tests, permission combinations, exact debounce boundaries and ownership/cleanup | WARP3 → Marstek interaction, including 120-second release, remains unvalidated on devices |
+| Deterministic scenarios / EV shadow | Host scenario harness uses fake clocks, scriptable telemetry/connectivity, transport/readback faults and semantic result/cleanup capture; bounded EV planner/service tests cover deadlines, gaps, optional PV, prices, current, partial intervals, revisions and persistence; browser fixtures cover intent save/DST/shortfall presentation | Software evidence only; no physical Modbus-device emulation or automatic economic EVSE control |
 | Optimizer/storage dispatch | Planning, current-slot authority, opt-in, durable pause/Resume, ownership, retry and UI tests; merged #25 | Real charge/hold/discharge execution and combined ESP32 timing/resources remain open |
 | Forecast.Solar / memory hardening | Contract fixtures, bounded TLS/parser/resource diagnostics and allocation/replan regressions in #27/#29 | #30 records >24 hours on `generic_esp32s3_usb` without PSRAM, successful TLS cycles on both planes and largest INTERNAL block recovery; broader plane/quota/recovery regression coverage remains |
 | Energy-Charts v2 DE-LU | Strict v2 parser/fixtures and externally verified HTTP response contract | Successful live ESP32 HTTPS/parser/resource validation remains open; desktop HTTP captures do not close it |
@@ -112,6 +128,8 @@ The runbook covers WARP3, Marstek sign/scale and lifecycle/watchdog uncertainty,
 all permission/configuration transitions, reconnect, EV Protection and Economic
 Storage Dispatch. Device outcomes remain pending until recorded with actual device
 firmware/profile revisions, command/readback and independent physical observations.
-No new hardware validation is claimed by this PR. Local checks stay focused; let
+WARP3, Marstek, EV Protection and Economic Storage Dispatch physical validation all
+remain pending. No new hardware validation is claimed by this PR. Local checks stay
+focused; let
 GitHub CI run independently without waiting for, polling or monitoring Actions.
 See the [roadmap](HEMS_Roadmap.md) for remaining milestones.

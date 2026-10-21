@@ -177,3 +177,60 @@ the production bounded filter at 192/256 records and checks Retry-After holds.
 Forecast.Solar sparse/dense capture fixtures are sanitized; the dense query is
 retained deliberately and sparse overnight gaps are rejected atomically. Fixture
 provenance is in `test/fixtures/providers/README.md`. No test contacts a provider.
+
+
+## Deterministic HEMS scenarios and EV shadow planning
+
+Use the existing pinned ArduinoJson v7.4.3 checkout. Focused commands (not the full CI):
+
+```sh
+make -C test scenarios test_ev_shadow test_optimizer_service test_economic_dispatch test_economic_integration test_provider_cleanup ARDUINOJSON=../work/ArduinoJson/src
+(cd test && ./test_ev_shadow && ./test_optimizer_service && ./test_economic_dispatch && ./test_economic_integration && ./test_provider_cleanup)
+node test/test_hems_presentation.mjs
+```
+
+`scenarios` runs twelve separate processes to isolate production singleton state:
+protection Stop/charge/idle, charging resume, stale/unknown interruption, reconnect,
+manual supersession, command faults, no automatic EVSE commands, economic gates and
+bounded retry. `scenario/Runtime.h` shares the existing control-suite task, clock,
+profile and transport seams. `scenario/Harness.h` scripts power, SoC, charging state,
+unknown telemetry, connectivity, deterministic UTC/monotonic advancement and captures
+public mailbox/result/cleanup snapshots. It contains no policy implementation.
+Register fixtures supply production decoder/executor inputs; writes do not simulate
+physical power flow. Scripts must explicitly supply the subsequent observations.
+No firmware simulator, HTTP test endpoint, sleeps or persisted simulation state exists.
+
+For an optional host-only semantic log, from `test/` run:
+
+```sh
+./test_hems_scenarios protection-reconnect ../work/protection-reconnect.json
+./test_hems_scenarios command-failures ../work/command-results.json
+```
+
+JSON observations include semantic action/value, target, origin, authority revision,
+generation, command ID/state, transport/readback outcome and cleanup attempts. They
+are generated only when a host test requests them, never on the ESP32. Pure dispatch
+coverage additionally verifies current Charge/Hold/Discharge mapping, future-slot
+exclusion, revocation, owner-specific cleanup, retry bounds and EV Protection priority;
+production integration covers durable manual pause/Resume and provider authorization.
+
+`test_ev_shadow` exercises the real pure planner: passed/partial UTC deadlines,
+zero/impossible requests, tariff gaps/incomplete/stale data, optional PV coverage,
+price cap, minimum current, partial final duration, exact modeled cost, determinism
+and unchanged authoritative storage projection. `test_optimizer_service` exercises
+EV configuration invalidation, storage revision invalidation, stable polling,
+persistence failure and shared service behavior; the scenario restart probe restores
+intent but no schedule. `test_hems_presentation.mjs` covers DST gaps/folds including
+half-hour folds, locale reason parity and revision-safe dual-schedule snapshots.
+
+With the normal Vite development server running and Playwright/Chromium available:
+
+```sh
+node test/test_ev_shadow_browser.mjs
+```
+
+This checks EV intent-only API saves, explicit repeated-time selection, Overview /
+Diagnostics, shortfall/storage limitations, no command requests and 320/768/1440px
+layouts using deterministic API fixtures. It does not execute physical firmware.
+See [the EV contract](../docs/HEMS_Economic_EV_Charging.md) and
+[hardware validation](../docs/HEMS_Hardware_Validation.md) for limits and pending work.

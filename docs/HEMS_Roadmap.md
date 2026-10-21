@@ -1,7 +1,10 @@
 # OpenDTU-HEMS development roadmap
 
-Snapshot: 2026-10-21. Development baseline: `hems` at
+Snapshot: 2026-10-22. Development baseline: `hems` at
 `617ef19a3af6e64b81a349a867c16facaae6aa04` (merged PR #30).
+The unmerged `feature/hems-ev-shadow-simulation` package is stacked on open PR #32
+(`59e5b22d`, target `feature/hems-validation-readiness`), cleanly rebasable/retargetable
+to `hems` after that prerequisite merges. PR #31 remains independent.
 See [current status](HEMS_Current_Status.md) for merged history and validation evidence.
 
 ## Implemented software
@@ -43,6 +46,28 @@ Contracts: [control](HEMS_CONTROL.md), [profiles](HEMS_Modbus_Profiles.md),
 [energy data](HEMS_Energy_Data.md), [native providers/optimizer](HEMS_Native_Energy.md),
 [storage policies](HEMS_Policies.md), [dispatch](HEMS_Economic_Dispatch.md).
 
+## Current unmerged software milestone
+
+- Deterministic host scenario testing drives the real controller, policies, planners,
+  providers, mailbox and semantic executor with fake time and scripted telemetry,
+  connectivity and command/readback outcomes. Semantic logs expose target, action,
+  value, source, authority, generation, result and cleanup attempts. This is software
+  policy/control evidence, not a physical-device simulator or hardware validation.
+- Economic EV Charging has advanced to **shadow planning only**, default disabled.
+  It models remaining required AC energy by an absolute UTC departure using explicit
+  voltage/phases, bounded exact-price/PV intervals and the authoritative storage
+  projection. Storage-discharge slots are excluded and limitations/shortfall reported.
+  This is staged residual scheduling, not globally optimal joint-home optimization.
+- Overview, intent Settings, Advanced electrical assumptions, detailed diagnostics and
+  normal support snapshots expose the EV proposal and coverage/revisions. DST folds
+  require an explicit UTC instant. Configuration alone persists; no simulation/history.
+- **Automatic economic EVSE dispatch is not implemented.** No automatic EVSE command
+  originates from this feature. Manual commands and existing storage/protection
+  precedence and permissions retain their behavior.
+
+See [EV charging contract](HEMS_Economic_EV_Charging.md). The hardware gates below
+remain pending; deterministic tests close none of them.
+
 ## Next milestones
 
 1. **WARP3 and Marstek physical validation.** Follow the
@@ -70,16 +95,18 @@ Contracts: [control](HEMS_CONTROL.md), [profiles](HEMS_Modbus_Profiles.md),
    findings. Identity/recovery journals are not a prerequisite unless evidence shows
    a concrete operational need.
 6. **Deferred policy expansion.** Minimum-economic-benefit/hysteresis and recurring
-   target/reserve schedules follow real dispatch validation. Economic EV Charging is
-   intentionally **not implemented**: define its product semantics before adding an
-   EVSE optimizer/dispatch producer through the existing actuator and permissions.
+   target/reserve schedules follow real dispatch validation. Economic EV Charging
+   now has a bounded **shadow-only** product contract and staged residual planner.
+   Automatic EVSE economic dispatch remains **not implemented** and deferred until
+   physical validation and a separate explicit execution contract. A future joint-home
+   optimizer may replace staging; it is not part of this milestone.
 
 ## Separate open work
 
 As of this snapshot, [PR #31](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/31)
 (`feature/cmt-radio-rework`, OpenDTU #3296 port) is **open and unmerged**, still needs
-radio hardware validation and is not part of this `hems` baseline. HEMS validation
-readiness has no dependency on that PR, its APIs or radio behavior. This work remains
+radio hardware validation and is not part of this `hems` baseline. This HEMS scenario/EV-shadow
+package has no dependency on that PR, its APIs or radio behavior. This work remains
 applicable whether #31 is later merged or closed.
 
 ## Verification discipline
