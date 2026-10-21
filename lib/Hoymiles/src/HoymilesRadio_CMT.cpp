@@ -418,9 +418,11 @@ void HoymilesRadio_CMT::loop()
 
                         const bool ownsTransaction = _busyFlag && !isQueueEmpty()
                             && _commandQueue.front()->getTargetAddress() == inv->serial();
-                        rxRingFollow(f.channel, inv->CmtLink, ownsTransaction);
+                        const uint8_t expectedMainCmd = ownsTransaction ? (_commandQueue.front()->getMainCmd() | 0x80) : 0;
+                        const bool accepted = expectedMainCmd == 0 || f.fragment[0] == expectedMainCmd;
+                        rxRingFollow(f.channel, inv->CmtLink, ownsTransaction && accepted);
 
-                        inv->addRxFragment(f.fragment, f.len, f.rssi);
+                        inv->addRxFragment(f.fragment, f.len, f.rssi, expectedMainCmd);
                     } else {
                         ESP_LOGE(TAG, "Inverter Not found!");
                     }

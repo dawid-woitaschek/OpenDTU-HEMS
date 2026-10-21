@@ -44,6 +44,8 @@ public:
 
     virtual String getCommandName() const = 0;
 
+    uint8_t getMainCmd() const { return _payload[0]; }
+
     void setSendCount(const uint8_t count);
     uint8_t getSendCount() const;
     uint8_t incrementSendCount();
