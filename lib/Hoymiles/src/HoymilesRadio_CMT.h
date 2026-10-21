@@ -68,6 +68,8 @@ public:
 
     std::vector<CountryFrequencyList_t> getCountryFrequencyList() const;
 
+    bool getProbeFrequency(const uint16_t step, uint32_t& frequency, const uint8_t startChannel = 0) const;
+
 private:
     void ARDUINO_ISR_ATTR handleInt1();
     void ARDUINO_ISR_ATTR handleInt2();

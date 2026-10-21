@@ -96,6 +96,55 @@ uint32_t HoymilesRadio_CMT::getInvBootRingFrequency(const uint8_t startChannel) 
     return getFrequencyFromChannel(channel);
 }
 
+bool HoymilesRadio_CMT::getProbeFrequency(const uint16_t step, uint32_t& frequency, const uint8_t moduleStartChannel) const
+{
+    const CountryFrequencyDefinition_t& def = countryDefinition.at(_countryMode);
+
+    const int16_t startChannel = (moduleStartChannel != 0) ? moduleStartChannel : ((def.Band == FrequencyBand_t::BAND_860) ? 33 : 60);
+
+    const int16_t candidates[] = {
+        startChannel, static_cast<int16_t>(startChannel - 8),
+        static_cast<int16_t>(startChannel + 1), static_cast<int16_t>(startChannel - 1),
+        static_cast<int16_t>(startChannel - 7), static_cast<int16_t>(startChannel - 9)
+    };
+    constexpr uint16_t candidateCount = sizeof(candidates) / sizeof(candidates[0]);
+
+    int16_t channel;
+    if (step < candidateCount) {
+        channel = candidates[step];
+    } else {
+        const int16_t minChannel = static_cast<int16_t>((def.Freq_Legal_Min - _radio->getBaseFrequency()) / getChannelWidth());
+        const int16_t maxChannel = static_cast<int16_t>((def.Freq_Legal_Max - _radio->getBaseFrequency()) / getChannelWidth());
+
+        uint16_t remaining = step - candidateCount;
+        channel = -1;
+        for (int16_t c = minChannel; c <= maxChannel; c++) {
+            bool isCandidate = false;
+            for (const int16_t candidate : candidates) {
+                isCandidate = isCandidate || (candidate == c);
+            }
+            if (isCandidate) {
+                continue;
+            }
+            if (remaining == 0) {
+                channel = c;
+                break;
+            }
+            remaining--;
+        }
+        if (channel < 0) {
+            return false;
+        }
+    }
+
+    if (channel < 0 || channel > 0xFE) {
+        return false;
+    }
+
+    frequency = getFrequencyFromChannel(static_cast<uint8_t>(channel));
+    return frequency >= def.Freq_Legal_Min && frequency <= def.Freq_Legal_Max;
+}
+
 void HoymilesRadio_CMT::init(const int8_t pin_sdio, const int8_t pin_clk, const int8_t pin_cs, const int8_t pin_fcs, const int8_t pin_gpio2, const int8_t pin_gpio3)
 {
     _dtuSerial.u64 = 0;

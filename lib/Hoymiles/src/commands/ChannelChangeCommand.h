@@ -15,6 +15,8 @@ public:
 
     void setCountryMode(const CountryModeId_t mode);
 
+    void setBandBytes(const uint8_t profile, const uint8_t startChannel);
+
     virtual bool handleResponse(const fragment_t fragment[], const uint8_t max_fragment_id);
 
     virtual uint8_t getMaxResendCount() const;
