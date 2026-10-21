@@ -16,3 +16,6 @@ webapp_dist/
 /test/test_modbus_profiles
 /test/test_economic_dispatch
 /test/test_economic_integration
+
+/test/test_ev_shadow
+/test/test_hems_scenarios
