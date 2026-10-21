@@ -132,8 +132,8 @@ $(TEST_ENERGY): test_energy.cpp ../src/hems/energy/Provider.cpp ../src/hems/prof
 $(TEST_ENERGY_SERVICE) $(TEST_ENERGY_RETRY): %: %.cpp energy_harness.h provider_fixtures.h ../src/hems/energy/Native.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $(filter %.cpp,$^)
 
-$(TEST_RUNTIME_DIAGNOSTICS): test_runtime_diagnostics.cpp ../src/diagnostics/Breadcrumb.cpp
-	$(CXX) $(CXXFLAGS) -Idiagnostics_stubs -I../include -I$(ARDUINOJSON) -o $@ $^
+$(TEST_RUNTIME_DIAGNOSTICS): test_runtime_diagnostics.cpp ../src/diagnostics/Breadcrumb.cpp ../include/diagnostics/Heap.h ../include/diagnostics/HeapSerialize.h
+	$(CXX) $(CXXFLAGS) -Idiagnostics_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
 $(TEST_RESTART_HELPER): test_restart_helper.cpp ../src/RestartHelper.cpp ../src/diagnostics/Breadcrumb.cpp
 	$(CXX) $(CXXFLAGS) -Irestart_stubs -I../include -I$(ARDUINOJSON) -o $@ $^

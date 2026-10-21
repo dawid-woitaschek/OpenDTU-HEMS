@@ -116,8 +116,10 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     if (!c.dischargePermille) { return fail("discharge_efficiency_missing"); }
     if (!c.maxChargeW || !c.maxDischargeW) { return fail("battery_power_limits_missing"); }
     // Validate even callers constructing Config directly, not only the JSON boundary.
-    JsonDocument checked; serializeConfig(c, checked.to<JsonObject>()); Config valid;
-    if (!parseConfig(checked.as<JsonVariantConst>(), valid)) { return fail("invalid_configuration"); }
+    {
+        JsonDocument checked; serializeConfig(c, checked.to<JsonObject>()); Config valid;
+        if (!parseConfig(checked.as<JsonVariantConst>(), valid)) { return fail("invalid_configuration"); }
+    } // Configuration JSON is scratch; release its pools before allocating DP.
     if (in.now < Energy::MinUtc || static_cast<uint64_t>(in.now) + c.horizonSeconds > UINT32_MAX) { return fail("clock_invalid"); }
     auto goals = Policies::evaluateStorageEconomicPolicy(c.policies, c.capacityWh, c.minSoc, c.maxSoc, in.now);
     out.targetDeadline = goals.deadline; out.targetWh = goals.targetWh;

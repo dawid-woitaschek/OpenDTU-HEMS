@@ -9,21 +9,42 @@
 #include <cstring>
 #include <iostream>
 using namespace Hems::Energy;
+namespace {
+bool checkedGet(char const* url, Source source, JsonDocument& doc, NativeInfo& info, char const*& error)
+{
+    assert(activeClients == 0 && activeHttp == 0);
+    bool ok = providerGet(url, source, doc, info, error);
+    // Every early return must destroy both clients, including a failed TLS
+    // handshake, response rejection, malformed body and JSON allocation failure.
+    assert(activeClients == 0 && activeHttp == 0);
+    return ok;
+}
+}
 int main()
 {
     Hems::Profiles::BoundedAllocator allocator(MaxJsonMemory);
     JsonDocument doc(&allocator); assert(allocator.used == 0); NativeInfo info; char const* error;
-    auto get=[&] { return providerGet("https://api.energy-charts.info/v2/price",Source::EnergyCharts,doc,info,error); };
+    auto get=[&] { return checkedGet("https://api.energy-charts.info/v2/price",Source::EnergyCharts,doc,info,error); };
     transportBody.clear(); serializeJson(ProviderFixtures::prices(2, 1792180800), transportBody);
     assert(get() && caInstalled && redirectPolicy==0 && transportUrl=="https://api.energy-charts.info/v2/price");
     retryAfter = 120; assert(get() && info.retrySeconds == 120); retryAfter = 0; // A 200 response can also impose a server hold.
-    assert(!providerGet("http://api.energy-charts.info/v2/price",Source::EnergyCharts,doc,info,error));
-    assert(!providerGet("https://api.energy-charts.info.attacker.test/",Source::EnergyCharts,doc,info,error));
-    assert(!providerGet("https://api.forecast.solar/",Source::EnergyCharts,doc,info,error));
+    assert(!checkedGet("http://api.energy-charts.info/v2/price",Source::EnergyCharts,doc,info,error));
+    assert(!checkedGet("https://api.energy-charts.info.attacker.test/",Source::EnergyCharts,doc,info,error));
+    assert(!checkedGet("https://api.forecast.solar/",Source::EnergyCharts,doc,info,error));
+    beginAvailable = false; assert(!get() && !strcmp(error, "provider_begin_failed")); beginAvailable = true;
     transportCode=-1; assert(!get() && !strcmp(error,"provider_connect_failed")); // TCP/socket and generic TLS -1 remain ambiguous.
     assert(info.httpStatus == -1 && !strcmp(info.httpError, "connection refused") && info.dns == 1);
     dnsAvailable = false; assert(!get() && !strcmp(error, "provider_dns_failed") && info.dns == 0); dnsAvailable = true;
     tlsCode = -0x2700; assert(!get() && !strcmp(error, "provider_tls_error") && info.tlsError == -0x2700 && info.tlsErrorText[0]);
+    // Repeated allocator failures on both cloud origins must not retain a client.
+    tlsCode = -0x7f00;
+    for (unsigned i = 0; i < 10; ++i) {
+        for (auto source : { Source::EnergyCharts, Source::ForecastSolar }) {
+            auto url = source == Source::EnergyCharts ? "https://api.energy-charts.info/v2/price" : "https://api.forecast.solar/estimate/";
+            assert(!checkedGet(url, source, doc, info, error));
+            assert(!strcmp(error, "provider_tls_error") && info.tlsError == -0x7f00);
+        }
+    }
     tlsCode = -1; assert(!get() && !strcmp(error, "provider_connect_failed") && info.tlsError == -1); tlsCode = 0;
     transportCode = -11; assert(!get() && !strcmp(error, "provider_read_timeout"));
     transportCode = -5; assert(!get() && !strcmp(error, "provider_connection_lost"));
@@ -31,7 +52,7 @@ int main()
     transportCode=302; assert(!get() && redirectPolicy==0); transportCode=500; assert(!get());
     transportCode=429; retryAfter=10000; assert(!get() && info.retrySeconds==10000);
     retryAfter=0; assert(!get() && info.retrySeconds == 60);
-    assert(!providerGet("https://api.forecast.solar/estimate/", Source::ForecastSolar, doc, info, error) && info.retrySeconds == 7200);
+    assert(!checkedGet("https://api.forecast.solar/estimate/", Source::ForecastSolar, doc, info, error) && info.retrySeconds == 7200);
     time_t tomorrow = time(nullptr) + 86400; struct tm utc {}; gmtime_r(&tomorrow, &utc);
     char dateHeader[64]; strftime(dateHeader, sizeof(dateHeader), "%a, %d %b %Y %H:%M:%S GMT", &utc);
     retryHeader = dateHeader; assert(!get() && info.retrySeconds >= 86395 && info.retrySeconds <= 86400); retryHeader.clear();
@@ -76,10 +97,10 @@ int main()
         fixture["result"]["watt_hours_period"][key] = i ? 250 : 0;
     }
     transportBody.clear(); serializeJson(fixture, transportBody);
-    assert(providerGet("https://api.forecast.solar/estimate/", Source::ForecastSolar, doc, info, error));
+    assert(checkedGet("https://api.forecast.solar/estimate/", Source::ForecastSolar, doc, info, error));
     assert(doc["result"]["watt_hours_period"].size() == MaxIntervals + 1 && activeClients == 0 && activeHttp == 0);
     std::cout << "Forecast.Solar 256 intervals: payload=" << info.payloadBytes << " JSON allocator peak=" << allocator.peak << " host bytes\n";
     Hems::Profiles::BoundedAllocator tiny(1); JsonDocument noMemory(&tiny);
-    assert(!providerGet("https://api.forecast.solar/estimate/", Source::ForecastSolar, noMemory, info, error) && !strcmp(error, "insufficient_memory"));
+    assert(!checkedGet("https://api.forecast.solar/estimate/", Source::ForecastSolar, noMemory, info, error) && !strcmp(error, "insufficient_memory"));
     std::cout<<"Production verified HTTPS transport origin, CA wiring, redirects, failure/recovery, retry and bounded-body tests passed\n";
 }

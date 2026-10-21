@@ -8,6 +8,7 @@
 #include <ctime>
 #include <new>
 #include <cmath>
+#include <type_traits>
 namespace Hems::Optimizer {
 namespace {
 constexpr char Path[] = "/hems-optimizer.json", Temp[] = "/hems-optimizer.tmp";
@@ -177,7 +178,15 @@ void Service::run()
     std::lock_guard<std::mutex> lock(_mutex);
     if (generation != _generation || latestRevision != result->energyRevision || !sameStorage(result->inputs, latestInputs)
             || latestInputs.now / 900 != result->inputs.now / 900) { _pending = _config.enabled; return; }
-    _energyRevision = latestRevision; _result = std::move(result); _error = nullptr; ++_planRevision;
+    // Readers hold _mutex and no Result address escapes. Keep the published
+    // allocation in place rather than moving this large, long-lived heap island
+    // between short-lived allocations on every replan. Candidate validation and
+    // failure behavior stay atomic; this adds only a bounded plain-data copy.
+    static_assert(std::is_trivially_copy_assignable<Result>::value, "Publication must not allocate under the lock");
+    _energyRevision = latestRevision;
+    if (_result) { *_result = *result; }
+    else { _result = std::move(result); }
+    _error = nullptr; ++_planRevision;
 }
 PlanView Service::dispatchPlan() const
 {

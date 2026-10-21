@@ -13,7 +13,7 @@ public:
     HTTPClient() { ++activeHttp; }
     ~HTTPClient() { --activeHttp; }
     static std::string errorToString(int code) { return code == -1 ? "connection refused" : code == -11 ? "read Timeout" : "test HTTP error"; }
-    bool begin(WiFiClient& c, char const* url) { client=&c; transportUrl=url; return true; }
+    bool begin(WiFiClient& c, char const* url) { client=&c; transportUrl=url; return beginAvailable; }
     void useHTTP10(bool) {}
     void setReuse(bool) {}
     void setFollowRedirects(int p) { redirectPolicy=p; }

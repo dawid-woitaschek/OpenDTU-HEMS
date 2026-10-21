@@ -2,6 +2,7 @@
 #include <diagnostics/Breadcrumb.h>
 #include <diagnostics/ResetReason.h>
 #include <diagnostics/Serialize.h>
+#include <diagnostics/HeapSerialize.h>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -60,5 +61,50 @@ int main()
     assert(!strcmp(resetName(ESP_RST_PANIC), "ESP_RST_PANIC") && !strcmp(resetName(ESP_RST_SW), "ESP_RST_SW"));
     assert(!strcmp(resetName(ESP_RST_INT_WDT), "ESP_RST_INT_WDT") && !strcmp(resetName(ESP_RST_TASK_WDT), "ESP_RST_TASK_WDT"));
     assert(!strcmp(resetName(static_cast<esp_reset_reason_t>(99)), "ESP_RST_UNRECOGNIZED"));
+    // Diagnostic history stays bounded, preserves boot, and rejects rows that
+    // were overwritten while an HTTP serializer was working outside its lock.
+    HeapJournal heap;
+    HeapSample sample;
+    sample.uptimeMs = 12; sample.freeInternal = 85000; sample.largestInternal = 27000;
+    sample.context.point = HeapPoint::Boot;
+    heap.sample(sample);
+    auto initial = heap.samples.cursor();
+    assert(initial.count == 1 && initial.sequence == 1);
+    sample.context.point = HeapPoint::BeforeRequest; sample.context.provider = HeapProvider::ForecastSolar; sample.context.plane = 1;
+    for (unsigned i = 0; i < 30; ++i) { sample.uptimeMs = 100 + i; heap.sample(sample); }
+    auto full = heap.samples.cursor();
+    HeapSample row;
+    assert(full.count == 16 && full.sequence == 31 && !heap.samples.read(initial.sequence, row));
+    assert(heap.boot.uptimeMs == 12 && heap.boot.context.point == HeapPoint::Boot);
+    assert(heap.samples.read(full.sequence - 15, row) && row.uptimeMs == 114);
+    assert(heap.samples.read(full.sequence, row) && row.uptimeMs == 129);
+    assert(!heap.samples.read(full.sequence + 1, row));
+    sample.context.point = HeapPoint::Observer; sample.context.provider = HeapProvider::None; sample.context.plane = -1;
+    heap.sample(sample);
+    HeapContext context;
+    context.component = Component::Energy; context.operation = Operation::Forecast; context.phase = Phase::Connect; context.subIndex = 1;
+    char function[] = "heap_caps_calloc_function_name_that_is_long";
+    for (unsigned i = 0; i < 6; ++i) { heap.failed(16384 + i, 2052, function, 140 + i, context); }
+    function[0] = '!'; // The failure record owns a bounded copy of SDK text.
+    auto failed = heap.failures.cursor();
+    HeapFailure failure;
+    assert(failed.count == 4 && failed.sequence == 6 && !heap.failures.read(2, failure));
+    assert(heap.failures.read(3, failure) && failure.requested == 16386);
+    assert(heap.failures.read(6, failure) && failure.requested == 16389 && failure.capabilities == 2052);
+    assert(failure.function[0] == 'h' && failure.function[31] == 0);
+    assert(failure.context.phase == Phase::Connect && failure.context.provider == HeapProvider::ForecastSolar && failure.context.plane == 1);
+    assert(failure.checkpointUptimeMs == 129 && failure.checkpointFreeInternal == 85000 && failure.checkpointLargestInternal == 27000);
+    json.clear(); heapFailureJson(failure, json.to<JsonObject>());
+    failure = {}; // JSON must not point to a transient stack snapshot.
+    assert(json["function"].as<std::string>().find("heap_caps_calloc") == 0);
+    assert(json["phase"] == "connect" && json["provider"] == "forecast_solar" && json["last_checkpoint_age_ms"] == 16);
+    json.clear(); heapSampleJson(row, json.to<JsonObject>());
+    assert(json["fragmentation_percent"] == 68 && json["plane"] == 1);
+    assert(fragmentationPercent(0, 0) == 0 && fragmentationPercent(1, 2) == 0 && fragmentationPercent(1024, 1024) == 0);
+    HeapJournal noSamples;
+    noSamples.failed(42, 4, nullptr, 10, {});
+    assert(noSamples.failures.read(1, failure) && failure.function[0] == 0 && failure.checkpointFreeInternal == 0);
+    assert(!strcmp(name(HeapPoint::Observer), "observer"));
     std::cout << "RTC journal corruption/torn-write handling, previous boot, active/completed/concurrent operations, restart markers and SDK reason mapping passed; retained bytes=" << sizeof(Storage) << '\n';
+    std::cout << "Bounded heap/failure history, overwrite guards, boot baseline and cached checkpoint labeling passed; static heap journal bytes=" << sizeof(HeapJournal) << '\n';
 }

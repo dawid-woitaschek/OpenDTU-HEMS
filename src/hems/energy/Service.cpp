@@ -17,6 +17,11 @@ namespace Hems::Energy {
 namespace {
 constexpr char Path[] = "/hems-energy.json", Temp[] = "/hems-energy.tmp";
 char const* name(Domain domain) { return domain == Domain::Tariff ? "tariff" : "forecast"; }
+Diagnostics::HeapProvider heapProvider(Source source)
+{
+    return source == Source::EnergyCharts ? Diagnostics::HeapProvider::EnergyCharts
+        : source == Source::ForecastSolar ? Diagnostics::HeapProvider::ForecastSolar : Diagnostics::HeapProvider::Normalized;
+}
 uint32_t utcNow() { auto now = time(nullptr); return now > 0 && static_cast<uint64_t>(now) <= UINT32_MAX ? now : 0; }
 bool nativeCloud(Source source) { return source == Source::EnergyCharts || source == Source::ForecastSolar; }
 bool clockReady(Settings const& settings)
@@ -80,7 +85,7 @@ __attribute__((noinline)) bool normalizedGet(Settings const& settings, Domain do
     return parseSeries(doc.as<JsonVariantConst>(), domain, series, error);
 }
 // All request scratch dies here, before aggregation, quota delay, or the next plane.
-__attribute__((noinline)) bool nativeRequest(Settings const& settings, unsigned plane, Series& series, NativeInfo& info, char const*& error)
+__attribute__((noinline)) bool nativeRequest(Settings const& settings, unsigned plane, std::unique_ptr<Series>& series, NativeInfo& info, char const*& error)
 {
     bool ok;
     {
@@ -90,12 +95,20 @@ __attribute__((noinline)) bool nativeRequest(Settings const& settings, unsigned 
         Profiles::BoundedAllocator allocator(MaxJsonMemory); JsonDocument doc(&allocator);
         ok = providerGet(url, settings.source, doc, info, error);
         if (ok) {
-            ok = settings.source == Source::ForecastSolar ? parseForecastSolar(doc.as<JsonVariantConst>(), series, info, error)
-                : parseEnergyCharts(doc.as<JsonVariantConst>(), series, error);
+            // providerGet has destroyed its HTTP/TLS objects. The destination is
+            // only needed now; do not put another 5 KiB allocation below TLS.
+            if (!series) { series.reset(new (std::nothrow) Series()); }
+            if (!series) { error = "insufficient_memory"; ok = false; }
+            else {
+                ok = settings.source == Source::ForecastSolar ? parseForecastSolar(doc.as<JsonVariantConst>(), *series, info, error)
+                    : parseEnergyCharts(doc.as<JsonVariantConst>(), *series, error);
+            }
         }
         info.jsonPeak = allocator.peak;
     }
     info.released = memorySample();
+    Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::Released, heapProvider(settings.source),
+        settings.source == Source::ForecastSolar ? plane : -1);
     return ok;
 }
 constexpr uint32_t WorkerStackBytes = 10240;
@@ -305,6 +318,8 @@ void Service::workerEntry(void* context)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (service._backgroundRun) { service._backgroundRun(service._backgroundContext); }
         for (auto domain : { Domain::Tariff, Domain::Forecast }) { service.runPending(domain); }
+        // fetch/runPending frames, unpublished Series and optimizer scratch are gone.
+        Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::WorkerIdle);
         auto freeStack = uxTaskGetStackHighWaterMark(nullptr); // ESP-IDF reports bytes.
         { std::lock_guard<std::mutex> lock(service._mutex); service._workerStackFree = freeStack; }
     }
@@ -333,11 +348,10 @@ __attribute__((noinline)) void Service::runPending(Domain domain)
 void Service::fetch(Domain domain, Settings const& settings, uint32_t generation)
 {
     char const* error = nullptr;
-    auto series = std::unique_ptr<Series>(new (std::nothrow) Series());
+    std::unique_ptr<Series> series;
     bool parsed = false;
     bool outbound = false, response = false;
     if (!clockReady(settings)) { error = "clock_invalid"; }
-    else if (!series) { error = "insufficient_memory"; }
     else if (!NetworkSettings.isConnected()) { error = "network_unavailable"; }
     else if (settings.source != Source::Normalized) {
         NativeInfo info;
@@ -353,21 +367,9 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             }
             response = false;
             Diagnostics::workerPhase(Diagnostics::Phase::ProviderStart, settings.source == Source::ForecastSolar ? i : -1);
-            bool merge = settings.source == Source::ForecastSolar && series->count;
-            // First/only plane fills the unpublished aggregate directly. Allocate a
-            // plane scratch only when there is already an aggregate to preserve.
-            if (merge && !single) {
-                single.reset(new (std::nothrow) Series());
-                if (!single) {
-                    error = "insufficient_memory";
-                    std::lock_guard<std::mutex> lock(_mutex);
-                    if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
-                    _planes[i].error = error;
-                    parsed = false; break;
-                }
-            }
+            bool merge = settings.source == Source::ForecastSolar && series && series->count;
             info = {};
-            bool ok = nativeRequest(settings, i, merge ? *single : *series, info, error);
+            bool ok = nativeRequest(settings, i, merge ? single : series, info, error);
             {
                 std::lock_guard<std::mutex> lock(_mutex);
                 outbound = outbound || info.dns >= 0 || info.httpStatus != 0;
@@ -407,7 +409,11 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                 if (more) { vTaskDelay(pdMS_TO_TICKS(5000)); }
             }
         }
-    } else { outbound = true; parsed = normalizedGet(settings, domain, *series, error); }
+    } else {
+        series.reset(new (std::nothrow) Series());
+        if (!series) { error = "insufficient_memory"; }
+        else { outbound = true; parsed = normalizedGet(settings, domain, *series, error); }
+    }
     std::lock_guard<std::mutex> lock(_mutex);
     if (_generation[static_cast<unsigned>(domain)] != generation) { return; }
     auto index = static_cast<unsigned>(domain);
