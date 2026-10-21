@@ -225,7 +225,7 @@ void HoymilesRadio_CMT::startRxHopping(const uint32_t centreFrequency, const boo
         static_cast<unsigned>(channel), static_cast<unsigned>(_rxHopChannel), stayUs);
 }
 
-void HoymilesRadio_CMT::rxRingFollow(const uint8_t c, CmtLinkState& link)
+void HoymilesRadio_CMT::rxRingFollow(const uint8_t c, CmtLinkState& link, const bool ownsTransaction)
 {
     const uint8_t previousRingState = link.ringState;
     const uint32_t nowMs = millis();
@@ -255,7 +255,11 @@ void HoymilesRadio_CMT::rxRingFollow(const uint8_t c, CmtLinkState& link)
     }
     link.ringNext = next;
 
-    if (!_rxHopActive || !_busyFlag) {
+    // The receiver is shared: a late frame of another inverter (e.g. the end of
+    // a long answer that arrived after its request timed out) must not move
+    // the receiver away from the answer of the inverter whose request is active.
+    // Its ring state above is still updated, it serves its own next request.
+    if (!_rxHopActive || !_busyFlag || !ownsTransaction) {
         return;
     }
 
@@ -412,7 +416,9 @@ void HoymilesRadio_CMT::loop()
                         ESP_LOGD(TAG, "RX %.2f MHz --> %s | %" PRId8 " dBm",
                             getFrequencyFromChannel(f.channel) / 1000000.0, Utils::dumpArray(f.fragment, f.len).c_str(), f.rssi);
 
-                        rxRingFollow(f.channel, inv->CmtLink);
+                        const bool ownsTransaction = _busyFlag && !isQueueEmpty()
+                            && _commandQueue.front()->getTargetAddress() == inv->serial();
+                        rxRingFollow(f.channel, inv->CmtLink, ownsTransaction);
 
                         inv->addRxFragment(f.fragment, f.len, f.rssi);
                     } else {

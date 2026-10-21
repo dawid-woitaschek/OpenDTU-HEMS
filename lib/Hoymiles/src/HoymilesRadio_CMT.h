@@ -104,7 +104,7 @@ private:
 
     uint8_t rxRingNext(const uint8_t c) const;
     bool rxRingContains(const uint8_t c) const;
-    void rxRingFollow(const uint8_t c, CmtLinkState& link);
+    void rxRingFollow(const uint8_t c, CmtLinkState& link, const bool ownsTransaction);
 
     static constexpr uint32_t RX_HOP_DWELL_US = 2000;
     static constexpr uint32_t RX_HOP_HOLD_MAX_US = 60000;
