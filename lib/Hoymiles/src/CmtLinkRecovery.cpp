@@ -68,7 +68,12 @@ void CmtLinkRecovery::onProbeHit(InverterAbstract* inv, const uint32_t frequency
 
     CmtLinkState& link = inv->CmtLink;
 
-    const uint32_t learned = (frequency == radio->getInverterTargetFrequency()) ? 0 : frequency;
+    const uint8_t hitChannel = radio->getChannelFromFrequency(frequency);
+    const uint8_t targetChannel = radio->getChannelFromFrequency(radio->getInverterTargetFrequency());
+    const bool onTargetRing = hitChannel != 0xFF && targetChannel != 0xFF
+        && hitChannel + 1 >= targetChannel && hitChannel <= targetChannel + 1;
+
+    const uint32_t learned = onTargetRing ? 0 : frequency;
 
     ESP_LOGD(TAG, "%s: probe hit on %.3f MHz", inv->serialString().c_str(), frequency / 1000000.0);
 
