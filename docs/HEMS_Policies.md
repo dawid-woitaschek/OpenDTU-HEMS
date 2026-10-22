@@ -10,7 +10,7 @@ category triggers. Cheap/normal/expensive remain frontend presentation only.
 
 | Setting | Exact meaning |
 | --- | --- |
-| Grid charging | When forbidden, a charging transition may use only modeled PV surplus after the configured base load. It may not increase grid import for the battery. This is separate from the device write permission. |
+| Grid charging | When forbidden, a charging transition may use only modeled PV surplus after the per-slot household load forecast (or explicit constant fallback). It may not increase grid import for the battery. This is separate from the device write permission. |
 | Battery reserve | Existing `min_soc_pct`: lower planning bound at every state, rounded up to whole Wh. This is a user planning reserve, not a BMS/hardware safety setting. |
 | Maximum desired SoC | Existing `max_soc_pct`: upper planning bound, rounded down to Wh. Hardware limits remain authoritative. |
 | Target charge | Optional minimum SoC at one absolute UTC deadline. The deadline splits a DP slot when necessary; the target Wh is an exact additional energy state. It is enforced at the deadline, then the ordinary reserve applies. |
@@ -73,11 +73,11 @@ Schedule reasons describe membership in the least-cost feasible horizon plan;
 they are not invented per-action counterfactual proofs. Permission restrictions
 explain why price alone cannot authorize an action.
 
-Minimum-benefit hysteresis and recurring schedules are deliberately deferred.
-Efficiency losses and minimum-throughput tie breaking already remain modeled,
-but tiny positive modeled benefits are not filtered by a new threshold. A future
-threshold must distinguish optional arbitrage from the cost of required targets
-and compare equivalent feasible policies, rather than discard user intent.
+The current [energy-management extension](HEMS_Energy_Management.md) adds optional
+plan-change hysteresis by re-evaluating feasible schedules on the same fresh
+inputs and terminal table. It adds real marginal cycle costs and optional local
+load profiles. Throughput remains a secondary tie breaker. Numeric prices are
+not replaced by categories, minimum spreads or whole-plan-profit gates.
 
 ## Priority and control boundary
 
