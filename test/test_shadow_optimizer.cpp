@@ -12,6 +12,7 @@ struct Fixture {
     Config c; Inputs in; Energy::Series tariff, forecast; Plan p;
     Fixture() {
         c.socBoundsConfigured = true; c.enabled = true; c.effectivePrice = true; c.horizonSeconds = 14400; c.capacityWh = 2000;
+        c.terminalPriceConfigured=true; c.terminalPriceMicros=200000;
         c.minSoc=20; c.maxSoc=90; c.chargePermille=950; c.dischargePermille=950; c.baseLoadW=1000;
         c.maxChargeW=2000; c.maxDischargeW=2000;
         tariff.count=forecast.count=192; tariff.generatedAt=forecast.generatedAt=Now;
@@ -27,11 +28,12 @@ struct Fixture {
     }
     bool run() { if (in.tariff) in.tariff=&tariff; if (in.forecast) in.forecast=&forecast; return calculate(c,in,p); }
     void spread(int32_t cheap=50000, int32_t expensive=400000) {
+        c.terminalPriceMicros=std::max(0,std::min(cheap,expensive));
         for (size_t i=0;i<tariff.count;++i) { tariff.intervals[i].value=tariff.intervals[i].importPrice=i<8 ? cheap : expensive; }
     }
     bool moves() const { for(size_t i=0;i<p.count;++i) if(p.steps[i].startWh!=p.steps[i].endWh) return true; return false; }
     void bounds() const {
-        assert(p.finalWh>=p.initialWh && p.optimizedNano<=p.baselineNano);
+        assert(p.finalWh>=c.capacityWh*c.minSoc/100 && p.optimizedNano<=p.baselineNano);
         for(size_t i=0;i<p.count;++i) {
             auto const& s=p.steps[i]; assert(s.endWh>=400 && s.endWh<=1800);
             assert(s.batteryW<=int32_t(c.maxChargeW) && -s.batteryW<=int32_t(c.maxDischargeW));
@@ -44,7 +46,8 @@ void policyTests()
 {
     Fixture f; f.spread(); assert(f.run() && f.moves());
     f.c.policies.gridChargingAllowed = false;
-    assert(f.run() && !f.moves()); // Cannot refill terminal stock from grid.
+    assert(f.run());
+    for (size_t i=0;i<f.p.count;++i) assert(f.p.steps[i].batteryW<=0); // Existing stock has a priced continuation value; no grid refill.
     f.in.forecastStatus.planningUsable = f.in.forecastStatus.fresh = true;
     for (size_t i=0; i<8; ++i) f.forecast.intervals[i].value=3000;
     assert(f.run() && f.moves() && f.p.pvIncluded);
@@ -60,7 +63,7 @@ void policyTests()
 
     // A hard deadline makes the DP choose the least-cost reachable slots, including an exact non-grid target state.
     f=Fixture(); f.c.policies.targetEnabled=true; f.c.policies.targetSoc=73;
-    f.c.policies.targetDeadline=Now+1875; f.c.policies.dischargeAllowed=false;
+    f.c.terminalPriceMicros=50000; f.c.policies.targetDeadline=Now+1875; f.c.policies.dischargeAllowed=false;
     f.c.chargePermille=f.c.dischargePermille=1000;
     f.tariff.intervals[1].value=f.tariff.intervals[1].importPrice=50000;
     assert(f.run() && !strcmp(f.p.targetState,"target_planned"));
@@ -70,11 +73,11 @@ void policyTests()
     for (size_t i=0; i<f.p.count; ++i) {
         if(f.p.steps[i].end==Now+1875) { assert(f.p.steps[i].endWh>=1460); deadline=true; }
     }
-    assert(deadline && f.p.finalWh>=f.p.initialWh);
-    assert(f.p.optimizedNano>f.p.baselineNano); // Intent may cost money; never invent positive savings.
+    assert(deadline && f.p.finalWh>=f.c.capacityWh*f.c.minSoc/100);
+    assert(f.p.optimizedNano>=f.p.baselineNano); // Intent may cost money; never invent positive savings.
     JsonDocument report; serializePlan(f.c,f.in,f.p,report.to<JsonObject>());
     assert(report["target_state"]=="target_planned" && report["device_writes"]==false);
-    assert(report["modeled_savings_nano"].as<int64_t>()<0);
+    assert(report["modeled_savings_nano"].as<int64_t>()<=0);
     f.c.maxChargeW=100; assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable") && f.p.count==0);
     f.c.maxChargeW=2000; f.c.policies.gridChargingAllowed=false;
     assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable"));
@@ -93,7 +96,7 @@ void policyTests()
     f=Fixture(); f.c.policies.targetEnabled=true; f.c.policies.targetSoc=70; f.c.policies.targetDeadline=Now+7200;
     f.tariff.count=4;
     assert(f.run() && f.p.partial && !strcmp(f.p.targetState,"target_horizon_incomplete"));
-    assert(f.p.steps[f.p.count-1].end==Now+3600 && f.p.finalWh>=f.p.initialWh);
+    assert(f.p.steps[f.p.count-1].end==Now+3600 && f.p.finalWh>=f.c.capacityWh*f.c.minSoc/100);
     f.tariff.count=192; f.c.horizonSeconds=900;
     assert(f.run() && f.p.partial && !strcmp(f.p.partialReason,"target_horizon_incomplete"));
     f.c.policies.targetDeadline=Now; assert(!f.run() && !strcmp(f.p.blocker,"target_deadline_passed"));
@@ -102,7 +105,8 @@ void policyTests()
     // Exact numeric economics: equal earlier prices can be UI-normal and still fund expensive future import.
     f=Fixture(); f.spread(200000,500000); assert(f.run() && f.moves());
     assert(f.p.steps[7].endWh>f.p.initialWh);
-    f.spread(200000,201000); f.c.chargePermille=f.c.dischargePermille=800; assert(f.run() && !f.moves());
+    f.spread(200000,201000); f.c.chargePermille=f.c.dischargePermille=800; assert(f.run());
+    for(size_t n=0;n<f.p.count;++n) assert(f.p.steps[n].batteryW<=0); // No uneconomic new closed cycle; priced starting inventory may serve load.
     f=Fixture(); f.spread(500000,50000); f.in.currentConstraints.dischargeAllowed=false;
     assert(f.run() && f.p.steps[0].endWh>=f.p.initialWh); // Protection dominates price.
     f.in.currentConstraints.maxChargePower={true,0}; f.in.currentConstraints.maxDischargePower={true,0};
@@ -130,7 +134,7 @@ void policyTests()
     f=Fixture(); f.c.minSoc=0; f.c.maxSoc=100; f.c.socStepPct=2; f.c.horizonSeconds=172800;
     f.in.storage.socPct=Model::Signal<double>::fresh(51.1); f.c.policies.targetEnabled=true;
     f.c.policies.targetSoc=73; f.c.policies.targetDeadline=Now+7201;
-    assert(f.run() && f.p.states==53 && f.p.count==193 && f.p.finalWh>=f.p.initialWh);
+    assert(f.run() && f.p.states==53 && f.p.count==193 && f.p.finalWh>=f.c.capacityWh*f.c.minSoc/100);
 
     // Additive persistent/API v1 compatibility: old fields keep their exact meanings.
     f=Fixture();
@@ -160,7 +164,7 @@ int main()
     auto first=f.p; assert(f.run()); assert(f.p.optimizedNano==first.optimizedNano);
     for(size_t i=0;i<f.p.count;++i) assert(f.p.steps[i].endWh==first.steps[i].endWh);
     f=Fixture(); f.spread(200000,201000); f.c.chargePermille=f.c.dischargePermille=800;
-    assert(f.run() && !f.moves()); // Losses exceed the price spread.
+    assert(f.run()); for(size_t n=0;n<f.p.count;++n) assert(f.p.steps[n].batteryW<=0); // No uneconomic closed cycle.
     f=Fixture(); f.spread(-100000,400000); assert(f.run() && f.moves() && f.p.optimizedNano<f.p.baselineNano); f.bounds();
     f=Fixture(); f.in.forecastStatus.planningUsable=f.in.forecastStatus.fresh=true;
     for(size_t i=0;i<8;++i) f.forecast.intervals[i].value=3000;
@@ -179,7 +183,8 @@ int main()
     f=Fixture(); f.c.maxChargeW=100; f.spread(); assert(f.run()); f.bounds();
     f=Fixture(); f.c.maxDischargeW=100; f.spread(); assert(f.run()); f.bounds();
     f=Fixture(); f.c.baseLoadW=0; assert(f.run() && !f.moves() && f.p.optimizedNano==0);
-    f.c.exportConfigured=true; f.c.exportMicros=400000; assert(f.run() && f.moves() && f.p.optimizedNano<0);
+    f.c.exportConfigured=true; f.c.exportMicros=400000; assert(f.run() && !f.moves());
+    f.c.flow.batteryExport=true; assert(f.run() && f.moves() && f.p.optimizedNano<0);
     f=Fixture(); f.spread(400000,50000); f.in.currentConstraints.dischargeAllowed=false;
     assert(f.run() && f.p.steps[0].endWh>=f.p.steps[0].startWh); f.bounds();
     f=Fixture(); f.spread(); f.in.currentConstraints.chargeAllowed=false;
@@ -195,7 +200,8 @@ int main()
     f=Fixture(); f.spread(INT32_MIN,INT32_MAX); assert(f.run()); f.bounds();
     f=Fixture(); f.spread(1,1000000); f.c.chargePermille=f.c.dischargePermille=100; assert(f.run()); f.bounds();
     f=Fixture(); f.spread(0,0); assert(f.run() && !f.moves());
-    f=Fixture(); f.c.chargePermille=f.c.dischargePermille=100; f.spread(); assert(f.run() && !f.moves());
+    f=Fixture(); f.c.chargePermille=f.c.dischargePermille=100; f.spread(); assert(f.run());
+    for(size_t n=0;n<f.p.count;++n) assert(f.p.steps[n].batteryW<=0); // No loss-heavy new grid cycle.
     for(unsigned hours : {23,25}) {
         f=Fixture(); f.c.horizonSeconds=hours*3600; f.in.now=Now+9*86400;
         for(size_t i=0;i<f.tariff.count;++i) { f.tariff.intervals[i].start+=9*86400; f.tariff.intervals[i].end+=9*86400; }

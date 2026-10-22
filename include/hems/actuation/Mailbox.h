@@ -16,12 +16,13 @@ enum class Action : uint8_t {
     Release,
 };
 
-enum class Origin : uint8_t { None, Manual, Protection, Economic };
+enum class Origin : uint8_t { None, Manual, Protection, Economic, Flow };
 inline char const* originName(Origin origin)
 {
     switch (origin) {
         case Origin::Manual: return "manual";
         case Origin::Protection: return "ev_protection";
+        case Origin::Flow: return "flow_protection";
         case Origin::Economic: return "economic";
         default: return "none";
     }
