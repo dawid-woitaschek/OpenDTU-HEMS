@@ -1,3 +1,4 @@
+#include <hems/flow/Coordinator.h>
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright (C) 2022-2026 Thomas Basler and others
@@ -101,6 +102,12 @@ void WebApiLimitClass::onLimitPost(AsyncWebServerRequest* request)
     float limit = root["limit_value"].as<float>();
     PowerLimitControlType type = root["limit_type"].as<PowerLimitControlType>();
 
+    if (Hems::Flow::Coordination.envelope().enabled) {
+        retMsg["message"] = "HEMS coordinates inverter output. Disable coordinated control before direct inverter commands.";
+        retMsg["code"] = WebApiError::GenericValueMissing;
+        WebApi.sendJsonResponse(request, response, __FUNCTION__, __LINE__);
+        return;
+    }
     auto inv = Hoymiles.getInverterBySerial(serial);
     if (inv == nullptr) {
         retMsg["message"] = "Invalid inverter specified!";

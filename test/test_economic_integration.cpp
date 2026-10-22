@@ -39,6 +39,7 @@ int main()
     Optimizer::Config c; c.enabled = c.socBoundsConfigured = true; c.effectivePrice = false;
     c.capacityWh = 2000; c.minSoc = 20; c.maxSoc = 90; c.chargePermille = c.dischargePermille = 950;
     c.maxChargeW = c.maxDischargeW = 2000; c.baseLoadW = 1000; c.horizonSeconds = 14400;
+    c.terminalPriceConfigured=true; c.terminalPriceMicros=50000;
     assert(!c.dispatchEnabled); assert(ShadowOptimizer.configure(c)); ticks(8);
     assert(ShadowOptimizer.dispatchPlan().valid && writes.empty()); // Legacy/default Shadow.
     c.dispatchEnabled = true; assert(ShadowOptimizer.configure(c)); ticks(8); assert(writes.empty()); // Monitor.
@@ -113,6 +114,7 @@ int main()
     assert(command.command.target == ControlTarget::Storage);
     // Economic disable may not release an actual EV Protection intervention.
     c.policies.targetEnabled = false; c.policies.dischargeAllowed = true;
+    c.terminalPriceMicros = 200000;
     for (unsigned i = 0; i < 16; ++i) { tariff["intervals"][i]["price_micros_per_kwh"] = 200000; }
     assert(Energy::EnergyData.ingest(Energy::Domain::Tariff, tariff.as<JsonVariantConst>()));
     assert(ShadowOptimizer.configure(c)); ticks(8);
@@ -169,5 +171,38 @@ int main()
     assert(HemsController.submitManual(manual, id)); runWorker(); ticks(2);
     c.dispatchEnabled = false; assert(ShadowOptimizer.configure(c)); assert(ShadowOptimizer.dispatchPlan().paused);
     ticks(8); assert(!ShadowOptimizer.dispatchPlan().config.dispatchEnabled);
+    // New coordination uses the actual controller/worker authorization path.
+    settings.Mode = Mode::Active; settings.Warp.Enabled = false; HemsController.updateSettings();
+    c.flow.enabled = true; c.flow.pvAcLimitW = 3000; c.flow.maxExportW = 0;
+    c.flow.evProtection = false; c.policies.targetEnabled = false;
+    c.dispatchEnabled = true; c.policies.dischargeAllowed = true; c.maxDischargeW = 2500;
+    c.maxChargeW = 1000;
+    assert(ShadowOptimizer.configure(c)); assert(ShadowOptimizer.resume());
+    Model::testGrid = Model::Signal<double>::fresh(200);
+    Model::testPv = Model::Signal<double>::fresh(0); registers[30006] = 0;
+    Flow::Coordination.observe({testNow,true,false}); ticks(2);
+    auto refreshFlow = [&] { Flow::Coordination.observe({testNow,true,false}); ticks(1); };
+    refreshFlow();
+    Actuation::Command tooMuch { ControlTarget::Storage, Actuation::Action::SetDischargePowerW, true, 1200 };
+    assert(!HemsController.submitManual(tooMuch,id)); // actual residual is 200 W
+    Actuation::Command unsafeRelease { ControlTarget::Storage, Actuation::Action::Release };
+    assert(!HemsController.submitManual(unsafeRelease,id));
+    auto allowed = tooMuch; allowed.value = 100;
+    // Wait for an idle mailbox without authorizing any simulated grid export.
+    for(unsigned n=0;n<8;++n) refreshFlow();
+    assert(HemsController.submitManual(allowed,id));
+    {
+        Model::testGrid = Model::Signal<double>::fresh(20); // load dropped after queueing
+        auto before = writes.size(); runWorker();
+        assert(writes.size()==before); // fresh worker authorization revokes the queued discharge
+    }
+    Model::testGrid.quality = Model::Quality::Stale;
+    refreshFlow(); report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+    assert(report["export_enforcement_available"]==false);
+    assert(Flow::Coordination.envelope().pvLimitW==0);
+    Model::testGrid = Model::Signal<double>::fresh(200);
+    Flow::Coordination.observe({testNow,false,false}); ticks(1);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+    assert(report["export_enforcement_available"]==false);
     std::cout << "Production economic dispatch opt-in, Monitor/permission isolation, verified semantic writes, idempotence, revisions, SoC, durable pause/resume, revocation and storage-only integration passed\n";
 }

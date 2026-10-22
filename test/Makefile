@@ -205,3 +205,11 @@ help:
 	@echo "  test   - Build and run all tests"
 	@echo "  clean  - Remove test executables"
 	@echo "  help   - Show this help"
+
+all: test_energy_management
+test_energy_management: $(wildcard ../include/hems/flow/*.h ../include/hems/load/*.h ../include/hems/optimizer/*.h) test_energy_management.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+test: energy-management-test
+.PHONY: energy-management-test
+energy-management-test: test_energy_management
+	./test_energy_management

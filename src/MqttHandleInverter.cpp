@@ -1,3 +1,4 @@
+#include <hems/flow/Coordinator.h>
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright (C) 2022-2026 Thomas Basler and others
@@ -185,6 +186,10 @@ void MqttHandleInverterClass::onMqttMessage(Topic t, const espMqttClientTypes::M
         return;
     }
 
+    if (Hems::Flow::Coordination.envelope().enabled) {
+        ESP_LOGW(TAG, "HEMS coordination owns inverter output; direct MQTT command rejected");
+        return;
+    }
     switch (t) {
     case Topic::LimitPersistentRelative:
         // Set inverter limit relative persistent

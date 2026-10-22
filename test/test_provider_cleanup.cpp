@@ -136,7 +136,10 @@ void SettingsStore::init() {}
 BindingConfig SettingsStore::get() const { return _config; }
 bool SettingsStore::set(BindingConfig const& value) { _config = value; return true; }
 }
-namespace Hems::Model { void normalizeSources(SystemState&) {} }
+namespace Hems::Model {
+Signal<double> testGrid, testPv;
+void normalizeSources(SystemState& state) { state.grid.powerW = testGrid; state.pv.powerW = testPv; }
+}
 
 static Profiles::Profile load(char const* path)
 {
