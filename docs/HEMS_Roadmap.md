@@ -1,10 +1,10 @@
 # OpenDTU-HEMS development roadmap
 
-Snapshot: 2026-10-22. Product branch: `hems`, currently containing the promoted modernization/provider work through PR #28 and the memory/TLS hardening promoted by PR #30. Current `hems` promotion head: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
+Snapshot: 2026-10-22. Product branch: `hems`, currently containing the promoted modernization/provider work through PR #28 and the memory/TLS hardening promoted by PR #30. Current `hems` promotion baseline before the documentation refresh: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
 
 Foundation/productization PR #23, policy PR #24, economic dispatch PR #25, modernization/provider PR #27 and memory/TLS hardening PR #29 are merged in the promoted HEMS line. PR #26 was superseded by #27. PR #28 promoted the modernization/provider state to `hems`; PR #30 promoted the memory/TLS hardening state to `hems`.
 
-Open PR #31 (`feature/cmt-radio-rework`) is intentionally **not part of `hems`**. It ports CMT2300A recovery/RX-hopping behavior from current upstream OpenDTU work and remains unmerged and physically unvalidated. Its source base is current `hems` at `617ef19a3af6e64b81a349a867c16facaae6aa04`.
+Open PR #31 (`feature/cmt-radio-rework`) is intentionally **not part of `hems`**. It ports CMT2300A recovery/RX-hopping behavior from current upstream OpenDTU work and remains unmerged and physically unvalidated. Its source base is the pre-documentation-refresh `hems` baseline `617ef19a3af6e64b81a349a867c16facaae6aa04`.
 
 ## Product model implemented in `hems`
 
