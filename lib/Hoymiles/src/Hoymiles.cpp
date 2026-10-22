@@ -4,6 +4,7 @@
  */
 #include "Hoymiles.h"
 #include "Utils.h"
+#include "commands/RfInfoCommand.h"
 #include "inverters/HERF_1CH.h"
 #include "inverters/HERF_2CH.h"
 #include "inverters/HERF_4CH.h"
@@ -71,6 +72,8 @@ void HoymilesClass::loop()
 
             if (!iv->isReachable()) {
                 iv->sendChangeChannelRequest();
+            } else {
+                iv->CmtLink.acceptedNoLink = 0;
             }
 
             if (Utils::getTimeAvailable()) {
@@ -108,6 +111,13 @@ void HoymilesClass::loop()
                         || invalidDevInfo) {
                         ESP_LOGI(TAG, "Request device info");
                         iv->sendDevInfoRequest();
+                    }
+
+                    // Identify CMT modules once; keep NRF polling unchanged.
+                    if (iv->getRadio() == _radioCmt.get() && iv->getEnablePolling() && !iv->RfInfo()->containsValidData()) {
+                        ESP_LOGD(TAG, "Request RF info");
+                        auto cmd = iv->getRadio()->prepareCommand<RfInfoCommand>(iv.get());
+                        iv->getRadio()->enqueCommand(cmd);
                     }
                 }
             }
