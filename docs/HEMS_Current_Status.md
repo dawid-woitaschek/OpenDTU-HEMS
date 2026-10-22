@@ -1,6 +1,6 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-22. Product branch: `hems`. The promoted HEMS line currently includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30. Current promoted `hems` baseline before this documentation refresh: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
+Snapshot: 2026-10-22. Product branch: `hems`. The promoted HEMS line currently includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30. Promoted product baseline before this documentation refresh: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
 
 PR #26 was superseded by #27. Open PR #31 (`feature/cmt-radio-rework`) targets `hems` but is **not merged and not physically validated**. It must not be treated as current product behavior.
 
