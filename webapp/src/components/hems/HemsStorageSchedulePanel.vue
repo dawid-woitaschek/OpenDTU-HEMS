@@ -248,6 +248,7 @@
                     </div>
                 </section>
 
+                <EnergyManagementSummary :plan="plan" />
                 <div class="row g-3">
                     <div class="col-sm-6">
                         <div class="small text-body-secondary">{{ t('hemsUi.modeledSavings') }}</div>
@@ -283,6 +284,7 @@
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
+import EnergyManagementSummary from '@/components/hems/EnergyManagementSummary.vue';
 import CardElement from '@/components/CardElement.vue';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { formatPrice } from '@/utils/hemsPresentation';
