@@ -28,6 +28,9 @@ private:
     };
     mutable std::mutex _mutex;
     Config _config;
+    Load::Profile _load;
+    uint32_t _lastObservationMs = 0, _lastHistorySaveMs = 0;
+    bool _historyDue = false;
     uint32_t _generation = 0, _lastRunMs = 0, _energyRevision = 0;
     bool _pending = false, _attempted = false;
     bool _manualPaused = false;

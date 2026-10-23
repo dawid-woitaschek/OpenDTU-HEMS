@@ -2,6 +2,7 @@
 #include <hems/economic/Dispatch.h>
 #include <cassert>
 #include <iostream>
+#include <cstring>
 using namespace Hems;
 using namespace Hems::Actuation;
 struct Fixture {
@@ -31,6 +32,10 @@ struct Fixture {
     }
 };
 int main() {
+    { Fixture f; f.in.plan.config.flow.enabled=true; assert(!f.tick().submit);
+      assert(!strcmp(f.dispatch.snapshot().state,"waiting_wear_cost"));
+      f.in.plan.config.wearSource=1; assert(f.tick().submit);
+      f.in.plan.config.wearSource=2; f.in.plan.config.degradationMicros=0; assert(f.tick().submit); }
     { Fixture f; f.in.plan.config.dispatchEnabled = false; assert(!f.tick().submit); }
     for (auto mode : { Mode::Disabled, Mode::Monitor }) { Fixture f; f.in.mode = mode; assert(!f.tick().submit); }
     { Fixture f; f.in.permission = false; assert(!f.tick().submit); }

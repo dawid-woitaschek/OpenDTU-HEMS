@@ -96,6 +96,7 @@ Decision Dispatch::update(Context const& in)
     char const* blocked = nullptr;
     if (!in.plan.config.dispatchEnabled) { blocked = "disabled"; }
     else if (in.plan.paused) { blocked = "paused_manual"; }
+    else if (!Flow::economicWearAcknowledged(in.plan.config.flow, in.plan.config.wearSource)) { blocked = "waiting_wear_cost"; }
     else if (in.mode != Mode::Active) { blocked = "waiting_active"; }
     else if (!in.permission) { blocked = "waiting_permission"; }
     else if (!fresh(in.storage)) { blocked = "waiting_telemetry"; }
@@ -109,6 +110,7 @@ Decision Dispatch::update(Context const& in)
         Actuation::Command retained;
         bool grace = _state.confirmed && in.owner == Origin::Economic && !in.protectionOwned && in.plan.inputsUsable
             && in.mode == Mode::Active && in.permission && !in.plan.paused && in.plan.config.dispatchEnabled
+            && Flow::economicWearAcknowledged(in.plan.config.flow, in.plan.config.wearSource)
             && fresh(in.storage) && !std::strcmp(in.plan.reason, "energy_revision")
             && in.now >= in.plan.start && in.now < in.plan.end
             && mapCommand(in, retained) && same(_state.last, retained);

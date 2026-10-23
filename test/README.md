@@ -177,3 +177,14 @@ the production bounded filter at 192/256 records and checks Retry-After holds.
 Forecast.Solar sparse/dense capture fixtures are sanitized; the dense query is
 retained deliberately and sparse overnight gaps are rejected atomically. Fixture
 provenance is in `test/fixtures/providers/README.md`. No test contacts a provider.
+
+### Coordinated energy management
+
+`test_energy_management` exercises production flow decisions, DP economics,
+terminal valuation/replanning, load learning, DST and deterministic forecast-error
+and WARP-style reference comparisons. `test_optimizer_service` additionally
+checks six-hour verified history checkpoints, failed rename, reboot and corrupted
+history; `test_economic_integration` checks coordinated manual/worker revocation,
+stale meter and unavailable DPL. All remain hardware-free. See
+[behavior, configuration, measured resources and remaining hardware facts](../docs/HEMS_Energy_Management.md).
+`yarn --cwd webapp test` includes explicit preset/opt-in and en/de/fr coverage.

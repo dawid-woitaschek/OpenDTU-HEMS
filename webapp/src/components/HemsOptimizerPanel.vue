@@ -88,6 +88,7 @@
                         <div class="fs-4">{{ soc(plan.initial_soc_pct) }} → {{ soc(plan.final_soc_pct) }}</div>
                     </div>
                 </div>
+                <EnergyManagementSummary :plan="plan" />
                 <p class="small text-body-secondary">
                     {{ date(plan.horizon_start) }} – {{ date(plan.horizon_end) }} · {{ label(plan.price_basis || '') }}
                 </p>
@@ -154,6 +155,18 @@
                     />{{ t('hemsUi.confirmSoc') }}</label
                 >
 
+                <EnergyManagementSettings v-model="draft.energy_management" @reference="applyReference" />
+                <label for="optimizer-expected_base_load_w" class="form-label">{{ t('hemsUi.baseLoad') }} (W)</label>
+                <input
+                    id="optimizer-expected_base_load_w"
+                    v-model.number="draft.expected_base_load_w"
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="1"
+                    class="form-control mb-3"
+                    required
+                />
                 <fieldset class="border rounded p-3 mb-3" v-if="draft.policies">
                     <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.storagePolicies') }}</legend>
                     <p class="form-text mt-0">{{ t('hemsUi.policyHint') }}</p>
@@ -414,6 +427,9 @@
     </CardElement>
 </template>
 <script setup lang="ts">
+import EnergyManagementSummary from '@/components/hems/EnergyManagementSummary.vue';
+import EnergyManagementSettings from '@/components/hems/EnergyManagementSettings.vue';
+import { defaultEnergyManagement, type EnergyManagement } from '@/utils/hemsEnergyManagement';
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CardElement from '@/components/CardElement.vue';
@@ -451,6 +467,7 @@ type Config = {
     expected_base_load_w: number;
     soc_step_pct: number;
     policies: StoragePolicies;
+    energy_management: EnergyManagement;
 };
 type Step = {
     start: number;
@@ -466,7 +483,25 @@ type Step = {
     grid_export_wh: number;
 };
 type Plan = {
-    dispatch?: EconomicDispatch;
+    dispatch?: EconomicDispatch & {
+        coordination_state?: string;
+        export_enforcement_available?: boolean;
+        coordinated_battery_w?: number;
+        planned_battery_w?: number;
+        last_power_w?: number;
+    };
+    load_forecast_source?: string;
+    load_learned_slots?: number;
+    load_total_slots?: number;
+    cost_breakdown?: {
+        import_nano: number;
+        export_nano: number;
+        degradation_nano: number;
+        buffer_nano: number;
+        terminal_inventory_change_nano: number;
+        curtailed_wh: number;
+        wear_source: number;
+    };
     config: Config;
     state: string;
     blockers: string[];
@@ -500,7 +535,6 @@ const advancedFields = [
     { key: 'discharge_permille', label: 'dischargeEfficiency', unit: '%', min: 0, max: 100, scale: 10, step: 0.1 },
     { key: 'max_charge_w', label: 'maxCharge', unit: 'W', min: 0, max: 100000, scale: 1, step: 1 },
     { key: 'max_discharge_w', label: 'maxDischarge', unit: 'W', min: 0, max: 100000, scale: 1, step: 1 },
-    { key: 'expected_base_load_w', label: 'baseLoad', unit: 'W', min: 0, max: 100000, scale: 1, step: 1 },
     { key: 'horizon_seconds', label: 'planHorizon', unit: 's', min: 900, max: 172800, scale: 1, step: 1 },
     { key: 'soc_step_pct', label: 'socStep', unit: '%', min: 2, max: 10, scale: 1, step: 1 },
 ] as const;
@@ -553,6 +587,7 @@ async function load(reset = false) {
         if (!draft.value || reset) {
             draft.value = structuredClone(result.config);
             draft.value.dispatch_enabled ??= false;
+            draft.value.energy_management ||= defaultEnergyManagement();
             draft.value.policies ||= {
                 grid_charging_allowed: true,
                 discharge_allowed: true,
@@ -588,6 +623,13 @@ function setDeadline(event: Event) {
     const epoch = utcDeadline(input.value);
     input.setCustomValidity(epoch ? '' : t('hemsUi.invalidDeadline'));
     if (draft.value) draft.value.policies.target_deadline = epoch;
+}
+function applyReference() {
+    if (!draft.value) return;
+    draft.value.policies.grid_charging_allowed = true;
+    draft.value.policies.discharge_allowed = true;
+    draft.value.policies.target_enabled = false;
+    draft.value.soc_step_pct = 2;
 }
 const save = () => perform('/config', draft.value, true);
 const recalculate = () => perform('/recalculate', {});

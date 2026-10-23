@@ -7,6 +7,8 @@
 #include <battery/Stats.h>
 #include <powermeter/Controller.h>
 #include "PowerLimiter.h"
+#include <hems/flow/Coordinator.h>
+#include <hems/flow/DplBounds.h>
 #include "Configuration.h"
 #include "MqttSettings.h"
 #include "NetworkSettings.h"
@@ -194,10 +196,43 @@ void PowerLimiterClass::loop()
         latestInverterStats = std::max(*oStatsMillis, latestInverterStats);
     }
 
+    bool coordinationAvailable = config.PowerLimiter.Enabled && _mode != Mode::Disabled && !_inverters.empty();
+    bool pvHeadroom = false, solarDormant = true;
+    size_t configuredCount = 0;
+    for (size_t i = 0; i < INV_MAX_COUNT; ++i) {
+        auto const& inv = config.PowerLimiter.Inverters[i];
+        if (!inv.Serial) { break; }
+        ++configuredCount;
+        // AC-only accounting and one grid-connection meter are required. Mixed
+        // DC/storage inverters, ungoverned sources, lower floors and overscaling
+        // cannot be promised a hard aggregate AC envelope here.
+        coordinationAvailable = coordinationAvailable && inv.IsGoverned && inv.IsBehindPowerMeter
+            && inv.PowerSource == PowerLimiterInverterConfig::InverterPowerSource::Solar
+            && inv.LowerPowerLimit == 0 && !inv.UseOverscaling;
+    }
+    bool topologySupported = coordinationAvailable;
+    uint32_t physicalAcW = 0, currentAcW = 0;
+    for (auto const& inv : _inverters) {
+        physicalAcW += inv->getConfiguredMaxPowerWatts();
+        currentAcW += inv->getCurrentOutputAcWatts();
+        // Nighttime is a DPL scheduling exclusion, not evidence of measured
+        // zero production. It permits residual-meter-only battery regulation.
+        solarDormant = solarDormant && inv->getEligibility() == PowerLimiterInverter::Eligibility::Nighttime
+            && inv->isSendingCommandsEnabled() && inv->getInverterMaxPowerWatts() > 0;
+        coordinationAvailable = coordinationAvailable && inv->isEligible();
+        pvHeadroom = pvHeadroom || inv->getMaxIncreaseWatts() > 0;
+    }
+    topologySupported = topologySupported && physicalAcW <= UINT16_MAX && configuredCount == _inverters.size();
+    solarDormant = solarDormant && topologySupported;
+    physicalAcW = Hems::Flow::effectivePvCeiling(physicalAcW, config.PowerLimiter.TotalUpperPowerLimit);
+    coordinationAvailable = coordinationAvailable && topologySupported;
+    auto envelope = Hems::Flow::Coordination.envelope();
+    pvHeadroom = physicalAcW > currentAcW && (pvHeadroom || (envelope.enabled && envelope.pvLimitW == 0 && SunPosition.isDayPeriod()));
+    Hems::Flow::Coordination.observe({ static_cast<uint32_t>(millis()), coordinationAvailable, pvHeadroom, physicalAcW, topologySupported, solarDormant });
     // note that we can only perform unconditional full solar-passthrough or any
     // calculation at all after surviving the loop above, which ensures that we
     // have inverter stats more recent than their respective last update command
-    if (Mode::UnconditionalFullSolarPassthrough == _mode) {
+    if (Mode::UnconditionalFullSolarPassthrough == _mode && !Hems::Flow::Coordination.envelope().enabled) {
         return unconditionalFullSolarPassthrough();
     }
 
@@ -388,6 +423,10 @@ void PowerLimiterClass::loop()
     auto totalAllowance = config.PowerLimiter.TotalUpperPowerLimit;
     inverterTotalPower = std::min(inverterTotalPower, totalAllowance);
 
+    auto coordinated = Hems::Flow::Coordination.envelope();
+    if (coordinated.enabled) {
+        inverterTotalPower = Hems::Flow::Coordination.cap(physicalAcW, millis());
+    }
     auto coveredBySolar = updateInverterLimits(inverterTotalPower, sSolarPoweredFilter, sSolarPoweredExpression);
     auto remainingAfterSolar = (inverterTotalPower >= coveredBySolar) ? inverterTotalPower - coveredBySolar : 0;
     auto coveredBySmartBuffer = updateInverterLimits(remainingAfterSolar, sSmartBufferPoweredFilter, sSmartBufferPoweredExpression);
@@ -628,6 +667,10 @@ uint16_t PowerLimiterClass::calcTargetOutput() const
 uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
         PowerLimiterClass::inverter_filter_t filter, std::string const& filterExpression)
 {
+    bool coordinated = Hems::Flow::Coordination.envelope().enabled;
+    if (coordinated && filterExpression == sSolarPoweredExpression) {
+        powerRequested = Hems::Flow::Coordination.cap(powerRequested, millis());
+    }
     std::vector<PowerLimiterInverter*> matchingInverters;
     uint16_t producing = 0; // sum of AC power the matching inverters produce now
 
@@ -654,7 +697,7 @@ uint16_t PowerLimiterClass::updateInverterLimits(uint16_t powerRequested,
     int32_t diff = powerRequested - producing;
 
     auto const& config = Configuration.get();
-    uint16_t hysteresis = config.PowerLimiter.TargetPowerConsumptionHysteresis;
+    uint16_t hysteresis = coordinated ? 0 : config.PowerLimiter.TargetPowerConsumptionHysteresis;
 
     bool plural = matchingInverters.size() != 1;
     DTU_LOGD("requesting %d W from %d %s inverter%s currently "

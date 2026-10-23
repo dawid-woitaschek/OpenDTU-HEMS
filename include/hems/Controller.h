@@ -10,6 +10,7 @@
 #include <hems/actuation/Readiness.h>
 #include <hems/constraints/Constraints.h>
 #include <hems/economic/Dispatch.h>
+#include <hems/flow/Coordinator.h>
 #include <hems/model/State.h>
 #include <hems/policies/EvProtection.h>
 #include <hems/storage/Provider.h>
@@ -43,6 +44,7 @@ public:
     Storage::Snapshot getStorageSnapshot() const;
     Model::SystemState getNormalizedState() const;
     Model::StorageState getStoragePlanningState() const;
+    Model::StoragePowerLimits getStoragePowerLimits() const;
     Constraints::ConstraintSet getConstraints() const;
     Policies::EvProtectionSnapshot getEvProtectionShadowSnapshot() const;
     uint64_t economicContextRevision() const;
@@ -55,10 +57,15 @@ private:
     bool constraintsPermit(Actuation::Command const& command) const;
     void applyEvProtection();
     void applyEconomic();
+    Flow::Decision flowDecision(Optimizer::PlanView const& plan) const;
     bool economicAuthorized(Actuation::Command const& command) const;
+    bool flowAuthorized(Actuation::Command const& command) const;
     mutable std::mutex _economicMutex;
     Economic::Dispatch _economic;
-    uint32_t _economicLastTickMs = 0;
+    Flow::Decision _flow;
+    uint32_t _economicLastTickMs = 0, _lastFlowAttemptMs = 0;
+    uint32_t _flowStopSlot = 0, _flowStopPoll = 0;
+    uint8_t _flowStopAttempts = 0;
     std::atomic<bool> _evProtectionOwned { false };
     uint32_t _evProtectionGeneration = 0;
     std::atomic<uint32_t> _policyCommandId { 0 };

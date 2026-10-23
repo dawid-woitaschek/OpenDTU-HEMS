@@ -6,6 +6,14 @@ export interface EconomicDispatch {
     storage_permission: boolean;
     cleanup_pending: boolean;
     cleanup_state: string;
+    planned_battery_w?: number;
+    commanded_action?: string;
+    commanded_power_w?: number;
+    last_action?: string;
+    last_power_w?: number;
+    coordinated_battery_w?: number;
+    coordination_state?: string;
+    export_enforcement_available?: boolean;
 }
 
 export interface HemsOperation {

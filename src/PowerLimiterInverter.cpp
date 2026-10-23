@@ -1,5 +1,6 @@
 #include "RestartHelper.h"
 #include "PowerLimiterInverter.h"
+#include <hems/flow/DplBounds.h>
 #include "PowerLimiterBatteryInverter.h"
 #include "PowerLimiterSolarInverter.h"
 #include "PowerLimiterSmartBufferInverter.h"
@@ -66,7 +67,10 @@ PowerLimiterInverter::Eligibility PowerLimiterInverter::getEligibility() const
     // respective message to request this info is only sent after a significant
     // backoff (~5 minutes, see upstream FAQ). this is to avoid error messages
     // to appear in the inverter's event log.
-    if (getCurrentLimitWatts() == 0) { return Eligibility::CurrentLimitUnknown; }
+    auto limit = _spInverter->SystemConfigPara();
+    if (!Hems::Flow::powerLimitKnown(getCurrentLimitWatts(),
+            limit->getLastUpdateCommand(), limit->getLastLimitCommandSuccess() == CMD_OK,
+            limit->getLastUpdateRequest(), limit->getLastLimitRequestSuccess() == CMD_OK)) { return Eligibility::CurrentLimitUnknown; }
 
     // inverters not connected to the grid are not eligible, as they cannot
     // produce power.

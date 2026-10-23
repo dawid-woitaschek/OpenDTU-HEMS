@@ -241,12 +241,25 @@ Actuation::Origin Provider::owner() const
     std::lock_guard<std::mutex> lock(_mutex);
     return _controlSource;
 }
-bool Provider::releaseEconomic()
+bool Provider::releaseEconomic() { return releaseOwned(Actuation::Origin::Economic); }
+bool Provider::releaseFlow() { return releaseOwned(Actuation::Origin::Flow); }
+bool Provider::handoffProtectionToFlow()
 {
     auto command = _mailbox.snapshot();
     if (command.state == Actuation::MailboxState::Pending || command.state == Actuation::MailboxState::Running) { return false; }
     std::lock_guard<std::mutex> lock(_mutex);
-    if (_busy || _cleanup.valid || !_controlOwned || _controlSource != Actuation::Origin::Economic) { return false; }
+    if (_busy || _cleanup.valid || _ownershipUncertain || !_controlOwned || _controlSource != Actuation::Origin::Protection) { return false; }
+    // Keep the existing controlled Stop electrically unchanged. No autonomous
+    // Release, acquisition or second writer is involved in this handoff.
+    _controlSource = Actuation::Origin::Flow;
+    return true;
+}
+bool Provider::releaseOwned(Actuation::Origin expected)
+{
+    auto command = _mailbox.snapshot();
+    if (command.state == Actuation::MailboxState::Pending || command.state == Actuation::MailboxState::Running) { return false; }
+    std::lock_guard<std::mutex> lock(_mutex);
+    if (_busy || _cleanup.valid || !_controlOwned || _controlSource != expected) { return false; }
     ++_generation; _polled = false;
     retainCleanupLocked(_config, _profile, _port, _unit);
     _controlOwned = false; _controlSource = Actuation::Origin::None;
