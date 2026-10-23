@@ -19,6 +19,14 @@ Inputs liveInputs()
     in.now = time(nullptr);
     auto dpl = Flow::Coordination.dpl();
     in.observedPvAcLimitW = dpl.physicalAcW;
+    in.observedPvAcLimitKnown = dpl.atMs && millis() - dpl.atMs <= 3000;
+    auto state = HemsController.getNormalizedState();
+    // Under zero permitted PV export and no grid charging, a fully curtailed
+    // inverter has no safe starting surplus. Don't plan inaccessible PV charges.
+    in.pvSurplusObserved = state.grid.powerW.usable() && state.storage.acPowerW.usable()
+        && state.pv.powerW.usable() && std::isfinite(state.grid.powerW.value)
+        && std::isfinite(state.storage.acPowerW.value) && std::isfinite(state.pv.powerW.value)
+        && state.storage.acPowerW.value - state.grid.powerW.value > 0;
     in.flowTopologySupported = dpl.atMs && millis() - dpl.atMs <= 3000 && dpl.topologySupported;
     in.controlRevision = HemsController.economicContextRevision();
     in.tariffStatus = Energy::EnergyData.status(Energy::Domain::Tariff);
@@ -33,10 +41,13 @@ Inputs liveInputs()
     in.currentConstraints.maxDischargePower = constraints.maxDischargePower;
     return in;
 }
-bool sameStorage(Inputs const& a, Inputs const& b, bool flow)
+bool sameStorage(Inputs const& a, Inputs const& b, Config const& c)
 {
+    bool flow = c.flow.enabled;
+    bool surplusMatters = flow && !c.policies.gridChargingAllowed && (!c.flow.pvExport || !c.flow.maxExportW);
     return a.storageLimits.known == b.storageLimits.known && a.storageLimits.chargeW == b.storageLimits.chargeW
-        && a.storageLimits.dischargeW == b.storageLimits.dischargeW && (!flow || (a.flowTopologySupported == b.flowTopologySupported && a.observedPvAcLimitW == b.observedPvAcLimitW))
+        && a.storageLimits.dischargeW == b.storageLimits.dischargeW && (!flow || (a.flowTopologySupported == b.flowTopologySupported && a.observedPvAcLimitW == b.observedPvAcLimitW
+            && a.observedPvAcLimitKnown == b.observedPvAcLimitKnown && (!surplusMatters || a.pvSurplusObserved == b.pvSurplusObserved)))
         && a.loadRevision == b.loadRevision && a.controlRevision == b.controlRevision
         && a.storage.socPct.quality == b.storage.socPct.quality
         && std::isfinite(a.storage.socPct.value) == std::isfinite(b.storage.socPct.value)
@@ -144,7 +155,7 @@ char const* Service::changedLocked(Inputs const& inputs, uint32_t revision) cons
     if (!_result) { return _replanReason; }
     if (revision != _result->energyRevision) { return "energy_revision"; }
     if (inputs.controlRevision != _result->inputs.controlRevision) { return "control_changed"; }
-    if (!sameStorage(inputs, _result->inputs, _config.flow.enabled)) { return "storage_or_constraints_changed"; }
+    if (!sameStorage(inputs, _result->inputs, _config)) { return "storage_or_constraints_changed"; }
     if (!sameStatus(inputs.tariffStatus, _result->inputs.tariffStatus)
             || (_result->plan.pvIncluded && !sameStatus(inputs.forecastStatus, _result->inputs.forecastStatus))) { return "input_freshness_changed"; }
     if (inputs.now < _result->plan.generatedAt || (_result->plan.count && inputs.now >= _result->plan.steps[0].end)
@@ -163,7 +174,7 @@ bool Service::due()
     }
     inputs.loadRevision = _config.automaticLoad ? _load.revision : 0;
     _historyDue = _load.dirty && millis() - _lastHistorySaveMs >= 21600000;
-    if (!_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
+    if (_config.flow.enabled && !_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
     if (_config.enabled) {
         if (auto reason = changedLocked(inputs, revision)) { _pending = true; _replanReason = reason; }
     }
@@ -223,7 +234,7 @@ void Service::run()
     result->config = c; result->inputs = liveInputs();
     result->inputs.loadRevision = c.automaticLoad ? load->revision : 0;
     result->inputs.loadProfile = c.automaticLoad ? load.get() : nullptr;
-    if (!c.flow.evProtection) { result->inputs.currentConstraints.dischargeAllowed = true; }
+    if (c.flow.enabled && !c.flow.evProtection) { result->inputs.currentConstraints.dischargeAllowed = true; }
     result->energyRevision = Energy::EnergyData.revision();
     {
         auto tariff = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
@@ -242,8 +253,8 @@ void Service::run()
     auto latestRevision = Energy::EnergyData.revision(); auto latestInputs = liveInputs();
     std::lock_guard<std::mutex> lock(_mutex);
     latestInputs.loadRevision = c.automaticLoad ? _load.revision : 0;
-    if (!c.flow.evProtection) { latestInputs.currentConstraints.dischargeAllowed = true; }
-    if (generation != _generation || latestRevision != result->energyRevision || !sameStorage(result->inputs, latestInputs, c.flow.enabled)
+    if (c.flow.enabled && !c.flow.evProtection) { latestInputs.currentConstraints.dischargeAllowed = true; }
+    if (generation != _generation || latestRevision != result->energyRevision || !sameStorage(result->inputs, latestInputs, c)
             || latestInputs.now / 900 != result->inputs.now / 900) { _pending = _config.enabled; return; }
     if (_result && c.hysteresisMicros && result->plan.count) {
         evaluateRetained(c, result->inputs, result->plan, _result->plan, result->plan, static_cast<int64_t>(c.hysteresisMicros) * 1000);
@@ -264,7 +275,7 @@ PlanView Service::dispatchPlan() const
     auto inputs = liveInputs(); auto revision = Energy::EnergyData.revision();
     std::lock_guard<std::mutex> lock(_mutex);
     inputs.loadRevision = _config.automaticLoad ? _load.revision : 0;
-    if (!_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
+    if (_config.flow.enabled && !_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
     PlanView view; view.config = _config; view.paused = _manualPaused;
     view.revision = _planRevision; view.energyRevision = revision;
     view.inputsUsable = inputs.tariffStatus.fresh && inputs.tariffStatus.planningUsable && inputs.tariffStatus.currentCovered
@@ -289,7 +300,7 @@ void Service::serialize(JsonObject output, bool all, size_t offset) const
     auto inputs = liveInputs(); auto revision = Energy::EnergyData.revision();
     std::lock_guard<std::mutex> lock(_mutex);
     inputs.loadRevision = _config.automaticLoad ? _load.revision : 0;
-    if (!_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
+    if (_config.flow.enabled && !_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
     unsigned days = 0;
     for (auto const& day : _load.history.days) { days += day.civil != 0; }
     output["load_history_days"] = days; output["load_history_bytes"] = sizeof(Load::History);

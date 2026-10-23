@@ -37,7 +37,7 @@ struct Inputs {
     uint64_t controlRevision = 0;
     Load::Profile const* loadProfile = nullptr;
     uint32_t loadRevision = 0, observedPvAcLimitW = 0;
-    bool flowTopologySupported = true;
+    bool flowTopologySupported = true, observedPvAcLimitKnown = false, pvSurplusObserved = true;
     // Optional reliable future restriction intervals; absence means unknown.
     Energy::Series const* evRestrictions = nullptr;
 };
@@ -62,7 +62,7 @@ struct Plan {
     uint64_t internalAbsWh = 0;
     uint16_t learnedSlots = 0;
     uint32_t terminalPrice = 0, terminalDemandWh = 0;
-    bool retainedByHysteresis = false;
+    bool retainedByHysteresis = false, baselineValid = false, negativeTerminalPrice = false;
     char const* state = "not_ready";
     char const* blocker = nullptr;
     char const* partialReason = nullptr;

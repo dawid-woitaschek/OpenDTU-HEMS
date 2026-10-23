@@ -173,6 +173,7 @@ int main()
     ticks(8); assert(!ShadowOptimizer.dispatchPlan().config.dispatchEnabled);
     // New coordination uses the actual controller/worker authorization path.
     settings.Mode = Mode::Active; settings.Warp.Enabled = false; HemsController.updateSettings();
+    c.wearSource=2; // Explicit zero acknowledgement in this wire fixture.
     c.flow.enabled = true; c.flow.pvAcLimitW = 3000; c.flow.maxExportW = 0;
     c.flow.evProtection = false; c.policies.targetEnabled = false;
     c.dispatchEnabled = true; c.policies.dischargeAllowed = true; c.maxDischargeW = 2500;
@@ -204,5 +205,84 @@ int main()
     Flow::Coordination.observe({testNow,false,false}); ticks(1);
     report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
     assert(report["export_enforcement_available"]==false);
+    // Fresh known night residual permits a real semantic discharge with stale PV.
+    assert(ShadowOptimizer.resume()); economicUtc+=900;
+    tariff["generated_at"]=economicUtc;
+    for (auto row:tariff["intervals"].as<JsonArray>()) row["price_micros_per_kwh"]=row["start"]==economicUtc ? 900000 : 100000;
+    assert(Energy::EnergyData.ingest(Energy::Domain::Tariff,tariff.as<JsonVariantConst>()));
+    registers[30006]=0; Model::testPv.quality=Model::Quality::Stale;
+    auto nightTick=[&] { Flow::Coordination.observe({testNow,false,false,3000,true,true}); ticks(1); };
+    for(unsigned n=0;n<12;++n) nightTick();
+    command=HemsController.getActuationCommandSnapshot(ControlTarget::Storage);
+    assert(command.command.action==Actuation::Action::SetDischargePowerW && command.state==Actuation::MailboxState::Succeeded);
+    // EV stop -> fresh-false debounce -> metadata handoff, with no autonomous
+    // Release or repeated Protection Stop. Economic discharge resumes normally.
+    c.flow.evProtection=true; assert(ShadowOptimizer.configure(c));
+    settings.Warp.Enabled=true; inputRegisters[1003]=3; registers[30006]=500;
+    HemsController.updateSettings(); for(unsigned n=0;n<12;++n) nightTick();
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"]=="ev_protection");
+    for (unsigned n=0;n<4;++n) {
+        nightTick(); report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+        assert(report["owner"]=="ev_protection"); // Flow never steals a still-protecting session
+    }
+    auto releasesBefore=releaseCount();
+    c.flow.enabled=false; assert(ShadowOptimizer.configure(c)); registers[30006]=0; ticks(4);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+    assert(report["owner"]=="ev_protection" && releaseCount()==releasesBefore);
+    c.flow.enabled=true; assert(ShadowOptimizer.configure(c)); inputRegisters[1003]=1;
+    for(unsigned n=0;n<145;++n) nightTick();
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+    assert(report["owner"]=="economic" && report["state"]!="blocked_protection" && releaseCount()==releasesBefore);
+    command=HemsController.getActuationCommandSnapshot(ControlTarget::Storage);
+    assert(command.command.action==Actuation::Action::SetDischargePowerW);
+    // Flow Stop on lost DPL; retain it during unavailable/invalid authority,
+    // then recover through the same worker without autonomous Release.
+    settings.Warp.Enabled=false; HemsController.updateSettings();
+    c.dispatchEnabled=false; assert(ShadowOptimizer.configure(c));
+    registers[30006]=1200; Model::testPv=Model::Signal<double>::fresh(0);
+    Model::testGrid=Model::Signal<double>::fresh(-1000);
+    for(unsigned n=0;n<12;++n) { Flow::Coordination.observe({testNow,false,false,3000,true}); ticks(1); }
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"]=="flow_protection");
+    registers[30006]=0; Model::testGrid=Model::Signal<double>::fresh(200);
+    for(unsigned n=0;n<12;++n) { Flow::Coordination.observe({testNow,false,false,3000,true}); ticks(1); }
+    assert(releaseCount()==releasesBefore); // a safe controlled hold, not unsafe Release
+    c.dispatchEnabled=true; assert(ShadowOptimizer.configure(c));
+    for(unsigned n=0;n<12;++n) nightTick();
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"]=="economic");
+    c.dispatchEnabled=false; assert(ShadowOptimizer.configure(c)); registers[30006]=1200;
+    Model::testGrid=Model::Signal<double>::fresh(-1000);
+    for(unsigned n=0;n<12;++n) { Flow::Coordination.observe({testNow,false,false,3000,true}); ticks(1); }
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"]=="flow_protection");
+    registers[30006]=0; Model::testGrid=Model::Signal<double>::fresh(200);
+    // Withdrawal drains only Flow once, including failed release; no retry storm.
+    readFails=true; ticks(12); // storage unavailable must not orphan ownership on withdrawal
+    c.flow.enabled=false; assert(ShadowOptimizer.configure(c)); writeFails=true; ticks(12); writeFails=false; readFails=false;
+    auto afterFlowRelease=releaseCount(); assert(afterFlowRelease==releasesBefore+1);
+    ticks(40); assert(releaseCount()==afterFlowRelease);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"]=="none");
+    // Unknown wear leaves shadow planning valid but cannot authorize economics;
+    // withdrawing acknowledgement from running discharge establishes a safe Stop.
+    c.flow.enabled=true; c.dispatchEnabled=true; c.wearSource=0;
+    assert(ShadowOptimizer.configure(c)); assert(ShadowOptimizer.resume());
+    registers[30006]=0; for(unsigned n=0;n<12;++n) nightTick();
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+    assert(report["plan_valid"]==true && report["state"]=="waiting_wear_cost" && report["owner"]=="none");
+    Actuation::Command queuedFlow {ControlTarget::Storage,Actuation::Action::Stop}; queuedFlow.origin=Actuation::Origin::Flow;
+    assert(HemsController.submitActuation(queuedFlow,id));
+    c.flow.enabled=false; assert(ShadowOptimizer.configure(c)); count=writes.size(); runWorker();
+    assert(writes.size()==count); // worker revokes Flow before its first write on withdrawal
+    c.flow.enabled=true; c.wearSource=2; assert(ShadowOptimizer.configure(c)); for(unsigned n=0;n<12;++n) nightTick();
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>()); assert(report["owner"]=="economic");
+    c.wearSource=0; assert(ShadowOptimizer.configure(c)); registers[30006]=200; Model::testGrid=Model::Signal<double>::fresh(0);
+    for(unsigned n=0;n<12;++n) nightTick();
+    command=HemsController.getActuationCommandSnapshot(ControlTarget::Storage);
+    assert(command.command.origin==Actuation::Origin::Flow && command.command.action==Actuation::Action::Stop);
+    registers[30006]=0; Model::testGrid=Model::Signal<double>::fresh(200); for(unsigned n=0;n<4;++n) nightTick();
+    Actuation::Command manualStop {ControlTarget::Storage,Actuation::Action::Stop};
+    assert(HemsController.submitManual(manualStop,id)); runWorker(); ticks(4);
+    c.flow.enabled=true; assert(ShadowOptimizer.configure(c)); for(unsigned n=0;n<5;++n) nightTick();
+    c.flow.enabled=false; assert(ShadowOptimizer.configure(c)); ticks(8);
+    report.clear(); HemsController.serializeEconomic(report.to<JsonObject>());
+    assert(report["owner"]=="manual" && releaseCount()==afterFlowRelease);
     std::cout << "Production economic dispatch opt-in, Monitor/permission isolation, verified semantic writes, idempotence, revisions, SoC, durable pause/resume, revocation and storage-only integration passed\n";
 }

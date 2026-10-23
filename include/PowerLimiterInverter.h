@@ -92,6 +92,8 @@ public:
         Nighttime
     };
 
+    Eligibility getEligibility() const;
+
     // only returns true if the inverter can participate
     // in achieving the requested change in power output
     bool isEligible() const;
@@ -116,9 +118,6 @@ protected:
     char _logPrefix[32];
 
 private:
-    // returns the detailed eligibility status of the inverter
-    Eligibility getEligibility() const;
-
     virtual void setAcOutput(uint16_t expectedOutputWatts) = 0;
 
     bool _retired = false; // true if to be abandoned by DPL

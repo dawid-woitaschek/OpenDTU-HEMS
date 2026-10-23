@@ -52,11 +52,16 @@ try {
         await page.locator('#energy-pv_ac_limit_w').fill('3000');
         await page.locator('#energy-net-export').fill('800');
         await page.locator('#energy-management-enabled').check();
+        await page.getByText(/Active coordinated economic dispatch waits/).waitFor();
+        await page.locator('#energy-wear-source').selectOption('2');
+        await page.locator('#energy-degradation_micros').fill('0');
         await page.locator('#optimizer-dispatch-enabled').check();
         await page.locator('form').filter({ has: page.locator('#optimizer-enabled') }).getByRole('button', { name: 'Save', exact: true }).click();
         await page.getByText('Waiting for Active HEMS mode', { exact: true }).first().waitFor();
         const saved = posts.find(p => p.path.endsWith('/optimizer/config')).data;
         assert.equal(saved.dispatch_enabled, true);
+        assert.equal(saved.energy_management.wear_source, 2);
+        assert.equal(saved.energy_management.degradation_micros, 0);
         assert.equal(saved.energy_management.enabled, true);
         assert.equal(saved.energy_management.max_export_w, 800);
         assert.equal(saved.energy_management.automatic_load, true);
