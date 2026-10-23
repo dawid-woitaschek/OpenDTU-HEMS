@@ -60,22 +60,33 @@ PR #34 targets the separate `hems-energy-management` integration branch from `co
 ### Configuration and UI
 
 - New coordination and automatic learning require explicit opt-in; migration grants no new actuator permission or automatic takeover.
-- Battery export defaults forbidden, EV protection defaults enabled and battery-wear cost defaults unknown/unmodeled rather than verified zero. Estimated and explicitly configured zero coefficients remain distinguishable.
+- For opted-in coordination battery export defaults forbidden and EV protection enabled. Disabled coordination preserves the legacy compensation-based export policy. Battery-wear cost defaults unknown/unmodeled; active coordinated economics requires an estimate or explicit coefficient, including zero acknowledgement.
 - Normal settings expose operating preference, export permissions, net export limit, EV protection and automatic versus fixed load estimation. Detailed wear/margin, terminal and hysteresis settings remain Advanced.
 - A reference preset selects PV-first use, no battery export, EV protection, automatic learning and grid charging without inventing device ratings, degradation coefficients or control permissions. Existing WARP battery-writing rules must be disabled before HEMS becomes the battery controller; WARP EV control may remain active.
 - English, German and French presentation is included on the integration branch.
+
+### PR #34 consistency review follow-up
+
+The [ten-point source review](HEMS_PR34_Review.md) confirms and fixes nighttime discharge blocking, EV Protection ownership reacquisition, orphaned Flow cleanup on withdrawal, bypass of DPL's global ceiling, disabled-mode battery-export migration, LocalFirst charge/curtail ordering and invalid hold-baseline reporting. It preserves the documentation commits already present on the PR branch.
+
+Nighttime uses fresh `grid - storage` residual demand without synthesizing PV telemetry; PV actuation and joint export enforcement remain unavailable in that fallback. EV protection hands an idle, certain controlled Stop to Flow without Release; a fresh economic command can take over. Flow withdrawal uses source-specific one-shot cleanup, while still-enabled coordination intentionally retains a reported safety hold through invalid/unavailable authority. Manual and unrelated Protection ownership remain protected.
+
+The planner and runtime share DPL's effective configured/model/global ceiling, including known zero. DPL recognizes acknowledged zero limits and restores permitted output through its existing bounded allocator; startup default OK without an acknowledgement timestamp remains unknown. Disabled coordination retains the legacy `exportConfigured` battery-export policy; explicit opt-in selects the new independent permission. Infeasible held-battery baselines yield null comparisons rather than invented savings. New active coordinated economic dispatch requires an estimated or explicitly configured wear coefficient, including explicit zero acknowledgement; shadow planning and legacy dispatch remain available.
+
+Strict PV-only/zero-export startup from curtailed PV remains a disclosed conservative limitation: no unpermitted import/export probe is sent, and the planner excludes inaccessible charging until fresh surplus is observed or permission changes. The nonnegative automatic terminal price remains a deliberate limited model; negative selected continuation prices disclose that empty-headroom value is unmodeled. Neither choice implies verified economic optimality for those missing opportunities.
 
 ### PR #34 software validation and resource measurements
 
 The PR currently documents local software/build validation, not device validation:
 
 - 35 native test executables passed, including production planner/service/controller/provider/mailbox/executor paths.
+- The ten-point follow-up adds nighttime residual regulation, EV ownership handoff, Flow withdrawal/revocation, known-zero DPL recovery, global-ceiling/LocalFirst/baseline/migration regression tests and explicit-wear acknowledgement coverage.
 - Focused fixtures cover PV/load/battery coordination, battery-induced export, zero/changing export limits, positive export compensation with battery export forbidden, stale data and actuator failure, EV-learning gaps, degradation/negative-price/PV-opportunity accounting, repeated replanning and fresh-cost hysteresis behavior.
 - Closed-cycle 95%/95% efficiency with 3 ct/EFC-reference-kWh wear rejects the isolated 15->18 ct/kWh cycle and accepts 15->35 ct/kWh.
 - Forecast fixtures compare learned profile, fixed fallback and the existing WARP-style schedule; the documentation explicitly does not claim three days of history are universally superior.
 - UI production build/type checks, tests, lint, formatting and intercepted browser checks passed locally.
 - A representative `generic_esp32s3_usb`, 8 MB, no-PSRAM firmware build passed locally. No hardware was flashed or operated.
-- Reported same-toolchain resource delta versus the PR base: +2,288 B static RAM, +28,860 B firmware flash, +432 B DP workspace, +2,120 B `Plan`, +2,208 B retained result allocation and +7,008 B learning-enabled peak planning object allocations. These figures are compile/layout or host allocation measurements, not live ESP32 heap/stack/latency results.
+- Reported same-toolchain resource delta versus the PR base: +2,288 B static RAM, +32,808 B firmware flash, +432 B DP workspace, +2,120 B `Plan`, +2,208 B retained result allocation and +7,008 B learning-enabled peak planning object allocations. These figures are compile/link and ESP32 ABI object-layout measurements, not live ESP32 heap/stack/latency results.
 - Planning complexity remains bounded `O(T x S^2)` with `T <= 256` and `S <= 54`; no PSRAM, cloud service, external database, ML framework, extra computer or new task is required by the integration.
 
 ### PR #34 validation still required
@@ -83,7 +94,7 @@ The PR currently documents local software/build validation, not device validatio
 Before promotion, validate on the actual reference hardware:
 
 - Marstek V148 register sign/scale, acquire/charge/discharge/Stop/Release semantics, command persistence/watchdog and response latency.
-- Freshness and timestamp alignment of grid/PV/storage telemetry, including whether nighttime Hoymiles telemetry is adequate for the required coordination mode.
+- Freshness and timestamp alignment of grid/PV/storage telemetry, including residual-meter-only night operation and transition back to fresh controlled PV at dawn.
 - Actual DPL zero/lower-output behavior and real import/export transients during charge/discharge changes, sudden load changes and actuator/network failures.
 - Runtime heap/largest-free-block behavior, task stack watermarks, planning latency, DPL responsiveness and TLS headroom on the no-PSRAM ESP32-S3.
 - End-to-end coordination with WARP EV protection and the real Marstek/Hoymiles/grid-meter topology.

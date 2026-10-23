@@ -14,10 +14,14 @@ The additive `energy_management` object lives in the existing version-1
 `/hems-optimizer.json`, with the existing authenticated API, 2048-byte request/file
 bound, verified temporary write and atomic rename. Old files remain readable.
 Absent new fields default to coordination **off**, automatic learning **off**,
-battery export **forbidden**, EV protection **on**, zero permitted net export,
+battery export **forbidden for opted-in coordination**, EV protection **on**, zero permitted net export,
 unknown/unmodeled wear and zero optional margin/hysteresis. Existing explicit
 storage/EVSE permissions, global mode, economic dispatch opt-in and manual pause
 remain separate gates. No migration grants a permission or activates new control.
+Absent or disabled coordination preserves the legacy `exportConfigured`-based
+battery-export permission, including after saving the additive disabled object.
+Explicit coordination opt-in switches to independent export permissions; only
+then can compensation never grant battery-export permission.
 Old firmware ignores the additive object: disable control before downgrading,
 because old firmware cannot enforce the new permissions or export coordination.
 
@@ -34,19 +38,25 @@ Disable old **WARP battery-writing rules** before granting HEMS storage control.
 WARP can retain EV control. HEMS adds no automatic EVSE scheduler. The alternative
 settings are economic operation, local PV first, or surplus export before PV
 charging. The independent grid-charging, discharge, PV-export, battery-export and
-EV-protection permissions remain authoritative. Compensation alone never permits
-battery export. Unknown wear is not a verified zero; estimated and explicitly
-configured coefficients, including explicit zero, are distinct.
+EV-protection permissions remain authoritative in coordinated mode. Unknown wear
+is not a verified zero; shadow plans omit it with a warning. Active coordinated
+economic dispatch requires an estimate or explicitly configured coefficient,
+including explicit zero acknowledgement. Legacy dispatch retains its old gates.
 
 The planner caps battery power by imported profile operation maxima and caps PV
-by observed DPL AC ratings as well as user limits. Physical battery
+by the observed effective DPL ceiling as well as user limits. Physical battery
 charge/discharge limits and the total PV inverter AC rating are
 independent of the maximum **net export at the grid connection**. The latter can
 be zero or another user value; there is no hard-coded 800 W rule. The DPL meter
 regulation target remains a separate DPL setting, not an export permission or a
 joint export guarantee. In coordinated mode the solar request follows the flow
 envelope for permitted local use/export instead of DPL's ordinary meter-target
-request; DPL retains device limits, communications, ordering and retries.
+request; acknowledged zero limits remain known and DPL can recover a
+non-producing solar source from zero through its bounded allocator, without an
+unbounded wake/probe. Parser default OK without a timestamp is still unknown.
+DPL retains its global `TotalUpperPowerLimit` (including zero), each
+inverter's configured/model maximum, communications, ordering and retries. The
+same effective ceiling bounds DP PV; zero is distinguished from an unknown bound.
 
 ## Measurement and execution contract
 
@@ -74,7 +84,12 @@ export/curtailment instead of a costly charge. Export-first mode reserves the
 permitted surplus for export before PV-only charging. A PV-only charge request
 is bounded by **measured** surplus, not forecast power or guessed inverter
 headroom. After curtailment it may have to wait for confirmed surplus; it does
-not intentionally draw grid power to discover unmeasured PV availability.
+not intentionally draw grid power to discover unmeasured PV availability. With no
+grid charging and no permitted PV export, a fully curtailed system cannot safely
+bootstrap charging. Planning excludes such charging throughout the horizon until
+fresh surplus is observed, and runtime reports `pv_charge_waiting_surplus`.
+Grid charging or a positive permitted PV export allowance removes this startup
+restriction. No unconfirmed command is counted as an electrical load.
 
 DPL consumes a small mutex-protected envelope with a three-second expiry. No
 network operation, planner or second Hoymiles writer is added to its loop. The
@@ -104,10 +119,19 @@ Missing/stale/inconsistent balance data yields a zero PV envelope and no
 discharge. With fresh grid and storage data, permitted grid charging can continue
 as a consumption-only action while PV measurement/control is unavailable; **joint
 export enforcement remains unavailable**. A missing meter does not authorize
-that fallback. At night an unreachable Hoymiles is not fabricated as a fresh
-zero-PV measurement: discharge remains unavailable until required AC telemetry
-recovers. Whether this installation can supply adequate nighttime PV telemetry
-requires device validation. Battery autonomy/watchdog behavior is also unknown.
+that fallback. At night DPL can publish a distinct supported dormant-solar state.
+Fresh grid and battery measurements then bound discharge by `grid - storage`,
+the actual residual consumption even with unknown/nonzero PV. No zero-PV sample
+is fabricated, battery export is prohibited in this fallback, and joint PV export
+enforcement still reports unavailable. Stale meters/storage, disabled commands,
+unsupported topology or daytime actuator failure do not get this exception.
+Dawn/dusk transitions and battery autonomy/watchdog behavior require validation.
+
+After EV protection's debounce, an idle, certain Protection-owned Stop transfers
+to Flow without a physical Release; economics can then resume through the normal
+worker. Missing authority retains a reported controlled safety hold rather than
+restoring autonomous export. Explicit coordination withdrawal uses source-specific
+one-shot Flow cleanup, preserving Manual and unrelated Protection ownership.
 
 Manual pause and manual ownership prevent automatic storage takeover. Global
 mode/permission revocation preserves the existing bounded courtesy-cleanup
@@ -179,7 +203,11 @@ or a median future price is used without refill permission. If that tail is
 missing, a nonnegative covered-horizon median is an **assumption**, not fabricated
 future data. The selected price, demand bound and source are reported. Known
 zero/negative refill prices can legitimately imply zero marginal inventory value;
-users should review the fallback assumption for their installation.
+users should review the fallback assumption for their installation. Negative
+selected automatic continuation prices emit `negative_terminal_headroom_unmodeled`:
+the table deliberately does not value empty headroom for future paid charging.
+Simply allowing a negative avoided-import salvage price would model the wrong
+charging/efficiency opportunity.
 
 All objective comparisons include the difference between final and starting
 inventory values, from the same table. No end floor follows a rising start SoC.
@@ -189,7 +217,10 @@ prices do not produce free terminal fill. Terminal inventory estimates are
 separate from the grid bill and are never labeled realized cash savings. The
 hold baseline has the same starting stock; differing final stocks are reconciled
 through the common inventory valuation. The reported grid-bill difference alone
-is not an equivalent-inventory economic improvement.
+is not an equivalent-inventory economic improvement. If holding is infeasible
+under the selected LocalFirst policy or a covered target, baseline cost and both
+savings comparisons are null with `hold_baseline_infeasible`, rather than silently
+using a zero-cost or partial baseline.
 
 Plan-change hysteresis is optional, zero by default and outside the energy-cost
 model. A retained schedule is re-evaluated from the **current** battery state on
@@ -251,8 +282,8 @@ version strings and linker alignment; these are compile/link measurements.
 | Resource | Base | Coordinated | Change |
 | --- | ---: | ---: | ---: |
 | Static RAM | 117,472 B | 119,760 B | +2,288 B |
-| Firmware flash | 2,868,625 B | 2,897,485 B | +28,860 B |
-| Served app gzip | 331,311 B | 338,062 B | +6,751 B |
+| Firmware flash | 2,868,625 B | 2,901,433 B | +32,808 B |
+| Served app gzip | 331,311 B | 339,320 B | +8,009 B |
 | DP workspace | 15,768 B | 16,200 B | +432 B |
 | Plan | 16,552 B | 18,672 B | +2,120 B |
 | Result object | 16,896 B | 19,104 B | +2,208 B |
@@ -272,7 +303,9 @@ snapshot: **66,936 B**, versus **59,928 B** in the base (**+7,008 B**). Constant
 load mode does not allocate the learner snapshot, and idle worker notifications
 allocate no planning scratch. Monetary hysteresis reuses the candidate Plan;
 terminal price sorting reuses parent scratch before parent generation. No third
-Plan, new worker, stack allocation size, flash partition or dependency is added.
+Plan or new worker is added. Task stack reservations, flash partition and
+dependencies are unchanged; bounded local snapshots/authorization checks still
+require device stack-watermark validation.
 
 Allocator headers, SDK mutex backing, transient configuration/response JSON and
 concurrent network/WebAPI/TLS pools are additional; these object sums are not a
@@ -294,3 +327,16 @@ The integration-base CI runs normal build/test jobs but skips firmware-channel
 publication for this base. CI artifacts remain downloadable. No CI polling,
 merging, deployment, hardware flashing or live installation changes are part of
 this work.
+
+The [PR #34 consistency review](HEMS_PR34_Review.md) records the ten investigated
+concerns, remedies, rejected unsafe alternatives and regression invariants.
+
+Review follow-up validation on 2026-10-23: all 35 native executables passed
+(`make -C test -B -j4 test`, followed by a complete run after the final ownership
+checks); production configuration and semantic/API/TLS surface checks, C++ lint,
+frontend tests/lint/format/type/build and intercepted browser checks at
+320/360/768/1440 px passed. The `generic_esp32s3_usb` no-PSRAM firmware build
+passed after the final source changes. `GITHUB_ACTIONS=true` skipped only the
+redundant automatic web build; the actual pinned frontend build was run locally
+first. The sizes above describe this reviewed source, with the original base
+comparison unchanged. No remote Actions monitoring or physical validation occurred.
