@@ -1719,7 +1719,11 @@
             "measurements_unavailable": "Fresh AC measurements unavailable; storage request and PV cap set to zero.",
             "inconsistent_measurements": "Inconsistent AC balance; control held.",
             "dpl_unavailable": "DPL unavailable or topology cannot enforce this policy.",
-            "coordination_topology_unsupported": "DPL topology/configuration unavailable for coordinated control."
+            "coordination_topology_unsupported": "DPL topology/configuration unavailable for coordinated control.",
+            "nighttime_residual_only": "Night: battery bounded by measured residual demand; joint PV export enforcement unavailable",
+            "pv_charge_waiting_surplus": "PV-only charging awaits measured surplus; starting from fully curtailed PV needs grid-charging permission or permitted PV export",
+            "hold_baseline_infeasible": "Holding the battery violates the selected policy or target; savings comparison unavailable",
+            "negative_terminal_headroom_unmodeled": "Negative continuation price: future empty-headroom value is not modeled"
         },
         "modeSummaryDisabled": "HEMS control is disabled.",
         "modeSummaryMonitor": "Automatic writes are off. Manual controls require HEMS Control permission.",
@@ -1785,10 +1789,12 @@
             "charging": "Charging economically",
             "holding": "Holding idle economically",
             "discharging": "Discharging economically",
-            "replanning": "Replanning the current interval"
+            "replanning": "Replanning the current interval",
+            "waiting_wear_cost": "Waiting for an estimated or explicitly configured battery cycle cost",
+            "holding_flow_protection": "Controlled safety hold retained; awaiting coordinated authority or explicit withdrawal"
         },
         "energyManagement": "Energy management",
-        "managementHint": "Coordinates the AC battery with DPL. Disable old WARP battery-writing rules before granting HEMS storage control; WARP EV control can remain active. Zero net export is supported. Device settings and network delays still permit transients.",
+        "managementHint": "Coordinates the AC battery with DPL. Export permissions below apply when coordination is enabled; disabled coordination retains the legacy compensation-based battery-export policy. Disable old WARP battery-writing rules before granting HEMS storage control; WARP EV control can remain active. Device settings and network delays still permit transients.",
         "referencePreset": "Apply household reference goals",
         "coordinateOptIn": "Enable coordinated control explicitly",
         "operatingPreference": "Operating preference",
@@ -1817,7 +1823,7 @@
         "terminal_price_micros": "Continuation import-price assumption",
         "hysteresis_micros": "Plan-change hysteresis (absolute money)",
         "explicitTerminalPrice": "Use explicit continuation price",
-        "terminalHint": "Uses the lowest covered future import price when refill is permitted; otherwise a median covered-price assumption. If the future tail is unavailable, the covered-horizon median is an estimate. Inventory value is not realized savings. Reserve and deadlines remain binding; hysteresis compares feasible plans on fresh common inputs.",
+        "terminalHint": "Uses the lowest covered future import price when refill is permitted; otherwise a median covered-price assumption. Missing future tariffs use a covered-horizon estimate. Negative derived prices are clamped to zero: the model does not value empty headroom for future paid charging. Inventory value is not realized savings. Reserve and deadlines remain binding; hysteresis compares feasible plans on fresh common inputs.",
         "coveredSlots": "slots with learned coverage",
         "chargeRationale": "Peak charge target in this displayed schedule, determined by load, PV and cost:",
         "plannedCommanded": "Planned / last commanded power",
@@ -1826,6 +1832,7 @@
         "importCost": "Projected import cost",
         "exportRevenue": "Projected export revenue",
         "inventoryValue": "Terminal inventory adjustment",
-        "curtailment": "PV curtailment"
+        "curtailment": "PV curtailment",
+        "wearAcknowledgementHint": "Shadow planning omits unknown battery wear. Active coordinated economic dispatch waits until you select an estimated or explicitly configured cycle cost under Advanced. Selecting an explicit zero acknowledges that wear is excluded."
     }
 }

@@ -33,6 +33,9 @@ public:
     bool submitCommand(Actuation::Command const& command, uint32_t& id);
     void requestRelease();
     bool releaseEconomic();
+    bool releaseFlow();
+    bool handoffProtectionToFlow();
+
     Actuation::Origin owner() const;
     bool cancelPendingCommand(uint32_t id = 0);
     Actuation::MailboxSnapshot commandSnapshot() const;
@@ -61,6 +64,7 @@ private:
         uint32_t token = 0;
     };
 
+    bool releaseOwned(Actuation::Origin expected);
     static void workerEntry(void* context);
     void worker();
     // Poll scratch must not remain on the command/authorization call stack.

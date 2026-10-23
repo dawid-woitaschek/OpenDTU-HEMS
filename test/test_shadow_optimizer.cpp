@@ -77,7 +77,7 @@ void policyTests()
     assert(f.p.optimizedNano>=f.p.baselineNano); // Intent may cost money; never invent positive savings.
     JsonDocument report; serializePlan(f.c,f.in,f.p,report.to<JsonObject>());
     assert(report["target_state"]=="target_planned" && report["device_writes"]==false);
-    assert(report["modeled_savings_nano"].as<int64_t>()<=0);
+    assert(!f.p.baselineValid && report["modeled_savings_nano"].isNull());
     f.c.maxChargeW=100; assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable") && f.p.count==0);
     f.c.maxChargeW=2000; f.c.policies.gridChargingAllowed=false;
     assert(!f.run() && !strcmp(f.p.blocker,"target_unreachable"));
@@ -183,7 +183,14 @@ int main()
     f=Fixture(); f.c.maxChargeW=100; f.spread(); assert(f.run()); f.bounds();
     f=Fixture(); f.c.maxDischargeW=100; f.spread(); assert(f.run()); f.bounds();
     f=Fixture(); f.c.baseLoadW=0; assert(f.run() && !f.moves() && f.p.optimizedNano==0);
-    f.c.exportConfigured=true; f.c.exportMicros=400000; assert(f.run() && !f.moves());
+    f.c.exportConfigured=true; f.c.exportMicros=400000; assert(f.run() && f.moves() && f.p.optimizedNano<0);
+    // Both absent and explicitly disabled coordination preserve legacy export.
+    JsonDocument legacy; serializeConfig(f.c,legacy.to<JsonObject>()); legacy.remove("energy_management");
+    Config migrated; assert(parseConfig(legacy.as<JsonVariantConst>(),migrated));
+    assert(!migrated.flow.enabled && !migrated.flow.batteryExport); f.c=migrated; assert(f.run() && f.moves());
+    serializeConfig(f.c,legacy.to<JsonObject>()); assert(parseConfig(legacy.as<JsonVariantConst>(),f.c)); assert(f.run() && f.moves());
+    f.c.flow.enabled=true; f.c.flow.pvAcLimitW=3000; f.c.flow.maxExportW=3000;
+    assert(f.run() && !f.moves()); // Explicit opt-in switches to independent permission.
     f.c.flow.batteryExport=true; assert(f.run() && f.moves() && f.p.optimizedNano<0);
     f=Fixture(); f.spread(400000,50000); f.in.currentConstraints.dischargeAllowed=false;
     assert(f.run() && f.p.steps[0].endWh>=f.p.steps[0].startWh); f.bounds();

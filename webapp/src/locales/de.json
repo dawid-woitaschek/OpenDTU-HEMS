@@ -1715,7 +1715,11 @@
             "measurements_unavailable": "Aktuelle AC-Messungen fehlen; Speicheranforderung und PV-Grenze null.",
             "inconsistent_measurements": "Unplausible AC-Bilanz; Regelung angehalten.",
             "dpl_unavailable": "DPL nicht verfügbar oder Topologie kann diese Regeln nicht umsetzen.",
-            "coordination_topology_unsupported": "DPL-Topologie/Konfiguration für koordinierte Regelung nicht verfügbar."
+            "coordination_topology_unsupported": "DPL-Topologie/Konfiguration für koordinierte Regelung nicht verfügbar.",
+            "nighttime_residual_only": "Nachts: Batterie durch gemessenen Restbedarf begrenzt; gemeinsame PV-Exportbegrenzung nicht verfügbar",
+            "pv_charge_waiting_surplus": "Reines PV-Laden wartet auf gemessenen Überschuss; Start bei vollständig abgeregelter PV benötigt Netzladefreigabe oder erlaubten PV-Export",
+            "hold_baseline_infeasible": "Halten verletzt die gewählte Strategie oder das Ziel; Ersparnisvergleich nicht verfügbar",
+            "negative_terminal_headroom_unmodeled": "Negativer Fortsetzungspreis: Wert freien Speicherplatzes wird nicht modelliert"
         },
         "modeSummaryDisabled": "Die HEMS-Steuerung ist deaktiviert.",
         "modeSummaryMonitor": "Automatische Zugriffe sind gesperrt. Manuelle Befehle benötigen die Berechtigung HEMS-Steuerung.",
@@ -1781,10 +1785,12 @@
             "charging": "Wirtschaftliches Laden",
             "holding": "Wirtschaftlicher Leerlauf",
             "discharging": "Wirtschaftliches Entladen",
-            "replanning": "Aktuelles Intervall wird neu geplant"
+            "replanning": "Aktuelles Intervall wird neu geplant",
+            "waiting_wear_cost": "Wartet auf geschätzte oder ausdrücklich konfigurierte Batteriezykluskosten",
+            "holding_flow_protection": "Kontrollierter Sicherheitshalt; wartet auf koordinierte Freigabe oder ausdrücklichen Widerruf"
         },
         "energyManagement": "Energiemanagement",
-        "managementHint": "Koordiniert den AC-Speicher mit DPL. Alte WARP-Regeln mit Speicher-Schreibzugriff vor der HEMS-Freigabe deaktivieren; WARP darf das Auto weiter steuern. Nulleinspeisung wird unterstützt. Geräteeinstellungen und Netzwerklatenz können kurzzeitige Einspeisung verursachen.",
+        "managementHint": "Koordiniert die AC-Batterie mit DPL. Die Exportfreigaben unten gelten bei aktiver Koordination; ohne Koordination bleibt die bisherige vergütungsabhängige Batterieexport-Regel erhalten. Alte WARP-Regeln mit Batterieschreibzugriff vor der HEMS-Übernahme deaktivieren; die WARP-EV-Steuerung kann aktiv bleiben. Geräteeinstellungen und Netzwerklatenzen erlauben weiterhin Transienten.",
         "referencePreset": "Haushalts-Voreinstellung anwenden",
         "coordinateOptIn": "Koordinierte Regelung ausdrücklich aktivieren",
         "operatingPreference": "Betriebsziel",
@@ -1813,7 +1819,7 @@
         "terminal_price_micros": "Importpreisannahme der Fortsetzung",
         "hysteresis_micros": "Planwechsel-Hysterese (Geldbetrag)",
         "explicitTerminalPrice": "Expliziten Fortsetzungspreis verwenden",
-        "terminalHint": "Nutzt bei erlaubtem Nachladen den niedrigsten verfügbaren zukünftigen Importpreis, sonst eine Medianpreis-Annahme. Fehlt die Fortsetzung, ist der Median des verfügbaren Horizonts eine Schätzung. Inventarwert ist keine realisierte Ersparnis. Reserve und Termine bleiben verbindlich; Hysterese vergleicht zulässige Pläne mit denselben aktuellen Eingaben.",
+        "terminalHint": "Nutzt bei erlaubtem Nachladen den niedrigsten abgedeckten künftigen Importpreis, sonst eine Medianannahme. Fehlende künftige Tarife werden aus dem abgedeckten Horizont geschätzt. Negative abgeleitete Preise werden auf null begrenzt: freier Speicherplatz für künftig vergütetes Laden wird nicht bewertet. Bestandswert ist keine realisierte Ersparnis. Reserve und Fristen bleiben verbindlich; Hysterese vergleicht zulässige Pläne mit denselben frischen Eingaben.",
         "coveredSlots": "Zeitabschnitte mit gelerntem Profil",
         "chargeRationale": "Höchstes Ladeziel im angezeigten Plan, aus Last, PV und Kosten:",
         "plannedCommanded": "Geplante / zuletzt befohlene Leistung",
@@ -1822,6 +1828,7 @@
         "importCost": "Prognostizierte Bezugskosten",
         "exportRevenue": "Prognostizierte Einspeiseerlöse",
         "inventoryValue": "Endbestandsbewertung",
-        "curtailment": "PV-Abregelung"
+        "curtailment": "PV-Abregelung",
+        "wearAcknowledgementHint": "Die Schattenplanung lässt unbekannten Batterieverschleiß aus. Die aktive koordinierte wirtschaftliche Steuerung wartet auf geschätzte oder ausdrücklich konfigurierte Zykluskosten unter Erweitert. Eine ausdrücklich gewählte Null bestätigt, dass Verschleiß unberücksichtigt bleibt."
     }
 }

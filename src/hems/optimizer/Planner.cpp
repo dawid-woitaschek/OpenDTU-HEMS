@@ -57,7 +57,19 @@ void totals(Config const& c, Plan& p) {
     p.degradationNano = static_cast<int64_t>(p.internalAbsWh) * c.degradationMicros / 2;
     p.bufferNano = static_cast<int64_t>(p.internalAbsWh) * c.bufferMicros / 2;
 }
-bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, Step const& slot, size_t index, uint32_t from, uint32_t to, Flow& flow)
+bool batteryExportAllowed(Config const& c) { return c.flow.enabled ? c.flow.batteryExport : c.exportConfigured; }
+bool pvChargeReachable(Config const& c, Inputs const& in) {
+    return !c.flow.enabled || c.policies.gridChargingAllowed || (c.flow.pvExport && c.flow.maxExportW) || in.pvSurplusObserved;
+}
+uint32_t nextEnergy(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, uint32_t wh, bool targetCovered) {
+    uint32_t step = std::max<uint32_t>(1, (static_cast<uint64_t>(c.capacityWh) * c.socStepPct + 99) / 100);
+    uint32_t next = std::min(goals.ceilingWh, goals.reserveWh + ((wh - goals.reserveWh) / step + 1) * step);
+    uint32_t initial = std::llround(in.storage.socPct.value * c.capacityWh / 100.0);
+    if (initial > wh) { next = std::min(next, initial); }
+    if (targetCovered && goals.targetWh > wh) { next = std::min(next, goals.targetWh); }
+    return next;
+}
+bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, Step const& slot, size_t index, uint32_t from, uint32_t to, Flow& flow, bool targetCovered, uint32_t nextStateWh = UINT32_MAX)
 {
     uint32_t seconds = slot.end - slot.start;
     int64_t deltaWs = (static_cast<int64_t>(to) - from) * 3600;
@@ -67,6 +79,7 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
         chargeW = std::min(chargeW, in.storageLimits.chargeW);
         dischargeW = std::min(dischargeW, in.storageLimits.dischargeW);
     }
+    if (!pvChargeReachable(c, in)) { chargeW = 0; }
     if (!index) {
         auto const& constraints = in.currentConstraints;
         if (!constraints.chargeAllowed) { chargeW = 0; }
@@ -87,13 +100,22 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
     } else if (deltaWs < 0) {
         flow.batteryWs = -((-deltaWs * c.dischargePermille) / 1000);
         if (-flow.batteryWs > static_cast<int64_t>(dischargeW) * seconds) { return false; }
-        // Without explicit compensation, storage never discharges solely for export.
-        if (!c.flow.batteryExport && -flow.batteryWs > std::max(static_cast<int64_t>(0), netWs)) { return false; }
+        // Disabled coordination retains the legacy compensation-based permission.
+        if (!batteryExportAllowed(c) && -flow.batteryWs > std::max(static_cast<int64_t>(0), netWs)) { return false; }
     }
     // Export-first reserves the permitted surplus for export before charging.
     if (c.flow.enabled && c.flow.preference == Hems::Flow::Preference::ExportFirst && c.flow.pvExport
             && deltaWs > 0 && !goals.gridChargingAllowed
             && flow.batteryWs > std::max<int64_t>(0, -netWs - static_cast<int64_t>(c.flow.maxExportW) * seconds)) { return false; }
+    if (c.flow.enabled && c.flow.preference == Hems::Flow::Preference::LocalFirst && netWs < 0 && chargeW && from < goals.ceilingWh) {
+        // Allocate available (already physically capped) PV to eligible battery
+        // charging BEFORE export/curtailment. Test the actual next lattice state,
+        // including exact initial/target insertions, not an assumed fixed step.
+        if (deltaWs < 0) { return false; }
+        uint32_t next = nextStateWh == UINT32_MAX ? nextEnergy(c, goals, in, to, targetCovered) : nextStateWh;
+        int64_t nextAc = (static_cast<int64_t>(next - from) * 3600 * 1000 + c.chargePermille - 1) / c.chargePermille;
+        if (next > to && nextAc <= std::min(-netWs, static_cast<int64_t>(chargeW) * seconds)) { return false; }
+    }
     int64_t grid = netWs + flow.batteryWs;
     if (c.flow.enabled) {
         int64_t permittedExport = static_cast<int64_t>(c.flow.maxExportW) * seconds;
@@ -103,13 +125,6 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
         flow.curtailedWs = std::min<int64_t>(static_cast<int64_t>(slot.pvW) * seconds, std::max<int64_t>(0, -grid - permittedExport));
         grid += flow.curtailedWs;
         if (grid < -permittedExport) { return false; }
-        if (c.flow.preference == Hems::Flow::Preference::LocalFirst && deltaWs >= 0 && grid < 0 && to < goals.ceilingWh) {
-            // Quantized DP: require every representable eligible PV charge before
-            // curtailment. Less than one lattice increment remains feasible.
-            int64_t quantumWs = static_cast<int64_t>(std::max<uint32_t>(1, (static_cast<uint64_t>(c.capacityWh) * c.socStepPct + 99) / 100)) * 3600 * 1000 / c.chargePermille;
-            int64_t extra = std::min({-grid, static_cast<int64_t>(chargeW) * seconds - std::max<int64_t>(0, flow.batteryWs), static_cast<int64_t>(goals.ceilingWh - to) * 3600 * 1000 / c.chargePermille});
-            if (extra >= quantumWs) { return false; }
-        }
     }
     flow.importWs = std::max(static_cast<int64_t>(0), grid); flow.exportWs = std::max(static_cast<int64_t>(0), -grid);
     flow.importCost = money(flow.importWs, slot.usedPrice);
@@ -204,6 +219,7 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     out.importNano = out.exportNano = out.degradationNano = out.bufferNano = out.terminalNano = out.curtailedWs = 0; out.internalAbsWh = 0;
     out.count = 0; out.pvIncluded = false; out.partial = false; out.states = 0;
     out.initialWh = out.finalWh = 0; out.runtimeUs = 0;
+    out.baselineValid = true; out.negativeTerminalPrice = false; out.terminalPrice = out.terminalDemandWh = 0;
     out.baselineNano = out.optimizedNano = 0; out.generatedAt = in.now; out.state = "not_ready"; out.blocker = nullptr; out.partialReason = nullptr;
     auto fail = [&](char const* reason) { out.count = 0; out.blocker = reason; return false; };
     if (!c.enabled) { out.state = "disabled"; return false; }
@@ -251,7 +267,7 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
             else { slot.pvW = ws / (slot.end - slot.start); }
         }
         if (c.flow.enabled) {
-            uint32_t physicalLimit = in.observedPvAcLimitW ? std::min(c.flow.pvAcLimitW, in.observedPvAcLimitW) : c.flow.pvAcLimitW;
+            uint32_t physicalLimit = (in.observedPvAcLimitKnown || in.observedPvAcLimitW) ? std::min(c.flow.pvAcLimitW, in.observedPvAcLimitW) : c.flow.pvAcLimitW;
             slot.pvW = std::min<int32_t>(slot.pvW, physicalLimit);
         }
         slot.loadW = c.baseLoadW;
@@ -314,6 +330,7 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     }
     std::sort(w->priceScratch, w->priceScratch + priceCount);
     int32_t assumedPrice = w->priceScratch[out.terminalFutureCovered && goals.gridChargingAllowed ? 0 : (priceCount - 1) / 2];
+    out.negativeTerminalPrice = !c.terminalPriceConfigured && assumedPrice < 0;
     out.terminalPrice = c.terminalPriceConfigured ? c.terminalPriceMicros : std::max(0, assumedPrice);
     out.terminalDemandWh = std::min<uint64_t>(upper - lower,
         (loadWs / std::max<uint32_t>(1, duration)) * c.terminalHours * 1000 / c.dischargePermille);
@@ -322,14 +339,17 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     for (size_t t = 0; t < out.count; ++t) {
         std::fill(std::begin(w->next), std::end(w->next), Score {});
         auto& slot = out.steps[t];
-        Flow baseline; transition(c, goals, in, slot, t, out.initialWh, out.initialWh, baseline); out.baselineNano += baseline.cost / 2;
+        Flow baseline;
+        if (!transition(c, goals, in, slot, t, out.initialWh, out.initialWh, baseline, targetCovered)
+                || (targetCovered && slot.end == goals.deadline && out.initialWh < goals.targetWh)) { out.baselineValid = false; }
+        if (out.baselineValid) { out.baselineNano += baseline.cost / 2; }
         for (size_t from = 0; from < out.states; ++from) {
             if (w->previous[from].cost == Infinity) { continue; }
             for (size_t to = 0; to < out.states; ++to) {
                 // At the deadline the target is a lower bound, not a price-ranking heuristic.
                 if (targetCovered && slot.end == goals.deadline && w->energy[to] < goals.targetWh) { continue; }
                 Flow f;
-                if (!transition(c, goals, in, slot, t, w->energy[from], w->energy[to], f)) { continue; }
+                if (!transition(c, goals, in, slot, t, w->energy[from], w->energy[to], f, targetCovered, w->energy[std::min<size_t>(to + 1, out.states - 1)])) { continue; }
                 Score candidate { w->previous[from].cost + f.cost,
                     w->previous[from].throughput + static_cast<uint64_t>(std::abs(static_cast<int64_t>(w->energy[to]) - w->energy[from])) };
                 if (better(candidate, w->next[to])) { w->next[to] = candidate; w->parent[t][to] = from; }
@@ -352,7 +372,7 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     out.optimizedNano = w->previous[selected].cost / 2 + out.terminalNano;
     for (size_t t = out.count; t-- > 0;) {
         size_t from = w->parent[t][selected]; auto& slot = out.steps[t]; Flow flow;
-        transition(c, goals, in, slot, t, w->energy[from], w->energy[selected], flow);
+        transition(c, goals, in, slot, t, w->energy[from], w->energy[selected], flow, targetCovered);
         slot.startWh = w->energy[from]; slot.endWh = w->energy[selected];
         applyFlow(slot, flow);
         selected = from;
@@ -378,7 +398,7 @@ bool evaluateRetained(Config const& c, Inputs const& in, Plan const& candidate, 
             int64_t delta = (static_cast<int64_t>(retained->endWh) - retained->startWh) * (slot.end - slot.start) / (retained->end - retained->start);
             int64_t next = static_cast<int64_t>(energy) + delta;
             if (next < goals.reserveWh || next > goals.ceilingWh || (goals.deadline == slot.end && next < goals.targetWh)) { return false; }
-            Flow f; if (!transition(c, goals, in, slot, n, energy, next, f)) { return false; }
+            Flow f; if (!transition(c, goals, in, slot, n, energy, next, f, candidate.targetDeadline && candidate.targetDeadline <= candidate.steps[candidate.count - 1].end)) { return false; }
             if (pass) { out.steps[n].startWh = energy; out.steps[n].endWh = next; applyFlow(out.steps[n], f); }
             cost += f.cost; energy = next;
         }
@@ -401,8 +421,11 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     for (auto key : { "initial_soc_pct", "final_soc_pct", "baseline_cost_nano", "optimized_cost_nano", "modeled_savings_nano" }) { out[key] = nullptr; }
     if (p.count) {
         out["initial_soc_pct"] = 100.0 * p.initialWh / c.capacityWh; out["final_soc_pct"] = 100.0 * p.finalWh / c.capacityWh;
-        out["baseline_cost_nano"] = p.baselineNano; out["optimized_cost_nano"] = p.optimizedNano;
-        out["modeled_savings_nano"] = p.baselineNano - p.optimizedNano;
+        out["optimized_cost_nano"] = p.optimizedNano;
+        if (p.baselineValid) {
+            out["baseline_cost_nano"] = p.baselineNano;
+            out["modeled_savings_nano"] = p.baselineNano - p.optimizedNano;
+        }
     }
     auto costs = out["cost_breakdown"].to<JsonObject>();
     costs["import_nano"] = p.importNano; costs["export_nano"] = p.exportNano;
@@ -413,7 +436,10 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     costs["wear_source"] = c.wearSource; costs["terminal_price_micros"] = p.terminalPrice;
     costs["terminal_demand_wh"] = p.terminalDemandWh;
     costs["terminal_source"] = c.terminalPriceConfigured ? "explicit" : p.terminalFutureCovered ? "covered_future_tariffs" : "covered_price_median_assumption";
-    out["projected_grid_bill_difference_nano"] = p.baselineNano - (p.importNano - p.exportNano);
+    out["baseline_policy"] = "hold_battery_under_same_flow_policy";
+    out["baseline_valid"] = p.count && p.baselineValid;
+    out["projected_grid_bill_difference_nano"] = nullptr;
+    if (p.count && p.baselineValid) { out["projected_grid_bill_difference_nano"] = p.baselineNano - (p.importNano - p.exportNano); }
     uint32_t peakWh = p.initialWh;
     for (size_t n = 0; n < p.count; ++n) { peakWh = std::max(peakWh, p.steps[n].endWh); }
     out["charge_target_soc_pct"] = c.capacityWh ? static_cast<double>(peakWh) * 100 / c.capacityWh : 0;
@@ -432,8 +458,8 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     out["target_state"] = p.targetState; out["target_deadline"] = p.targetDeadline;
     out["target_soc_pct"] = c.policies.targetEnabled ? c.policies.targetSoc : 0;
     auto restrictions = out["policy_restrictions"].to<JsonArray>();
-    if (!c.flow.batteryExport) { restrictions.add("battery_export_forbidden"); }
-    if (!c.flow.pvExport) { restrictions.add("pv_export_forbidden"); }
+    if (!batteryExportAllowed(c)) { restrictions.add("battery_export_forbidden"); }
+    if (c.flow.enabled && !c.flow.pvExport) { restrictions.add("pv_export_forbidden"); }
     if (!c.policies.gridChargingAllowed) { restrictions.add("grid_charging_forbidden"); }
     if (!c.policies.dischargeAllowed) { restrictions.add("economic_discharge_forbidden"); }
     if (!in.currentConstraints.chargeAllowed) { restrictions.add("current_charge_restricted"); }
@@ -444,6 +470,9 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     assumptions.add("future_ev_constraints_unknown"); assumptions.add("monthly_fee_excluded"); assumptions.add(c.wearSource ? "configured_marginal_cycle_cost" : "battery_wear_unknown");
     auto warnings = out["warnings"].to<JsonArray>(); warnings.add("modeled_savings_not_guaranteed");
     if (!c.wearSource) { warnings.add("battery_wear_unknown"); }
+    if (p.count && !p.baselineValid) { warnings.add("hold_baseline_infeasible"); }
+    if (!pvChargeReachable(c, in)) { warnings.add("pv_charge_waiting_surplus"); }
+    if (p.negativeTerminalPrice) { warnings.add("negative_terminal_headroom_unmodeled"); }
     if (!p.pvIncluded) { warnings.add("pv_forecast_excluded"); warnings.add(in.forecastStatus.fresh ? "pv_horizon_incomplete" : "pv_unavailable_or_stale"); }
     if (p.partial) { warnings.add(p.partialReason); }
     if (p.targetDeadline && !strcmp(p.targetState, "target_horizon_incomplete")

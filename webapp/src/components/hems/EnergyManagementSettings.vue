@@ -41,6 +41,9 @@
             <option :value="true">{{ t('hemsUi.automaticLoad') }}</option>
         </select>
         <p class="form-text">{{ t('hemsUi.learningHint') }}</p>
+        <p v-if="model.enabled && model.wear_source === 0" class="alert alert-warning">
+            {{ t('hemsUi.wearAcknowledgementHint') }}
+        </p>
         <details class="mt-3">
             <summary>{{ t('hemsUi.advancedSettings') }}</summary>
             <p class="form-text">{{ t('hemsUi.economicsHint') }}</p>

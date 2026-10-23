@@ -1320,7 +1320,11 @@
             "measurements_unavailable": "Mesures AC fraîches indisponibles ; demande batterie et limite PV à zéro.",
             "inconsistent_measurements": "Bilan AC incohérent ; commande suspendue.",
             "dpl_unavailable": "DPL indisponible ou topologie incompatible avec ces règles.",
-            "coordination_topology_unsupported": "Topologie/configuration DPL indisponible pour la commande coordonnée."
+            "coordination_topology_unsupported": "Topologie/configuration DPL indisponible pour la commande coordonnée.",
+            "nighttime_residual_only": "Nuit : batterie limitée par la demande résiduelle mesurée ; limitation conjointe de l’export PV indisponible",
+            "pv_charge_waiting_surplus": "La charge PV seule attend un surplus mesuré ; démarrer depuis un PV entièrement bridé nécessite la charge réseau autorisée ou l’export PV permis",
+            "hold_baseline_infeasible": "Le maintien de la batterie viole la politique ou l’objectif ; comparaison des économies indisponible",
+            "negative_terminal_headroom_unmodeled": "Prix de continuation négatif : valeur de la capacité libre future non modélisée"
         },
         "modeSummaryDisabled": "La commande HEMS est désactivée.",
         "modeSummaryMonitor": "Les écritures automatiques sont désactivées. Les commandes manuelles exigent l’autorisation Commande HEMS.",
@@ -1386,10 +1390,12 @@
             "charging": "Charge économique",
             "holding": "Maintien au repos économique",
             "discharging": "Décharge économique",
-            "replanning": "Recalcul de l’intervalle actuel"
+            "replanning": "Recalcul de l’intervalle actuel",
+            "waiting_wear_cost": "En attente d’un coût de cycle batterie estimé ou explicitement configuré",
+            "holding_flow_protection": "Arrêt de protection conservé ; en attente d’autorité coordonnée ou de retrait explicite"
         },
         "energyManagement": "Gestion de l’énergie",
-        "managementHint": "Coordonne la batterie AC avec DPL. Désactivez les règles WARP écrivant sur la batterie avant d’autoriser HEMS ; WARP peut continuer à gérer le véhicule. L’export nul est pris en charge. Les réglages et délais réseau peuvent permettre des transitoires.",
+        "managementHint": "Coordonne la batterie AC avec DPL. Les autorisations d’export ci-dessous s’appliquent à la coordination active ; sinon la règle historique d’export batterie liée à la rémunération reste applicable. Désactiver les anciennes règles WARP écrivant sur la batterie avant de confier le contrôle à HEMS ; WARP peut continuer à gérer le véhicule. Les réglages et délais réseau permettent encore des transitoires.",
         "referencePreset": "Appliquer les objectifs du foyer",
         "coordinateOptIn": "Activer explicitement la commande coordonnée",
         "operatingPreference": "Préférence de fonctionnement",
@@ -1418,7 +1424,7 @@
         "terminal_price_micros": "Hypothèse de prix d’import de continuation",
         "hysteresis_micros": "Hystérésis de changement de plan (montant)",
         "explicitTerminalPrice": "Utiliser un prix de continuation explicite",
-        "terminalHint": "Utilise le plus bas prix futur couvert si la recharge est autorisée, sinon une hypothèse de prix médian. Si la suite manque, la médiane de l’horizon couvert reste une estimation. La valeur du stock n’est pas une économie réalisée. Réserve et échéances restent obligatoires ; l’hystérésis compare les plans réalisables sur les mêmes données fraîches.",
+        "terminalHint": "Utilise le prix d’import futur couvert le plus bas si la recharge est autorisée, sinon une hypothèse médiane. Les tarifs futurs manquants sont estimés sur l’horizon couvert. Les prix dérivés négatifs sont ramenés à zéro : la capacité libre pour une recharge future rémunérée n’est pas valorisée. La valeur du stock n’est pas une économie réalisée. Réserve et échéances restent obligatoires ; l’hystérésis compare des plans réalisables avec les mêmes données fraîches.",
         "coveredSlots": "périodes couvertes par le profil",
         "chargeRationale": "Cible de charge maximale affichée, selon consommation, PV et coûts :",
         "plannedCommanded": "Puissance prévue / dernière commande",
@@ -1427,6 +1433,7 @@
         "importCost": "Coût d’import prévu",
         "exportRevenue": "Revenu d’export prévu",
         "inventoryValue": "Ajustement du stock final",
-        "curtailment": "Écrêtement PV"
+        "curtailment": "Écrêtement PV",
+        "wearAcknowledgementHint": "La planification indicative omet une usure inconnue. Le pilotage économique coordonné attend un coût de cycle estimé ou explicitement configuré dans Avancé. Choisir explicitement zéro confirme que l’usure est exclue."
     }
 }

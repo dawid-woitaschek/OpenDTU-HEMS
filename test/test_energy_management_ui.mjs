@@ -27,4 +27,5 @@ for (const locale of ['en', 'de', 'fr']) {
     for (const key of keys) assert.equal(typeof ui[key], 'string', `${locale}: ${key}`);
     for (const key of ['pv_export', 'battery_export', 'ev_protection', 'degradation_micros', 'buffer_micros', 'terminal_hours', 'terminal_price_micros', 'hysteresis_micros']) assert.equal(typeof ui[key], 'string', `${locale}: ${key}`);
 }
+assert.match(settings, /model.enabled && model.wear_source === 0/);
 console.log('Energy settings: explicit opt-in, reference goals without ratings/control grants, and en/de/fr labels passed');

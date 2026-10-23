@@ -59,6 +59,7 @@ private:
     void applyEconomic();
     Flow::Decision flowDecision(Optimizer::PlanView const& plan) const;
     bool economicAuthorized(Actuation::Command const& command) const;
+    bool flowAuthorized(Actuation::Command const& command) const;
     mutable std::mutex _economicMutex;
     Economic::Dispatch _economic;
     Flow::Decision _flow;

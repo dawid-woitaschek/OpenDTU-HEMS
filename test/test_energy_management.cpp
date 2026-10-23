@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/optimizer/Planner.h>
 #include <hems/flow/Coordinator.h>
+#include <hems/flow/DplBounds.h>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -57,6 +58,7 @@ void coordinator() {
     p.batteryExport=true; p.maxExportW=800;
     d=decide(measurements(200,0,0),-1200); assert(d.batteryW==-1000);
     p.maxExportW=0; d=decide(measurements(200,0,0),-1200); assert(d.batteryW==-200);
+    d=decide(measurements(500,1500,0),-1200); assert(d.batteryW==1000); // LocalFirst overrides permitted battery export, no netting two actions
     d=decide(measurements(20,0,-200),-1200); assert(d.batteryW==-20); // load drop
     auto s=measurements(200,500,0); s.grid.powerW.quality=Model::Quality::Stale;
     d=decide(s,-1200); assert(!d.usable && d.batteryW==0 && d.pvLimitW==0);
@@ -64,7 +66,28 @@ void coordinator() {
     p.preference=Flow::Preference::ExportFirst; p.maxExportW=800;
     d=Flow::coordinate(p,measurements(500,1500,0),1000,1000,2000,true,true,false,true,false);
     assert(d.batteryW==200);
+    // Dormancy never fabricates PV=0: residual grid-storage works with unknown
+    // PV and also with nonzero actual PV near dusk. EV protection remains final.
+    s=measurements(500,100,-200); s.pv.powerW.quality=Model::Quality::Stale;
+    d=Flow::coordinate(p,s,-1000,1000,2500,true,true,false,false,false,true);
+    assert(d.usable && !d.exportEnforcement && d.batteryW==-400 && !strcmp(d.reason,"nighttime_residual_only"));
+    d=Flow::coordinate(p,s,-1000,1000,2500,true,false,false,false,false,true); assert(d.batteryW==0);
+    d=Flow::coordinate(p,s,-1000,1000,2500,true,true,false,false,false,false); assert(!d.usable && d.batteryW==0);
+    s.grid.powerW.quality=Model::Quality::Stale;
+    d=Flow::coordinate(p,s,-1000,1000,2500,true,true,false,false,false,true); assert(!d.usable && d.batteryW==0);
+    assert(Flow::effectivePvCeiling(3000,800)==800 && Flow::effectivePvCeiling(3000,0)==0);
+    assert(Flow::effectivePvCeiling(700,800)==700 && Flow::effectivePvCeiling(100000,100000)==65535);
+    assert(!Flow::powerLimitKnown(0,0,true,0,false)); // parser's default OK is not an acknowledgement
+    assert(!Flow::powerLimitKnown(0,1000,false,0,false));
+    assert(Flow::powerLimitKnown(0,1000,true,0,false) && Flow::powerLimitKnown(0,0,true,1000,true));
+    assert(Flow::powerLimitKnown(800,0,true,0,false)); // existing nonzero behavior
+    assert(Flow::nonProducingSolarIncrease(0,0,3000)==3000);
+    assert(Flow::nonProducingSolarIncrease(800,0,3000)==0); // ordinary dawn estimate unchanged
     Flow::Mailbox bus; bus.publish({1000,1300,true}); assert(bus.cap(3000,1001)==1300 && bus.cap(3000,5001)==0);
+    bus.publish({1000,3000,true});
+    assert(bus.cap(Flow::effectivePvCeiling(3000,800),1001)==800);
+    assert(bus.cap(Flow::effectivePvCeiling(3000,300),1001)==300);
+    assert(bus.cap(Flow::effectivePvCeiling(3000,0),1001)==0);
     bus.publish({5000,0,false}); assert(bus.cap(3000,9000)==3000);
 }
 void economics() {
@@ -100,6 +123,39 @@ void planningEnvelopes() {
     assert(f.run() && f.plan.steps[0].pvW==1300 && f.plan.curtailedWs==0);
     f.c.flow.maxExportW=0; assert(f.run() && f.plan.steps[0].gridExportWs==0 && f.plan.curtailedWs==800*900);
     f.in.flowTopologySupported=false; assert(!f.run() && !strcmp(f.plan.blocker,"coordination_topology_unsupported"));
+    // A known zero global limit is not the old unknown-bound sentinel.
+    f.in.observedPvAcLimitKnown=true; f.in.observedPvAcLimitW=0;
+    f.in.flowTopologySupported=true; assert(f.run() && f.plan.steps[0].pvW==0);
+    // Local-first charges before curtailing, including an irregular exact initial
+    // state closer than one normal quantum. Disabled charge/at-full permit hold.
+    Fixture local; local.c.horizonSeconds=900; local.c.flow.preference=Flow::Preference::LocalFirst;
+    local.pv.intervals[0].value=1500; local.c.maxChargeW=1000; local.c.degradationMicros=10000000;
+    assert(local.run() && local.plan.steps[0].batteryW>0 && !local.plan.baselineValid);
+    JsonDocument report; serializePlan(local.c,local.in,local.plan,report.to<JsonObject>());
+    assert(report["baseline_valid"]==false && report["baseline_cost_nano"].isNull() && report["modeled_savings_nano"].isNull()
+        && report["projected_grid_bill_difference_nano"].isNull());
+    local.in.storage.socPct.value=11.9; local.pv.intervals[0].value=530;
+    assert(local.run() && local.plan.steps[0].endWh==600); // 595 -> 600 Wh, below 100 Wh quantum
+    local.in.currentConstraints.chargeAllowed=false; assert(local.run() && local.plan.steps[0].batteryW==0 && local.plan.baselineValid);
+    local.in.currentConstraints.chargeAllowed=true; local.in.storage.socPct.value=90;
+    assert(local.run() && local.plan.steps[0].batteryW==0 && local.plan.baselineValid);
+    // A target outside partial tariff coverage is not an inserted lattice state.
+    Fixture partial; partial.c.horizonSeconds=1800; partial.tariff.count=1;
+    partial.c.flow.preference=Flow::Preference::LocalFirst; partial.pv.intervals[0].value=1300;
+    partial.c.policies.gridChargingAllowed=false;
+    partial.c.policies.targetEnabled=true; partial.c.policies.targetSoc=13;
+    partial.c.policies.targetDeadline=Now+1800;
+    assert(partial.run() && partial.plan.steps[0].endWh==600 && partial.plan.partial);
+    // No grid/export permission: don't promise a future charge that cannot start
+    // after DPL has curtailed PV to load. Fresh surplus or grid permission recovers.
+    Fixture boot; boot.c.horizonSeconds=900; boot.pv.intervals[0].value=1500;
+    boot.c.flow.preference=Flow::Preference::LocalFirst; boot.c.policies.gridChargingAllowed=false;
+    boot.in.pvSurplusObserved=false; assert(boot.run() && boot.plan.steps[0].batteryW==0);
+    auto waiting=Flow::coordinate(boot.c.flow,measurements(500,500,0),1000,1000,2500,true,true,false,true,true);
+    assert(waiting.batteryW==0 && waiting.pvLimitW==500 && !strcmp(waiting.reason,"pv_charge_waiting_surplus"));
+    boot.in.pvSurplusObserved=true; assert(boot.run() && boot.plan.steps[0].batteryW>0);
+    boot.in.pvSurplusObserved=false; boot.c.policies.gridChargingAllowed=true;
+    assert(boot.run() && boot.plan.steps[0].batteryW>0);
     Fixture bounded; bounded.in.storageLimits={true,400,300}; bounded.c.horizonSeconds=7200;
     for(unsigned n=4;n<8;++n) bounded.tariff.intervals[n].value=bounded.tariff.intervals[n].importPrice=400000;
     assert(bounded.run()); for(unsigned n=0;n<bounded.plan.count;++n) assert(bounded.plan.steps[n].batteryW<=400 && bounded.plan.steps[n].batteryW>=-300);
@@ -115,6 +171,13 @@ void planningEnvelopes() {
     assert(tail.run() && !tail.plan.terminalFutureCovered && tail.plan.terminalPrice==150000);
     for(unsigned soc: {20u,40u,80u}) { tail.in.storage.socPct.value=soc; assert(tail.run() && tail.plan.terminalPrice==150000); }
     tail.tariff.count=192; assert(tail.run() && tail.plan.terminalFutureCovered);
+    // Deliberate bounded terminal limitation: negative credible prices are
+    // disclosed, never unsigned-wrapped or fabricated into a headroom model.
+    for (auto& price:tail.tariff.intervals) price.value=price.importPrice=-100000;
+    assert(tail.run() && tail.plan.terminalPrice==0 && tail.plan.negativeTerminalPrice);
+    report.clear(); serializePlan(tail.c,tail.in,tail.plan,report.to<JsonObject>());
+    bool warned=false; for(auto warning:report["warnings"].as<JsonArray>()) warned |= warning=="negative_terminal_headroom_unmodeled";
+    assert(warned);
     // Odd Wh and odd micro coefficients retain half-nano costs until plan totals.
     Fixture tiny; tiny.c.capacityWh=50; tiny.c.socStepPct=2; tiny.c.baseLoadW=20;
     tiny.c.horizonSeconds=7200; tiny.c.chargePermille=tiny.c.dischargePermille=1000;

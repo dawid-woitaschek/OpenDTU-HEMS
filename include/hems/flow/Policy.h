@@ -9,4 +9,7 @@ struct Policy {
     Preference preference = Preference::Economic;
     uint32_t maxExportW = 0, pvAcLimitW = 0;
 };
+// Unknown wear still permits shadow analysis; new active coordination requires
+// an estimate or explicit coefficient (zero is an intentional acknowledgement).
+inline bool economicWearAcknowledged(Policy const& p, uint8_t source) { return !p.enabled || source != 0; }
 } // namespace Hems::Flow

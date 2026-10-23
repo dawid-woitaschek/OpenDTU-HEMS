@@ -1,4 +1,5 @@
 #include "PowerLimiterSolarInverter.h"
+#include <hems/flow/DplBounds.h>
 
 PowerLimiterSolarInverter::PowerLimiterSolarInverter(PowerLimiterInverterConfig const& config)
     : PowerLimiterOverscalingInverter(config) { }
@@ -35,10 +36,11 @@ uint16_t PowerLimiterSolarInverter::getMaxIncreaseWatts() const
     if (!isEligible()) { return 0; }
 
     if (!isProducing()) {
-        // the inverter is not producing, we don't know how much we can increase
-        // the power, but its likely that its early in the morning when this happens,
-        // so we return the lower power limit.
-        return _config.LowerPowerLimit;
+        // Dawn output is unknown: retain the ordinary lower-floor estimate.
+        // A known zero limit itself prevents production, however. Offer its
+        // configured capacity so the existing allocator can restore only the
+        // requested, bounded output; this is not a measured PV-power estimate.
+        return Hems::Flow::nonProducingSolarIncrease(getCurrentLimitWatts(), _config.LowerPowerLimit, getConfiguredMaxPowerWatts());
     }
 
     // The inverter produces the configured max power or more.

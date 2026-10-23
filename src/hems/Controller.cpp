@@ -18,7 +18,8 @@ bool Controller::providerAuthorization(void* context, Actuation::Command const& 
     if (!context) { return false; }
     auto& controller = *static_cast<Controller*>(context);
     return controller.readiness(command.target, command.automatic, false).allowed() && controller.constraintsPermit(command)
-        && (command.origin != Actuation::Origin::Economic || controller.economicAuthorized(command));
+        && (command.origin != Actuation::Origin::Economic || controller.economicAuthorized(command))
+        && (command.origin != Actuation::Origin::Flow || controller.flowAuthorized(command));
 }
 
 void Controller::init(Scheduler& scheduler)
@@ -37,7 +38,7 @@ void Controller::init(Scheduler& scheduler)
         auto policyPlan = Optimizer::ShadowOptimizer.dispatchPlan();
         {
             std::lock_guard<std::mutex> lock(_policyMutex);
-            if (!policyPlan.config.flow.evProtection) { normalized.evse.device.enabled = false; _evProtectionPolicy.reset(); }
+            if (policyPlan.config.flow.enabled && !policyPlan.config.flow.evProtection) { normalized.evse.device.enabled = false; _evProtectionPolicy.reset(); }
             _evProtectionPolicy.update(normalized.evse, millis(), controlCapability(), getMode() == Mode::Active);
         }
         applyEvProtection();
@@ -246,11 +247,14 @@ void Controller::applyEvProtection()
     }
     if (block && !observedDischarge) { return; }
     if (!block && !_evProtectionOwned) { return; }
+    if (!block && Optimizer::ShadowOptimizer.dispatchPlan().config.flow.enabled) {
+        if (_storage.handoffProtectionToFlow()) { _evProtectionOwned = false; }
+        return;
+    }
     auto now = millis();
     if (_lastPolicyAttemptMs && now - _lastPolicyAttemptMs < 5000) { return; }
     Actuation::Command command; command.target = ControlTarget::Storage;
-    command.action = block || Optimizer::ShadowOptimizer.dispatchPlan().config.flow.enabled
-        ? Actuation::Action::Stop : Actuation::Action::Release;
+    command.action = block ? Actuation::Action::Stop : Actuation::Action::Release;
     uint32_t id;
     if (submitActuation(command, id)) {
         _lastPolicyAttemptMs = now;
@@ -273,16 +277,28 @@ Flow::Decision Controller::flowDecision(Optimizer::PlanView const& plan) const
     if (physical.known) { charge = std::min(charge, physical.chargeW); discharge = std::min(discharge, physical.dischargeW); }
     if (limits.maxChargePower.active) { charge = std::min<double>(charge, std::max(0.0, limits.maxChargePower.valueW)); }
     if (limits.maxDischargePower.active) { discharge = std::min<double>(discharge, std::max(0.0, limits.maxDischargePower.valueW)); }
-    return Flow::coordinate(plan.config.flow, state, plan.batteryW, charge, discharge,
+    auto policy = plan.config.flow;
+    if (dpl.atMs && millis() - dpl.atMs <= 3000) { policy.pvAcLimitW = std::min(policy.pvAcLimitW, dpl.physicalAcW); }
+    return Flow::coordinate(policy, state, plan.batteryW, charge, discharge,
         limits.chargeAllowed && state.storage.socPct.usable() && state.storage.socPct.value < plan.config.maxSoc,
         limits.dischargeAllowed && plan.config.policies.dischargeAllowed && state.storage.socPct.usable() && state.storage.socPct.value > plan.config.minSoc,
-        plan.config.policies.gridChargingAllowed, dpl.available && millis() - dpl.atMs <= 3000, dpl.pvHeadroom);
+        plan.config.policies.gridChargingAllowed, dpl.available && millis() - dpl.atMs <= 3000, dpl.pvHeadroom,
+        dpl.solarDormant && millis() - dpl.atMs <= 3000);
+}
+bool Controller::flowAuthorized(Actuation::Command const& command) const
+{
+    auto plan = Optimizer::ShadowOptimizer.dispatchPlan();
+    auto owner = _storage.owner();
+    return command.automatic && command.target == ControlTarget::Storage && command.action == Actuation::Action::Stop
+        && plan.config.flow.enabled && !plan.paused
+        && owner != Actuation::Origin::Manual && owner != Actuation::Origin::Protection;
 }
 bool Controller::economicAuthorized(Actuation::Command const& command) const
 {
     auto plan = Optimizer::ShadowOptimizer.dispatchPlan();
     if (!command.automatic || command.target != ControlTarget::Storage || !plan.config.dispatchEnabled
-            || plan.paused || !plan.valid || command.authority != plan.revision) { return false; }
+            || plan.paused || !plan.valid || command.authority != plan.revision
+            || !Flow::economicWearAcknowledged(plan.config.flow, plan.config.wearSource)) { return false; }
     if (plan.config.flow.enabled) { plan.batteryW = flowDecision(plan).batteryW; }
     auto owner = _storage.owner();
     if ((_evProtectionOwned || owner == Actuation::Origin::Protection) && plan.batteryW <= 0) { return false; }
@@ -300,7 +316,13 @@ void Controller::applyEconomic()
 {
     Economic::Context input;
     input.plan = Optimizer::ShadowOptimizer.dispatchPlan();
-    auto flow = flowDecision(input.plan);
+    auto flowPlan = input.plan;
+    bool economicAuthority = flowPlan.valid && flowPlan.config.dispatchEnabled
+        && Flow::economicWearAcknowledged(flowPlan.config.flow, flowPlan.config.wearSource);
+    if (!economicAuthority) {
+        flowPlan.batteryW = 0; flowPlan.config.maxChargeW = flowPlan.config.maxDischargeW = 0;
+    }
+    auto flow = flowDecision(flowPlan);
     bool coordinate = input.plan.config.flow.enabled && getMode() == Mode::Active;
     Flow::Coordination.publish({ static_cast<uint32_t>(millis()), flow.pvLimitW, coordinate });
     if (coordinate) { input.plan.batteryW = flow.batteryW; }
@@ -322,13 +344,13 @@ void Controller::applyEconomic()
         && input.storage.acPowerW.value < -std::max(0, -flow.batteryW) - 20;
     bool excessiveCharge = input.storage.acPowerW.usable()
         && input.storage.acPowerW.value > std::max(0, flow.batteryW) + 20
-        && (!input.plan.valid || !flow.usable || input.storage.socPct.value >= input.plan.config.maxSoc);
+        && (!economicAuthority || !flow.usable || input.storage.socPct.value >= input.plan.config.maxSoc);
     if (!excessiveDischarge && !excessiveCharge) { _flowStopAttempts = 0; }
     // A hard flow restriction can require reducing an already running command
     // even while no economic plan is valid. Do not release into autonomous
     // export. Manual pause/ownership and all provider authorization still apply.
     if (coordinate && !input.plan.paused && input.permission && input.mode == Mode::Active
-            && input.owner != Actuation::Origin::Manual && input.cleanupReady
+            && input.owner != Actuation::Origin::Manual && input.owner != Actuation::Origin::Protection && input.cleanupReady
             && input.mailbox.state != Actuation::MailboxState::Pending && input.mailbox.state != Actuation::MailboxState::Running
             && (excessiveDischarge || excessiveCharge)) {
         Actuation::Command stop { ControlTarget::Storage, Actuation::Action::Stop };
@@ -346,7 +368,13 @@ void Controller::applyEconomic()
         Optimizer::ShadowOptimizer.invalidate("economic_work_revoked");
         _storage.cancelPendingCommand(input.mailbox.id);
     }
-    if (decision.cleanup && !coordinate) { _storage.releaseEconomic(); }
+    if (!coordinate && !input.protectionOwned) {
+        // Existing one-shot retained-endpoint cleanup, restricted to its owner.
+        // While coordination still applies, retain the controlled safe Stop on
+        // invalid inputs; a fresh valid plan can take it over without Release.
+        _storage.releaseFlow();
+        if (decision.cleanup) { _storage.releaseEconomic(); }
+    }
     if (decision.submit) {
         uint32_t id;
         if (submitActuation(decision.command, id)) { _economic.accepted(decision.command, id, input.nowMs); }
@@ -362,6 +390,10 @@ void Controller::serializeEconomic(JsonObject output) const
     output["pause_reason"] = plan.paused ? "manual_control" : nullptr;
     output["state"] = !plan.config.dispatchEnabled ? "disabled" : plan.paused ? "paused_manual" : state.state;
     output["owner"] = Actuation::originName(_storage.owner());
+    if (_storage.owner() == Actuation::Origin::Flow && !plan.paused
+            && (!plan.valid || !_flow.usable || !plan.config.dispatchEnabled)) {
+        output["state"] = "holding_flow_protection";
+    }
     output["plan_revision"] = plan.revision; output["energy_revision"] = plan.energyRevision;
     output["plan_valid"] = plan.valid; output["plan_reason"] = plan.reason;
     output["slot_start"] = plan.start; output["slot_end"] = plan.end;
@@ -369,8 +401,9 @@ void Controller::serializeEconomic(JsonObject output) const
     Actuation::OperationInfo stopOperation;
     bool stopSupported = _storage.operationInfo(Actuation::Action::Stop, stopOperation);
     auto storage = getStoragePlanningState();
-    output["export_enforcement_available"] = plan.config.flow.enabled && _flow.usable && !plan.paused
+    output["export_enforcement_available"] = plan.config.flow.enabled && _flow.exportEnforcement && !plan.paused
         && plan.config.enabled && plan.config.dispatchEnabled && plan.valid && stopSupported
+        && Flow::economicWearAcknowledged(plan.config.flow, plan.config.wearSource)
         && readiness(ControlTarget::Storage, true, false).allowed() && _storage.owner() != Actuation::Origin::Manual
         && !(storage.faultActive.usable() && storage.faultActive.value)
         && controlPermissionGranted(ControlTarget::Storage) && getMode() == Mode::Active
