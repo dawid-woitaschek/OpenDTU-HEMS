@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Service.h>
 #include <RuntimeDiagnostics.h>
+#include <hems/Memory.h>
 #include <hems/profiles/Profile.h>
 #include <HttpGetter.h>
 #include <LittleFS.h>
@@ -77,7 +78,7 @@ __attribute__((noinline)) bool normalizedGet(Settings const& settings, Domain do
     auto request = getter.performGetRequest();
     if (!request || !request.getStream()) { error = "http_unavailable"; return false; }
     LimitedReader reader { *request.getStream() };
-    Profiles::BoundedAllocator allocator(MaxJsonMemory); JsonDocument doc(&allocator);
+    Profiles::BoundedAllocator allocator(MaxJsonMemory, true); JsonDocument doc(&allocator);
     auto decoded = deserializeJson(doc, reader, DeserializationOption::NestingLimit(6));
     int c; bool trailing = false;
     while (!decoded && (c = reader.read()) >= 0) { if (c > 32) { trailing = true; break; } }
@@ -85,19 +86,19 @@ __attribute__((noinline)) bool normalizedGet(Settings const& settings, Domain do
     return parseSeries(doc.as<JsonVariantConst>(), domain, series, error);
 }
 // All request scratch dies here, before aggregation, quota delay, or the next plane.
-__attribute__((noinline)) bool nativeRequest(Settings const& settings, unsigned plane, std::unique_ptr<Series>& series, NativeInfo& info, char const*& error)
+__attribute__((noinline)) bool nativeRequest(Settings const& settings, unsigned plane, Memory::Ptr<Series>& series, NativeInfo& info, char const*& error)
 {
     bool ok;
     {
         char url[256];
         if (settings.source == Source::ForecastSolar) { forecastUrl(settings.planes[plane], url, sizeof(url)); }
         else { tariffUrl(utcNow(), url, sizeof(url)); }
-        Profiles::BoundedAllocator allocator(MaxJsonMemory); JsonDocument doc(&allocator);
+        Profiles::BoundedAllocator allocator(MaxJsonMemory, true); JsonDocument doc(&allocator);
         ok = providerGet(url, settings.source, doc, info, error);
         if (ok) {
             // providerGet has destroyed its HTTP/TLS objects. The destination is
             // only needed now; do not put another 5 KiB allocation below TLS.
-            if (!series) { series.reset(new (std::nothrow) Series()); }
+            if (!series) { series = Memory::make<Series>(); }
             if (!series) { error = "insufficient_memory"; ok = false; }
             else {
                 ok = settings.source == Source::ForecastSolar ? parseForecastSolar(doc.as<JsonVariantConst>(), *series, info, error)
@@ -246,7 +247,7 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
 }
 bool Service::ingest(Domain domain, JsonVariantConst payload)
 {
-    auto series = std::unique_ptr<Series>(new (std::nothrow) Series());
+    auto series = Memory::make<Series>();
     char const* error = nullptr;
     bool parsed = series && parseSeries(payload, domain, *series, error);
     std::lock_guard<std::mutex> lock(_mutex);
@@ -348,14 +349,13 @@ __attribute__((noinline)) void Service::runPending(Domain domain)
 void Service::fetch(Domain domain, Settings const& settings, uint32_t generation)
 {
     char const* error = nullptr;
-    std::unique_ptr<Series> series;
+    Memory::Ptr<Series> series;
     bool parsed = false;
     bool outbound = false, response = false;
     if (!clockReady(settings)) { error = "clock_invalid"; }
     else if (!NetworkSettings.isConnected()) { error = "network_unavailable"; }
     else if (settings.source != Source::Normalized) {
         NativeInfo info;
-        std::unique_ptr<Series> single;
         unsigned requests = settings.source == Source::ForecastSolar ? settings.planeCount : 1;
         parsed = true;
         for (unsigned i = 0; i < requests; ++i) {
@@ -368,6 +368,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             response = false;
             Diagnostics::workerPhase(Diagnostics::Phase::ProviderStart, settings.source == Source::ForecastSolar ? i : -1);
             bool merge = settings.source == Source::ForecastSolar && series && series->count;
+            Memory::Ptr<Series> single; // Dies before quota delay and the next HTTPS request.
             info = {};
             bool ok = nativeRequest(settings, i, merge ? single : series, info, error);
             {
@@ -401,6 +402,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
                     parsed = false; break;
                 }
             }
+            single.reset();
             if (settings.source == Source::ForecastSolar && i + 1 < requests) {
                 bool more = false;
                 for (unsigned j = i + 1; j < requests; ++j) { more = more || settings.planes[j].enabled; }
@@ -410,7 +412,7 @@ void Service::fetch(Domain domain, Settings const& settings, uint32_t generation
             }
         }
     } else {
-        series.reset(new (std::nothrow) Series());
+        series = Memory::make<Series>();
         if (!series) { error = "insufficient_memory"; }
         else { outbound = true; parsed = normalizedGet(settings, domain, *series, error); }
     }

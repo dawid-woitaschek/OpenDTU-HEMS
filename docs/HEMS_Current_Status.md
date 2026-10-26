@@ -1,8 +1,13 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-22. Product branch: `hems`. The promoted HEMS line currently includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30. Promoted product baseline before this documentation refresh: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
+Snapshot: 2026-10-26. Product branch: `hems`. The promoted HEMS line currently includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30. Promoted product baseline before this documentation refresh: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
 
 PR #26 was superseded by #27. Open PR #31 (`feature/cmt-radio-rework`) targets `hems` but is **not merged and not physically validated**. It must not be treated as current product behavior.
+
+The runtime/memory stability branch `fix/hems-runtime-memory-stability` starts directly
+from current `hems` at `693eafe60fb2538ec11019dc0875737eb7e0495c`. It is **unmerged
+and physically unvalidated**. PR #34/energy-management also remains separate and
+unmerged; neither it nor PR #31 is a base for this runtime work.
 
 ## Usable control model
 
@@ -56,24 +61,56 @@ Live provider/on-device functional validation remains a separate gate. Desktop/A
 
 PR #29 audited the observed ESP32-S3 TLS allocation failures and found no proven provider memory leak. The key observed failure mode was loss of sufficiently large contiguous INTERNAL heap blocks while total free heap stayed broadly stable. The pinned Arduino 2.0.17 / ESP-IDF 4.4.7 mbedTLS binary requires large contiguous record buffers, making largest-block availability operationally important.
 
-The merged hardening reduces avoidable allocation overlap, keeps the retained optimizer Result at a stable address, releases validation/scratch allocations earlier and adds bounded fixed-storage heap diagnostics. No PSRAM requirement, periodic restart, TLS weakening, global mbedTLS/lwIP redesign or large new task stack was introduced.
+The merged hardening reduces avoidable allocation overlap, keeps the retained optimizer Result at a stable address, releases validation/scratch allocations earlier and adds bounded fixed-storage heap diagnostics. That historical pass introduced no PSRAM requirement, periodic restart, TLS weakening, global mbedTLS/lwIP redesign or large new task stack.
 
 PR #30 promoted this work to `hems` after **more than 24 hours of physical `generic_esp32s3_usb` ESP32-S3 validation without PSRAM**, including successful Forecast.Solar TLS cycles on both planes and recovery of the largest INTERNAL free block after TLS activity. This validates the memory/TLS hardening behavior observed during that run; it does not establish every provider/network scenario or prove absence of all future fragmentation issues.
 
 The PR #29 resource delta for `generic_esp32s3_usb` was +960 B static DRAM and +4,460 B reported flash over its baseline, with no PSRAM dependency. Fixed diagnostics include a preserved boot baseline, bounded heap checkpoints and allocation-failure records.
 
+Later physical evidence on **Device A** (ESP32-S3, Fusion Board v2.1, 8 MB flash,
+physically 2 MB quad PSRAM) supersedes no-PSRAM acceptance: fresh-boot INTERNAL
+minimum about 5.8 kB during HTTPS, later as low as 320 B, 28 failed allocations in
+one long run, two unexpected panic resets, and HTTPS largest INTERNAL block roughly
+7.7 kB. No-PSRAM Full HEMS has shown unacceptable pressure and panics on this device.
+After enabling its 2 MB PSRAM on the same hardware/configuration, initial cycles
+showed INTERNAL minimum about 51.9 kB, largest INTERNAL block around 47–51 kB during
+Forecast.Solar HTTPS, active PSRAM use and no failed allocations. Worker historical
+free stack remained about 3.4 kB. **Long-term PSRAM stability is not physically
+validated.** These are supplied device observations, not local PR test results.
+
+**PSRAM is the expected Full-HEMS memory tier.** No-PSRAM environments remain for
+compatibility; they are no longer the Full-HEMS design/acceptance target.
+
+The **unmerged** runtime branch adds correlated PSRAM/INTERNAL bounded diagnostics,
+explicit PSRAM placement for dynamic Series/planner data and provider JSON, earlier
+per-plane scratch release, allocation-only native request exception recovery and a
+256-byte streaming reader. It retains the bounded global DP, stacks, 512-byte malloc
+fallback, TLS roots/verification and current INTERNAL reserve configuration. With
+PSRAM present, explicit allocations fail gracefully instead of consuming INTERNAL
+on PSRAM exhaustion. See [implementation, investigations and validation boundaries](HEMS_Runtime_Memory_Stability.md).
+
+Local validation of the **unmerged runtime branch**: all 35 host test executables
+and the control-surface guard passed; `generic_esp32s3_usb`,
+`generic_esp32s3_usb_octal_psram` and `generic_esp32s3_usb_quad_psram` firmware builds
+passed. Quad compile/link delta against `693eafe6`: +832 B reported RAM and
++2,400 B reported flash. These figures are not runtime heap/physical stability
+measurements. Long-term Device A PSRAM validation remains pending; details and
+limitations are in [runtime memory stability](HEMS_Runtime_Memory_Stability.md).
+
 ## Validation and firmware
 
 Software validation accumulated through the merged milestones includes deterministic native controller/policy/provider/mailbox/executor coverage, all four permission combinations, Monitor manual commands, Active-only automatic commands, EV Protection/debounce, dispatch authority/revocation/retry/pause behavior, parser/catalog/planner/readback tests, frontend tests/builds and the firmware matrices documented in the respective PRs.
 
-Reference hardware remains Fusion Board v2.1 / Shield v1.1, ESP32-S3, 8 MB flash, `generic_esp32s3_usb`. The no-PSRAM build remains the acceptance baseline.
+Next runtime validation target: Device A, Fusion Board v2.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Existing no-PSRAM builds remain compatibility targets. Shield v1.1 remains the control-validation reference.
 
 **Physically validated on current promoted line:**
-- Runtime memory/TLS hardening over >24 h on ESP32-S3 `generic_esp32s3_usb` without PSRAM.
+- Historical PR #30 runtime memory/TLS run over >24 h on ESP32-S3 `generic_esp32s3_usb` without PSRAM; later Device A failures prevent treating this as general no-PSRAM stability acceptance.
 - Successful Forecast.Solar TLS cycles on both configured planes during that run.
 - Recovery of largest INTERNAL free block after TLS activity during that run.
 
 **Still not physically validated / still open:**
+- Long-term Full-HEMS PSRAM stability and the unmerged runtime changes on Device A.
+- PR #34 energy-management changes (separate, unmerged).
 - WARP3 current/stop/release lifecycle end to end.
 - Marstek V148 acquire/charge/discharge/Stop/Release lifecycle, actual sign/scale and persistence/watchdog behavior.
 - EV Protection end to end against the physical WARP3/Marstek combination.
@@ -90,7 +127,7 @@ The initial six-commit head had passing CI documented in the PR. Later upstream-
 
 ## Recommended next validation sequence
 
-1. Flash current verified `hems` firmware for `generic_esp32s3_usb` using the normal OTA image, never a factory image for OTA.
+1. Validate the runtime PR build separately on Device A using `generic_esp32s3_usb_quad_psram` and its normal OTA image, never a factory image for OTA. Record exact source/build identity; the runtime branch remains unmerged until accepted. Observe long-running INTERNAL/PSRAM history under provider/replanning/network load before claiming stability.
 2. Validate WARP3 semantic current/stop/release and Marstek bounded charge/discharge/stop/SoC/release against actual physical behavior, not just register readback.
 3. Exercise all storage/EVSE permission combinations in Monitor and Active, including communication interruption and recovery.
 4. Validate EV Protection end to end with real charging and storage discharge states, including the 120-second fresh-false release debounce.

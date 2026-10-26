@@ -49,7 +49,8 @@ void setup()
 {
     Diagnostics::init();
     Diagnostics::Scope boot(Diagnostics::Component::Runtime, Diagnostics::Operation::Boot);
-    // Move all dynamic allocations >512byte to psram (if available)
+    // Retain the >512-byte general malloc fallback to PSRAM. Bounded HEMS
+    // planner/provider scratch also uses explicit placement (hems/Memory.h).
     heap_caps_malloc_extmem_enable(512);
 
     // Initialize serial output

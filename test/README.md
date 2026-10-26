@@ -177,3 +177,18 @@ the production bounded filter at 192/256 records and checks Retry-After holds.
 Forecast.Solar sparse/dense capture fixtures are sanitized; the dense query is
 retained deliberately and sparse overnight gaps are rejected atomically. Fixture
 provenance is in `test/fixtures/providers/README.md`. No test contacts a provider.
+
+### Full-HEMS runtime/memory stability
+
+`test_hems_memory` compiles the production ESP32 placement path against a capability
+allocator seam: PSRAM vs absent-PSRAM selection, exhaustion without INTERNAL spill,
+and bounded JSON reallocation/accounting. `test_energy_service` tracks live Series
+across one/two/six-plane requests and delays, plus destination/aggregation allocation
+failures with atomic last-good retention. `test_energy_transport` injects bad_alloc
+in library constructors, begin/header/connect/body calls, checks RAII and subsequent
+recovery, and proves unrelated exceptions propagate. Its clock/socket seams exercise
+short reads, idle and total GET/body deadlines, millis wrap, exact payload limits,
+truncation, trailing bytes, Content-Length isolation and bounded bulk socket reads.
+`test_runtime_diagnostics` covers PSRAM history/serialization and cached failure
+samples, including absent-PSRAM zeros. These tests do not measure ESP32 stability;
+see [runtime memory stability](../docs/HEMS_Runtime_Memory_Stability.md).
