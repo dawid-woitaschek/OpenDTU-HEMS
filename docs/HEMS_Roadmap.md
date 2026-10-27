@@ -4,7 +4,7 @@ Snapshot: 2026-10-27. Product branch: `hems`, containing the promoted modernizat
 
 Foundation/productization PR #23, policy PR #24, economic dispatch PR #25, modernization/provider PR #27 and memory/TLS hardening PR #29 are merged in the promoted HEMS line. PR #26 was superseded by #27. PR #28 and PR #30 promoted those earlier milestones.
 
-PR #35 merged at `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`; PR #31 was rebased onto that hardened `hems` and refreshed to upstream OpenDTU PR #3296 head `85841577d4b55493732519edf021895b3353e759`. Its new CMT behavior has no additional physical validation. PR #34/energy-management remains separate, unmerged and untouched; it should later inherit the resulting hardened base.
+PR #35 merged at `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`; PR #31 was rebased onto that hardened `hems` and refreshed to upstream OpenDTU PR #3296 head `85841577d4b55493732519edf021895b3353e759`. Its new CMT behavior has no additional physical validation. PR #34/energy-management remains separate, unmerged, physically unvalidated and untouched; it should later inherit the resulting hardened base.
 
 ## Product model implemented in `hems`
 
@@ -19,7 +19,7 @@ OpenDTU-HEMS is supervisory home-energy automation, not the primary hardware saf
 - Economic storage dispatch is implemented as an explicit default-off opt-in. Manual storage commands durably pause economic automation until authenticated Resume.
 - Durable recovery/ownership journals and temporary-session authorization are not part of the product model. Old recovery files are ignored and administratively removable.
 - Manual UI, command/readback/telemetry diagnostics, runtime capability diagnostics and profile replacement without reboot are implemented.
-- Advanced Diagnostics can create a privacy-redacted `opendtu-hems-diagnostics/v1` support snapshot entirely in the browser. No persistent diagnostic history is written to LittleFS.
+- Advanced Diagnostics can create a privacy-redacted `opendtu-hems-diagnostics/v1` support snapshot entirely in the browser. The on-demand system request includes the existing bounded INTERNAL/PSRAM heap journal and allocation-failure records (`heap_history=1`); ordinary polling is unchanged. No persistent diagnostic history is written to LittleFS.
 - Overview presents the generated storage plan as a first-class schedule: current action, next action change, charge/hold/discharge blocks, expected SoC progression, strategy summary and modeled benefit.
 - Normal Settings keeps reserve/upper-SoC, grid-charging, economic-discharge and target/deadline controls together; technical optimizer/model knobs stay under Advanced settings.
 - Dynamic tariff and optional PV forecast domains, local/JSON provider paths, native Energy-Charts DE-LU v2 pricing and Forecast.Solar support are implemented.
@@ -30,7 +30,7 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
 
 ## Next milestones
 
-1. **Physical WARP3 + Marstek validation:** on Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback. Use the browser-only diagnostic snapshot before/after representative runs.
+1. **Physical WARP3 + Marstek validation:** on Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback. Use the [hardware validation runbook](HEMS_Hardware_Validation.md) and browser-only diagnostic snapshots before/after representative runs.
 2. **Correct actual WARP/Marstek mapping or lifecycle issues** found on hardware. Verify Marstek V148 power/SoC scaling, sign, persistence and command/watchdog behavior. Do not invent lifecycle architecture without hardware evidence.
 3. **Live provider/on-device validation:** Energy-Charts v2 HTTPS/parser/heap/stack and Forecast.Solar DNS/TLS/resources, scheduling/quota behavior and real multi-plane responses. Prior successful no-PSRAM runs do not establish long-term stability; the accepted PR #35 PSRAM run covers approximately 21 hours on Device A, with representative provider-specific live runs and retained diagnostics still useful for broader coverage.
 4. **Economic optimizer/dispatch real-input validation:** confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Software behavior is implemented; physical charge/discharge behavior remains the gate.
@@ -88,6 +88,27 @@ PR #31 compares the previously ported upstream `96f109311b69457fc27f05a01d82091f
 Recovery/probing, acknowledged channel changes, heard/link state and known line-A single-channel behavior remain. HEMS/OnBattery polling units, CMT-only RF-info traffic, stricter duplicate comparison, DEBUG diagnostics, existing country/radio setup and PR #35 hardening are retained. NRF source remains unchanged, with default-compatible shared abstractions.
 
 Physical CMT validation remains limited to previously tested behavior. No new hardware validation occurred for this refresh; the accepted Device A runtime run applies to PR #35. Refreshed RX/recovery and wider module/RF compatibility remain hardware follow-up work, not a claim of RF reliability.
+
+## Repository cleanup and deferred EV work
+
+PR #32 is superseded by the current-`hems` cleanup. The
+[hardware validation runbook](HEMS_Hardware_Validation.md), heap-history support
+export/regression and binding state-maintenance instructions are salvaged; its
+stale status rewrites and no-PSRAM reference are deliberately excluded. The runbook
+uses the Full-HEMS PSRAM target and records pending control/dispatch gates; adding
+procedures does not complete physical validation. The dispatch contract's obsolete
+Draft label is removed because PR #25 is already merged.
+
+PR #33 is deferred/superseded without merge or rebase. Keep
+`feature/hems-ev-shadow-simulation` and its [immutable shadow-planning design](https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/ac771b02266f9c0395f86519a660f845fbd2c125/docs/HEMS_Economic_EV_Charging.md)
+for future Economic EV Charging. Its obsolete PR #32 baseline (`59e5b22d`) and
+overlap with PR #34's optimizer/service/API/UI/snapshot areas prevent carrying it
+forward now. After #34's outcome, reassess intent/deadline semantics, residual-PV
+and storage conflicts, bounded planning, deterministic scenarios and pagination
+against current control contracts and PSRAM budgets; selectively reimplement useful
+parts rather than replaying stale state text. No economic EVSE producer is installed
+in `hems`. PR #34 is still separate, unmerged and physically unvalidated, and is
+untouched by this cleanup.
 
 ## Verification and resource discipline
 
