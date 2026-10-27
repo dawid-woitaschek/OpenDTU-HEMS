@@ -3,6 +3,7 @@
  * Copyright (C) 2022-2026 Thomas Basler and others
  */
 #include "InverterAbstract.h"
+#include "Hoymiles.h"
 #include "crc.h"
 #include <cstring>
 #include <esp_log.h>
@@ -25,6 +26,7 @@ InverterAbstract::InverterAbstract(HoymilesRadio* radio, const uint64_t serial)
     _devInfoParser.reset(new DevInfoParser());
     _gridProfileParser.reset(new GridProfileParser());
     _powerCommandParser.reset(new PowerCommandParser());
+    _rfInfoParser.reset(new RfInfoParser());
     _statisticsParser.reset(new StatisticsParser());
     _systemConfigParaParser.reset(new SystemConfigParaParser());
 }
@@ -77,7 +79,23 @@ bool InverterAbstract::isProducing()
 
 bool InverterAbstract::isReachable()
 {
-    return _enablePolling && Statistics()->getRxFailureCount() <= _reachableThreshold;
+    if (!_enablePolling) {
+        return false;
+    }
+    if (Statistics()->getRxFailureCount() <= _reachableThreshold) {
+        return true;
+    }
+    return wasHeardRecently(static_cast<uint32_t>(_reachableThreshold) + 1);
+}
+
+bool InverterAbstract::wasHeardRecently(const uint32_t pollCycles) const
+{
+    if (_radio != Hoymiles.getRadioCmt() || CmtLink.lastHeardMs == 0) {
+        return false;
+    }
+    // HEMS/OnBattery already stores the poll interval in milliseconds.
+    const uint32_t window = pollCycles * Hoymiles.PollInterval() + 2000;
+    return millis() - CmtLink.lastHeardMs < window;
 }
 
 void InverterAbstract::setEnablePolling(const bool enabled)
@@ -175,6 +193,11 @@ PowerCommandParser* InverterAbstract::PowerCommand()
     return _powerCommandParser.get();
 }
 
+RfInfoParser* InverterAbstract::RfInfo()
+{
+    return _rfInfoParser.get();
+}
+
 StatisticsParser* InverterAbstract::Statistics()
 {
     return _statisticsParser.get();
@@ -193,7 +216,7 @@ void InverterAbstract::clearRxFragmentBuffer()
     _rxFragmentRetransmitCnt = 0;
 }
 
-void InverterAbstract::addRxFragment(const uint8_t fragment[], const uint8_t len, const int8_t rssi)
+void InverterAbstract::addRxFragment(const uint8_t fragment[], const uint8_t len, const int8_t rssi, const uint8_t expectedMainCmd)
 {
     _lastRssi = rssi;
 
@@ -204,6 +227,13 @@ void InverterAbstract::addRxFragment(const uint8_t fragment[], const uint8_t len
 
     if (len - 11 > MAX_RF_PAYLOAD_SIZE) {
         ESP_LOGE(TAG, "FATAL: (%s, %d) fragment too large", __FILE__, __LINE__);
+        return;
+    }
+
+    CmtLink.lastHeardMs = millis();
+
+    if (expectedMainCmd != 0 && fragment[0] != expectedMainCmd) {
+        ESP_LOGD(TAG, "Fragment with main command 0x%02X ignored, expected 0x%02X", fragment[0], expectedMainCmd);
         return;
     }
 
@@ -249,6 +279,16 @@ uint8_t InverterAbstract::verifyAllFragments(CommandAbstract& cmd)
             cmd.gotTimeout();
             return FRAGMENT_ALL_MISSING_TIMEOUT;
         }
+    }
+
+    if (cmd.acceptsSingleFragmentAnswer()) {
+        // RF module replies need neither the 0x80 flag nor gapless numbering.
+        if (!cmd.handleResponse(_rxFragmentBuffer, _rxFragmentLastPacketId)) {
+            cmd.gotTimeout();
+            return FRAGMENT_HANDLE_ERROR;
+        }
+
+        return FRAGMENT_OK;
     }
 
     // Last fragment is missing (the one with 0x80)

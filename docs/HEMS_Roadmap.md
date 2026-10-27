@@ -1,15 +1,10 @@
 # OpenDTU-HEMS development roadmap
 
-Snapshot: 2026-10-26. Product branch: `hems`, currently containing the promoted modernization/provider work through PR #28 and the memory/TLS hardening promoted by PR #30. Current `hems` promotion baseline before the documentation refresh: `617ef19a3af6e64b81a349a867c16facaae6aa04`.
+Snapshot: 2026-10-27. Product branch: `hems`, containing the promoted modernization/provider work through PR #28, memory/TLS hardening promoted by PR #30, **merged PR #35 runtime/PSRAM hardening and merged refreshed PR #31 CMT2300A rework**.
 
-Foundation/productization PR #23, policy PR #24, economic dispatch PR #25, modernization/provider PR #27 and memory/TLS hardening PR #29 are merged in the promoted HEMS line. PR #26 was superseded by #27. PR #28 promoted the modernization/provider state to `hems`; PR #30 promoted the memory/TLS hardening state to `hems`.
+Foundation/productization PR #23, policy PR #24, economic dispatch PR #25, modernization/provider PR #27 and memory/TLS hardening PR #29 are merged in the promoted HEMS line. PR #26 was superseded by #27. PR #28 and PR #30 promoted those earlier milestones.
 
-Open PR #31 (`feature/cmt-radio-rework`) is intentionally **not part of `hems`**. It ports CMT2300A recovery/RX-hopping behavior from current upstream OpenDTU work and remains unmerged and physically unvalidated. Its source base is the pre-documentation-refresh `hems` baseline `617ef19a3af6e64b81a349a867c16facaae6aa04`.
-
-The runtime/memory stability branch `fix/hems-runtime-memory-stability` is based
-directly on `hems` `693eafe60fb2538ec11019dc0875737eb7e0495c` and is **unmerged,
-physically unvalidated**. PR #34/energy-management is also separate and unmerged;
-this runtime work includes neither PR #31 nor PR #34.
+PR #35 merged at `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`; PR #31 was rebased onto that hardened `hems` and refreshed to upstream OpenDTU PR #3296 head `85841577d4b55493732519edf021895b3353e759`. Its new CMT behavior has no additional physical validation. PR #34/energy-management remains separate, unmerged and untouched; it should later inherit the resulting hardened base.
 
 ## Product model implemented in `hems`
 
@@ -35,12 +30,14 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
 
 ## Next milestones
 
-1. **Full-HEMS PSRAM runtime validation first:** Device A, `generic_esp32s3_usb_quad_psram`, long runs under provider/TLS/JSON/replanning/network load; use correlated INTERNAL/PSRAM checkpoints and allocation-failure history. The runtime branch remains unmerged and requires physical validation. **Physical WARP3 + Marstek validation:** on Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback. Use the browser-only diagnostic snapshot before/after representative runs.
+1. **Physical WARP3 + Marstek validation:** on Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback. Use the browser-only diagnostic snapshot before/after representative runs.
 2. **Correct actual WARP/Marstek mapping or lifecycle issues** found on hardware. Verify Marstek V148 power/SoC scaling, sign, persistence and command/watchdog behavior. Do not invent lifecycle architecture without hardware evidence.
-3. **Live provider/on-device validation:** Energy-Charts v2 HTTPS/parser/heap/stack and Forecast.Solar DNS/TLS/resources, scheduling/quota behavior and real multi-plane responses. Prior successful no-PSRAM runs do not establish long-term stability; later failures require PSRAM validation plus representative provider-specific live runs and retained diagnostics.
+3. **Live provider/on-device validation:** Energy-Charts v2 HTTPS/parser/heap/stack and Forecast.Solar DNS/TLS/resources, scheduling/quota behavior and real multi-plane responses. Prior successful no-PSRAM runs do not establish long-term stability; the accepted PR #35 PSRAM run covers approximately 21 hours on Device A, with representative provider-specific live runs and retained diagnostics still useful for broader coverage.
 4. **Economic optimizer/dispatch real-input validation:** confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Software behavior is implemented; physical charge/discharge behavior remains the gate.
 5. **Product UX / planning presentation:** perform real-device visual validation and polish of Overview, Settings, Devices and Diagnostics. Keep one authoritative control model; tariff categories remain presentation-only.
-6. **CMT2300A radio recovery/RX hopping:** PR #31 is open and unmerged. Review CI separately when available, then perform hardware validation before any merge or promotion. Do not claim RF reliability from CI alone. If accepted, update both this roadmap and Current Status in the same PR before merge/promotion.
+6. **CMT2300A hardware follow-up:** refreshed PR #31 is merged. Local integration validation: all 36 native test executables and the control-surface guard passed, including PSRAM allocation/JSON failure recovery and CMT receive-flag handling. Production configuration compatibility and firmware channel/provenance tests passed; Hoymiles and changed wrapper/test sources passed cpplint with the repository filters. Source parity, hardening ancestry/scope and `git diff --check` passed. The `generic_esp32s3_usb_quad_psram` and `generic_esp32s3_usb` firmware builds passed with the existing embedded web assets; the frontend hook was skipped using `GITHUB_ACTIONS=true`. GitHub Actions were not queried or awaited.
+
+Physical CMT validation remains limited to previously tested behavior; no new hardware validation occurred for the upstream refresh. Exercise reception/recovery and module compatibility on the combined build. Address later failures with rollback or targeted fixes; source/build checks do not establish RF reliability.
 7. **Deferred economic policy expansion:** minimum-economic-benefit/hysteresis and recurring target/reserve schedules after real dispatch behavior is validated. Avoid a generic rule-engine DSL.
 8. **Economic EV charging:** define product semantics first, then add an EVSE optimizer/dispatch policy through the existing semantic actuator and permission model. No automatic economic EVSE producer exists yet.
 9. **Optional inverter firmware-update research:** reverse-engineered Hoymiles update transport exists in historical community work, but this is explicitly deferred and is not part of current `hems`. Any future implementation must be isolated, fail-closed on compatibility and physically validated before promotion.
@@ -48,9 +45,9 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
 
 Identity/recovery work remains optional unless physical testing proves a concrete operational need. There is no architectural mega-milestone before useful operation.
 
-## Current open work and validation boundaries
+## Integrated work and validation boundaries
 
-### Runtime memory stability (unmerged)
+### Runtime memory stability (PR #35 merged)
 
 PSRAM is the expected Full-HEMS tier; existing no-PSRAM environments stay as
 compatibility builds. Device A (Fusion Board v2.1, ESP32-S3, 8 MB flash, physically
@@ -60,9 +57,13 @@ HTTPS largest INTERNAL block roughly 7.7 kB: unacceptable pressure/panics. With
 2 MB PSRAM enabled on the same hardware/configuration, initial cycles showed about
 51.9 kB INTERNAL minimum, 47–51 kB largest INTERNAL during Forecast.Solar HTTPS,
 active PSRAM use and no failed allocations; worker historical free stack about
-3.4 kB. This is a strong initial improvement, **not long-term PSRAM validation**.
+3.4 kB. Subsequently, PR #35 was physically exercised on Device A with 2 MB PSRAM
+for approximately 21 hours without allocation failures, unexpected resets, heap
+drift, fragmentation drift or critical stack loss. This supplied validation is
+accepted as sufficient for the current project stage, without asserting every
+provider/network scenario or indefinite stability.
 
-The unmerged runtime branch implements explicit PSRAM placement for dynamic bounded
+Merged PR #35 implements explicit PSRAM placement for dynamic bounded
 Series/planner data and provider JSON; correlated PSRAM/INTERNAL history; per-plane
 scratch release before later HTTPS; bad_alloc-only request recovery; and a bounded
 256-byte streaming reader. DP and task stacks remain unchanged. Keep the 512-byte
@@ -72,21 +73,21 @@ unchanged. No no-PSRAM environment is removed. Software/build evidence and remai
 hardware gates are separated in [runtime memory stability](HEMS_Runtime_Memory_Stability.md).
 PR #34's larger planner/result/learning data should later inherit this runtime base.
 
-Local validation of the **unmerged runtime branch**: all 35 host test executables
+Local validation recorded for **PR #35**: all 35 host test executables
 and the control-surface guard passed; `generic_esp32s3_usb`,
 `generic_esp32s3_usb_octal_psram` and `generic_esp32s3_usb_quad_psram` firmware builds
 passed. Quad compile/link delta against `693eafe6`: +832 B reported RAM and
 +2,400 B reported flash. These figures are not runtime heap/physical stability
-measurements. Long-term Device A PSRAM validation remains pending; details and
-limitations are in [runtime memory stability](HEMS_Runtime_Memory_Stability.md).
+measurements. The later 21-hour Device A run supplies the stage-accepted physical
+validation; implementation details and investigation limits are in [runtime memory stability](HEMS_Runtime_Memory_Stability.md).
 
-### PR #31 - CMT2300A radio rework
+### CMT2300A radio rework (PR #31 merged)
 
-Open against `hems`, source branch `feature/cmt-radio-rework`, current documented head `a9f0592a0fbbfc3adf1324d397272252a64783d0`.
+PR #31 compares the previously ported upstream `96f109311b69457fc27f05a01d82091f821f26b2` with current [OpenDTU PR #3296](https://github.com/tbnobody/OpenDTU/pull/3296) head `85841577d4b55493732519edf021895b3353e759`. All five changed CMT files are adapted: receive-state detection and preamble-flag consumption, 3,000 µs wait / 100,000 µs sync hold, packet-drain timer reset and removal of predicted RX-ring state/following.
 
-The PR ports current upstream CMT2300A recovery, probing, channel-change acknowledgement handling, per-inverter heard/link state and RX-ring following while retaining HEMS/OnBattery behavior. It intentionally leaves NRF source behavior unchanged except for shared default-compatible abstractions.
+Recovery/probing, acknowledged channel changes, heard/link state and known line-A single-channel behavior remain. HEMS/OnBattery polling units, CMT-only RF-info traffic, stricter duplicate comparison, DEBUG diagnostics, existing country/radio setup and PR #35 hardening are retained. NRF source remains unchanged, with default-compatible shared abstractions.
 
-The initial six-commit head previously had passing CI as documented in the PR. Later follow-up commits were pushed to align with newer upstream behavior, but their CI status is not asserted here. Hardware validation has not been performed. Therefore PR #31 is **unmerged and physically unvalidated** and must not be described as current `hems` behavior.
+Physical CMT validation remains limited to previously tested behavior. No new hardware validation occurred for this refresh; the accepted Device A runtime run applies to PR #35. Refreshed RX/recovery and wider module/RF compatibility remain hardware follow-up work, not a claim of RF reliability.
 
 ## Verification and resource discipline
 
@@ -96,6 +97,6 @@ Before recommending flashing or promotion, verify the exact tested source/merge 
 
 The support snapshot is a support/validation transport, not a logging subsystem: it is generated only on demand, secrets are always redacted, network/location data are opt-in, and no persistent diagnostic history is created on the device.
 
-The Full-HEMS acceptance target is now Device A with `generic_esp32s3_usb_quad_psram`; no-PSRAM `generic_esp32s3_usb` remains a compatibility build. PR #29/#30 historically added 960 bytes static DRAM with no PSRAM requirement. The unmerged runtime branch retains fixed, bounded diagnostics and introduces explicit PSRAM placement without periodic restart, TLS weakening, or TCP/IP/AsyncTCP stack redesign. Long-term PSRAM validation is pending.
+The Full-HEMS acceptance target is now Device A with `generic_esp32s3_usb_quad_psram`; no-PSRAM `generic_esp32s3_usb` remains a compatibility build. PR #29/#30 historically added 960 bytes static DRAM with no PSRAM requirement. Merged PR #35 retains fixed, bounded diagnostics and introduces explicit PSRAM placement without periodic restart, TLS weakening, or TCP/IP/AsyncTCP stack redesign. Its approximately 21-hour Device A PSRAM run is accepted for this stage. Broader scenarios and the combined refreshed CMT behavior remain separate validation work.
 
 The separate intermittent inbound-new-connection investigation remains unproven as a HEMS issue. It does not block the product model.

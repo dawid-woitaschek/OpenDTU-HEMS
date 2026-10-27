@@ -1,9 +1,10 @@
 # Full HEMS runtime/memory stability
 
-Work on `fix/hems-runtime-memory-stability`, directly from `hems`
-`693eafe60fb2538ec11019dc0875737eb7e0495c`. **Unmerged; physical validation of
-these changes is pending.** PR #31/CMT and PR #34/energy-management are separate,
-unmerged lines and are not included.
+PR #35 (`fix/hems-runtime-memory-stability`), based on `hems`
+`693eafe60fb2538ec11019dc0875737eb7e0495c`, is merged at
+`f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`. The investigation and build figures
+below describe that runtime change. Refreshed PR #31/CMT is merged separately on
+this hardened base; PR #34/energy-management remains unmerged and untouched.
 
 ## Physical evidence supplied for this work
 
@@ -24,7 +25,13 @@ remains historical evidence, but the later pressure/failures make no-PSRAM Full
 HEMS unacceptable as the design/acceptance target. **PSRAM is the expected Full
 HEMS memory tier.** Existing no-PSRAM environments remain buildable compatibility
 targets; their eventual compatibility/deprecation policy is separate. A strong
-initial improvement with 2 MB PSRAM does not prove long-term stability.
+initial improvement with 2 MB PSRAM alone did not prove long-term stability.
+
+Subsequent user-supplied physical validation exercised PR #35 on Device A with
+2 MB PSRAM for approximately 21 hours without allocation failures, unexpected
+resets, heap drift, fragmentation drift or critical stack loss. This is accepted
+as sufficient for the current project stage. It does not establish every future
+provider/network scenario or validate the subsequently refreshed CMT behavior.
 
 ## Implementation and source-derived implications
 
@@ -176,13 +183,14 @@ changed USB/quad builds, same compiler/SDK):
 
 This adds 432 B along that selected HEMS call path, excluding library/callback
 frames. It is not a measured worker watermark. The 10,240 B worker stack remains
-unchanged; Device A must recheck its historical free watermark with this build.
+unchanged; the later Device A run reported no critical stack loss, without supplying
+a new numeric watermark here.
 
 These results cannot establish actual free heap, PSRAM timing, Wi-Fi behavior or
 long-term stability on ESP32. CI runs independently; no remote workflow polling
 was performed.
 
-The next physical target is **Device A, `generic_esp32s3_usb_quad_psram`**. Capture
+For further physical coverage use **Device A, `generic_esp32s3_usb_quad_psram`**. Capture
 boot and quiet worker-idle baselines plus before-connect/connected/response/parsed/
 released checkpoints, both providers and all enabled planes, including failure
 records/capabilities, quotas, timestamps and stack watermark. Exercise normally
