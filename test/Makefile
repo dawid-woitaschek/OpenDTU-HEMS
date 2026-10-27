@@ -46,7 +46,12 @@ all: test_hems_memory
 test_hems_memory: test_hems_memory.cpp ../include/hems/Memory.h ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -DESP32 -Imemory_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
-all: test_economic_dispatch test_economic_integration $(TEST_ENERGY_CHARTS_V2)
+all: test_economic_dispatch test_economic_integration $(TEST_ENERGY_CHARTS_V2) test_cmt_rx_state
+
+# Compile the production wrapper; discard unused hardware entry points at link time.
+test_cmt_rx_state: test_cmt_rx_state.cpp ../lib/CMT2300a/cmt2300wrapper.cpp ../lib/CMT2300a/cmt2300wrapper.h ../lib/CMT2300a/cmt2300a.h ../lib/CMT2300a/cmt2300a_defs.h
+	$(CXX) $(CXXFLAGS) -ffunction-sections -fdata-sections -Itransport_stubs -I../lib/CMT2300a -Wl,--gc-sections -o $@ $(filter %.cpp,$^)
+
 $(TEST_PROVIDER_CLEANUP): ../src/hems/economic/Dispatch.cpp economic_disabled.cpp
 test_economic_dispatch: test_economic_dispatch.cpp ../src/hems/economic/Dispatch.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
@@ -147,6 +152,7 @@ $(TEST_SETTINGS_STORES): test_settings_stores.cpp ../src/hems/evse/SettingsStore
 	$(CXX) $(CXXFLAGS) -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $^
 
 test: all
+	./test_cmt_rx_state
 	./test_hems_memory
 	./test_economic_dispatch
 	./test_economic_integration
@@ -187,6 +193,7 @@ test: all
 	./$(TEST_SETTINGS_STORES)
 
 clean:
+	rm -f test_cmt_rx_state
 	rm -f test_hems_memory
 	rm -f $(TEST_ENERGY_CHARTS_V2)
 	rm -f test_economic_dispatch test_economic_integration

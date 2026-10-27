@@ -15,6 +15,11 @@ make all
 make clean
 ```
 
+`make test` also checks CMT2300A receive-state detection using the production
+wrapper with register I/O seams: stale preamble consumption, sync/CRC/packet
+priority and preservation of receive flags. This does not validate RF reception
+or hopping timing on hardware.
+
 ## Test Coverage
 
 The tests cover various overscaling scenarios:

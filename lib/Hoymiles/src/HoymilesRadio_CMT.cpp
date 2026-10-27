@@ -189,89 +189,26 @@ uint8_t HoymilesRadio_CMT::rxRingNext(const uint8_t c) const
     return _rxHopCentreChannel - 1;
 }
 
-void HoymilesRadio_CMT::startRxHopping(const uint32_t centreFrequency, const bool enabled, const uint8_t firstChannel, const uint32_t stayUs)
+void HoymilesRadio_CMT::startRxHopping(const uint32_t centreFrequency, const bool enabled)
 {
     _rxHopHold = false;
     _rxHopActive = false;
-    _rxRingFollowing = false;
-    _rxRingMisses = 0;
 
     if (!enabled || !_rxHopEnabled) {
         return;
     }
 
     const uint8_t channel = getChannelFromFrequency(centreFrequency);
-    // Both neighbour channels have to exist
+    // Both neighbour channels have to exist.
     if (channel < 1 || channel >= 0xFE) {
         return;
     }
 
     _rxHopCentreChannel = channel;
     _rxHopChannel = channel;
-    _rxHopStayUntilUs = 0;
-
-    if (firstChannel != 0 && rxRingContains(firstChannel)) {
-        if (firstChannel != channel) {
-            _radio->setChannel(firstChannel);
-            _radio->startListening();
-            _rxHopChannel = firstChannel;
-        }
-        _rxHopStayUntilUs = micros() + stayUs;
-    }
-
     _rxHopLastUs = micros();
     _rxHopActive = true;
-    ESP_LOGD(TAG, "RX hopping: centre %u, first channel %u, stay %" PRIu32 " us",
-        static_cast<unsigned>(channel), static_cast<unsigned>(_rxHopChannel), stayUs);
-}
-
-void HoymilesRadio_CMT::rxRingFollow(const uint8_t c, CmtLinkState& link, const bool ownsTransaction)
-{
-    const uint8_t previousRingState = link.ringState;
-    const uint32_t nowMs = millis();
-    const uint32_t gap = nowMs - link.lastRxMs;
-    if (link.lastRxChannel != 0 && gap >= 25 && gap <= 80) {
-        if (c == link.lastRxChannel) {
-            link.ringState = 2;
-        } else if (rxRingNext(link.lastRxChannel) == c) {
-            link.ringState = 1;
-        }
-    }
-    if (link.ringState != previousRingState) {
-        ESP_LOGD(TAG, "RX ring state %u -> %u on channel %u", static_cast<unsigned>(previousRingState),
-            static_cast<unsigned>(link.ringState), static_cast<unsigned>(c));
-    }
-    link.lastRxChannel = c;
-    link.lastRxMs = nowMs;
-
-    if (link.ringState != 1) {
-        link.ringNext = 0;
-        return;
-    }
-
-    const uint8_t next = rxRingNext(c);
-    if (next == 0) {
-        return;
-    }
-    link.ringNext = next;
-
-    // The receiver is shared: a late frame of another inverter (e.g. the end of
-    // a long answer that arrived after its request timed out) must not move
-    // the receiver away from the answer of the inverter whose request is active.
-    // Its ring state above is still updated, it serves its own next request.
-    if (!_rxHopActive || !_busyFlag || !ownsTransaction) {
-        return;
-    }
-
-    // The next frame of the answer follows about 50 ms after this one, on the next channel of the ring
-    _rxHopHold = false;
-    _rxHopStayUntilUs = 0;
-    _rxRingFollowing = true;
-    _rxRingMisses = 0;
-    _radio->setChannel(next);
-    _radio->startListening();
-    _rxHopChannel = next;
-    _rxHopLastUs = micros();
+    ESP_LOGD(TAG, "RX hopping: centre %u", static_cast<unsigned>(channel));
 }
 
 void HoymilesRadio_CMT::rxHopStep()
@@ -281,44 +218,36 @@ void HoymilesRadio_CMT::rxHopStep()
         return;
     }
 
+    const uint32_t now = micros();
+
     if (_packetReceived) {
         _rxHopHold = false;
-        _rxHopLastUs = micros();
+        _rxHopLastUs = now;
         return;
     }
 
-    const uint32_t now = micros();
-
-    if (_rxHopHold) {
+    switch (_radio->getRxState()) {
+    case CmtRxState::Sync:
+        if (!_rxHopHold) {
+            _rxHopHold = true;
+            _rxHopHoldUs = now;
+        }
         if (now - _rxHopHoldUs < RX_HOP_HOLD_MAX_US) {
             return;
         }
         _rxHopHold = false;
+        break;
+    case CmtRxState::Preamble:
+        _rxHopHold = false;
         _rxHopLastUs = now;
-    }
-
-    // Waiting on the channel on which the next frame is expected
-    if (_rxHopStayUntilUs != 0 && static_cast<int32_t>(_rxHopStayUntilUs - now) > 0) {
         return;
+    default:
+        _rxHopHold = false;
+        if (now - _rxHopLastUs < RX_HOP_WAIT_US) {
+            return;
+        }
+        break;
     }
-
-    const uint32_t dwell = _rxRingFollowing ? RX_RING_SLOT_US : RX_HOP_DWELL_US;
-    if (now - _rxHopLastUs < dwell) {
-        return;
-    }
-
-    if (_radio->available()) {
-        _rxHopHold = true;
-        _rxHopHoldUs = now;
-        return;
-    }
-
-    if (_rxRingFollowing && ++_rxRingMisses >= RX_RING_MAX_MISSES) {
-        // The answer is over or lost: search again
-        _rxRingFollowing = false;
-        ESP_LOGD(TAG, "RX ring lost after %u slots, resuming hopping", static_cast<unsigned>(_rxRingMisses));
-    }
-    _rxHopStayUntilUs = 0;
 
     uint8_t channel = rxRingNext(_rxHopChannel);
     if (channel == 0) {
@@ -394,6 +323,8 @@ void HoymilesRadio_CMT::loop()
         }
         _radio->flush_rx();
         _packetReceived = false;
+        _rxHopHold = false;
+        _rxHopLastUs = micros();
 
     } else {
         rxHopStep();
@@ -419,8 +350,6 @@ void HoymilesRadio_CMT::loop()
                         const bool ownsTransaction = _busyFlag && !isQueueEmpty()
                             && _commandQueue.front()->getTargetAddress() == inv->serial();
                         const uint8_t expectedMainCmd = ownsTransaction ? (_commandQueue.front()->getMainCmd() | 0x80) : 0;
-                        const bool accepted = expectedMainCmd == 0 || f.fragment[0] == expectedMainCmd;
-                        rxRingFollow(f.channel, inv->CmtLink, ownsTransaction && accepted);
 
                         inv->addRxFragment(f.fragment, f.len, f.rssi, expectedMainCmd);
                     } else {
@@ -555,13 +484,7 @@ void HoymilesRadio_CMT::sendEsbPacket(CommandAbstract& cmd)
         && cmd.getInverter()->RfInfo()->containsValidData()
         && cmd.getInverter()->RfInfo()->getModuleLine() == RfModuleLine::A;
 
-    uint8_t firstChannel = 0;
-    uint32_t stayUs = 0;
-    if (cmd.getInverter() != nullptr && !cmd.usesBootFrequency()) {
-        firstChannel = cmd.getInverter()->CmtLink.ringNext;
-        stayUs = (cmd.getCommandName() == "RequestFrame") ? static_cast<uint32_t>(cmd.getTimeout()) * 1000 : RX_FIRST_FRAME_STAY_US;
-    }
-    startRxHopping(rxFrequency, !knownSingleChannel, firstChannel, stayUs);
+    startRxHopping(rxFrequency, !knownSingleChannel);
 
     _busyFlag = true;
     _rxTimeout.set(cmd.getTimeout());
