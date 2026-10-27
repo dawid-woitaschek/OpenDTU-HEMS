@@ -226,3 +226,90 @@ for (const key of paths(messages[0])) {
 }
 if (originalZone === undefined) delete process.env.TZ; else process.env.TZ = originalZone;
 console.log(`HEMS presentation passed: ${checks} timezone/day cases, robust price levels/flat days/duration/signs, schedule blocks/gaps/SoC, exact prices, forecast summaries, freshness, provider errors and locale parity`);
+
+// Execute the real support-export setup with deterministic API responses. Hardware
+// validation evidence must retain heap history without overlapping ESP32 responses
+// or sending commands, and partial collection must remain usable and redacted.
+{
+    const vm = await import('node:vm');
+    const component = readFileSync(new URL('../webapp/src/components/hems/SupportSnapshot.vue', import.meta.url), 'utf8');
+    const source = component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1];
+    const module = { exports: {} };
+    const authHeaders = new Headers({ Authorization: 'Basic test-only' });
+    let responder;
+    let inFlight = 0;
+    const calls = [];
+    const imports = {
+        vue: {
+            ref: value => ({ value }), computed: getter => ({ get value() { return getter(); } }),
+            getCurrentInstance: () => ({ appContext: { config: { globalProperties: { $emitter: {} } } } }),
+        },
+        'vue-i18n': { useI18n: () => ({ locale: { value: 'en' } }) },
+        'vue-router': { useRouter: () => ({}) },
+        '@/utils/authentication': { authHeader: () => authHeaders, handleResponse: response => response.json() },
+    };
+    vm.runInNewContext(ts.transpileModule(source + '\nexport { buildSnapshot, busy };', {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText, {
+        module, exports: module.exports, require: name => imports[name] || {}, Blob,
+        fetch: async (path, options) => {
+            assert.equal(inFlight, 0, 'support collection must remain sequential');
+            assert.equal(options?.method ?? 'GET', 'GET', 'export must not send commands');
+            assert.equal(options.headers, authHeaders);
+            inFlight++;
+            calls.push(path);
+            try {
+                await Promise.resolve();
+                return new Response(JSON.stringify(await responder(path)));
+            } finally { inFlight--; }
+        },
+    });
+    const snapshot = module.exports;
+    const heap = {
+        boot_baseline: { free_internal_bytes: 52000, free_psram_bytes: 1800000 },
+        history: [{ uptime_ms: 1234, largest_internal_bytes: 28000, free_psram_bytes: 1700000,
+            largest_psram_bytes: 1600000, checkpoint: 'worker_idle' }],
+        failed_allocations: [{ requested_bytes: 16717, last_checkpoint_age_ms: 5 }],
+    };
+    responder = path => {
+        if (path === '/api/system/status?heap_history=1') return {
+            reset_diagnostics: { heap }, hostname: 'private-test-host', password: 'test-secret',
+        };
+        if (path === '/api/hems/energy/tariff?all=1') throw new Error('test tariff unavailable');
+        if (path.includes('/optimizer?')) {
+            const offset = Number(new URL(path, 'http://test.invalid').searchParams.get('offset'));
+            return { schedule: [{ start: offset, end: offset + 1 }], has_more: offset < 1 };
+        }
+        return { value: 0, charging: false };
+    };
+    const first = JSON.parse(await snapshot.buildSnapshot());
+    assert.equal(first.schema, 'opendtu-hems-diagnostics/v1');
+    assert.deepEqual(first.system.reset_diagnostics.heap, heap);
+    assert.equal(first.system.password, '[redacted-secret]');
+    assert.equal(first.system.hostname, '[redacted-network]');
+    assert.equal(first.hems.charging, false);
+    assert.equal(first.energy.tariff, null);
+    assert.equal(first.collection_errors.tariff, 'test tariff unavailable');
+    assert.equal(first.optimizer.schedule.length, 2);
+    assert.equal(first.optimizer.snapshot_truncated, false);
+    assert.equal(snapshot.busy.value, false);
+    assert.deepEqual(calls, [
+        '/api/firmware/status', '/api/system/status?heap_history=1', '/api/hems/status',
+        '/api/hems/energy/tariff?all=1', '/api/hems/energy/forecast?all=1',
+        '/api/hems/optimizer?all=1&offset=0', '/api/hems/optimizer?all=1&offset=1',
+    ]);
+    calls.length = 0;
+    responder = path => {
+        if (path.startsWith('/api/system/status')) throw new Error('test system unavailable');
+        if (path.includes('/optimizer?')) return { schedule: [{ start: 0, end: 1 }], has_more: true };
+        return {};
+    };
+    const partial = JSON.parse(await snapshot.buildSnapshot());
+    assert.equal(partial.system, null);
+    assert.equal(partial.collection_errors.system, 'test system unavailable');
+    assert.equal(partial.optimizer.snapshot_pages, 16);
+    assert.equal(partial.optimizer.snapshot_truncated, true);
+    assert.equal(calls.filter(path => path.includes('/optimizer?')).length, 16);
+    assert.equal(snapshot.busy.value, false);
+    console.log('Support snapshot passed: bounded INTERNAL/PSRAM heap history, sequential authenticated GETs, redaction, partial failure and pagination bound');
+}

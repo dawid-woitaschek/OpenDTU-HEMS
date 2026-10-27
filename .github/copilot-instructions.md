@@ -1,195 +1,133 @@
-# OpenDTU-OnBattery GitHub Copilot Instructions
+# OpenDTU-HEMS GitHub Copilot Instructions
 
-**ALWAYS follow these instructions first and only fallback to additional search and context gathering if the information here is incomplete or found to be in error.**
+OpenDTU-HEMS is ESP32 C++ firmware with an embedded Vue/TypeScript web application,
+based on OpenDTU-OnBattery. `hems` is the product and default branch. Preserve the
+inherited inverter/BMS/meter/Dynamic Power Limiter behavior while developing the
+local-first HEMS layer. HEMS is experimental supervisory automation; device and
+BMS protections remain authoritative.
 
-OpenDTU-OnBattery is an ESP32-based firmware project that provides solar inverter monitoring and battery management with a web interface. The project combines C++ ESP32 firmware with a Vue.js web application that gets embedded into the firmware.
+## Binding HEMS project-state maintenance
 
-## Essential Setup and Build Process
+`docs/HEMS_Roadmap.md` and `docs/HEMS_Current_Status.md` are the authoritative
+project-state documents.
 
-### Required Dependencies
-Install dependencies in this exact order:
+- **Every HEMS-relevant PR must review both files and, when project state changes,
+  update both in the same PR.** This includes implementation, validation, hardware
+  status, open work, branches/PRs, firmware channels and known risks.
+- Before merge or promotion to `hems`, ensure both describe the resulting product
+  state accurately and remove stale information. Do not copy obsolete branch or
+  temporary PR-channel instructions into current documentation.
+- Distinguish implemented software, local checks, CI results and physical evidence.
+  Explicitly label unmerged and physically unvalidated work. **Never claim CI,
+  merge or hardware validation that did not actually happen.** Historical checks
+  are evidence for their recorded revision, not checks run by a later PR.
+- Use focused local checks appropriate to the change. Do not wait for or poll
+  remote CI / GitHub Actions.
+
+Read [Architecture](../docs/HEMS_Architecture.md), [Control](../docs/HEMS_CONTROL.md),
+[Energy data](../docs/HEMS_Energy_Data.md) and [Native providers/optimizer](../docs/HEMS_Native_Energy.md)
+for contracts. Manual and automatic control share semantic actuators, profile bounds,
+permissions, generation/freshness gates and existing provider workers/mailboxes.
+Monitor permits authorized manual commands but no automatic writes. Economic storage
+dispatch is a separate default-off opt-in; manual storage control durably pauses it
+until explicit Resume. Do not introduce raw-register write APIs or competing writers.
+
+## Hardware and memory target
+
+**PSRAM is the expected Full-HEMS memory tier.** The current runtime reference is
+Device A: Fusion Board v2.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM,
+`generic_esp32s3_usb_quad_psram`. Shield v1.1 is the control-validation reference.
+Match quad/octal PSRAM environments to actual hardware. Existing no-PSRAM targets,
+including the PlatformIO default `generic_esp32s3_usb`, are compatibility builds,
+not the Full-HEMS design/acceptance target.
+
+Keep bounded allocation, INTERNAL/PSRAM diagnostics, verified TLS and existing
+worker ownership. The accepted approximately 21-hour PR #35 Device A run does not
+validate every scenario or later changes. Host tests, builds and register readback
+do not prove physical power flow, watchdog behavior or RF reliability. Follow
+[Runtime memory stability](../docs/HEMS_Runtime_Memory_Stability.md) and the
+[hardware runbook](../docs/HEMS_Hardware_Validation.md) for evidence boundaries.
+
+## Setup and build
+
+Use the repository's Node.js 26 toolchain and pinned Yarn version from
+`webapp/package.json`; use Corepack rather than an unrelated global Yarn version.
+The workflows and `platformio.ini` define the current versions and environments.
 
 ```bash
-# Install Node.js 26 (REQUIRED - do not use older versions)
+# If the toolchain is not already installed:
 curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
 sudo apt-get install nodejs -y
-
-# Verify Node.js 26 installation
-export PATH=/usr/bin:$PATH
-node --version  # Should show v26.x.x
-
-# Enable corepack for yarn
+node --version  # v26.x
 npm install --global corepack@0.36.0
 corepack enable
+python3 -m pip install -r pio-scripts/requirements.txt
+python3 -m pip install cpplint
 
-# Install Python dependencies
-python3 -m pip install --upgrade pip
-pip install -r pio-scripts/requirements.txt
-
-# Install C++ linting
-pip install cpplint
-```
-
-### Build Process (CRITICAL ORDER)
-**The webapp MUST be built before firmware compilation. Never skip this step.**
-
-```bash
-# Navigate to repository root
-cd /path/to/OpenDTU-OnBattery
-
-# Build webapp first (ALWAYS required before firmware)
-cd webapp
-yarn install --immutable  # Takes ~25 seconds
-yarn build                       # Takes ~15 seconds - NEVER CANCEL
-
-# Return to repository root for firmware build
-cd ..
-
-# Build firmware (requires internet access)
-pio run -e generic_esp32s3_usb   # NEVER CANCEL - requires 60+ minute timeout
-```
-
-### Timing Expectations and Warnings
-- **Webapp dependencies**: ~25 seconds
-- **Webapp build**: ~15 seconds - NEVER CANCEL, set timeout to 60+ seconds
-- **Firmware build**: 10-45 minutes on first run - NEVER CANCEL, set timeout to 60+ minutes
-- **PlatformIO platform downloads**: 5-15 minutes - NEVER CANCEL, requires internet access
-
-### Network Requirements and Limitations
-**CRITICAL**: Firmware builds require internet access for:
-- ESP32 platform downloads (espressif32@6.13.0)
-- Library dependencies
-- Build tools
-
-If you encounter `HTTPClientError` during `pio run`, this indicates network restrictions that prevent PlatformIO from downloading required components. In restricted environments:
-- Webapp builds work without internet
-- Linting works without internet
-- Firmware builds will fail without internet access
-
-## Development and Validation
-
-### Linting and Code Quality
-Run these commands to validate code quality:
-
-```bash
-# Webapp linting and formatting
-cd webapp
-yarn lint                   # Takes ~3 seconds
-yarn prettier --check src/  # Takes ~3 seconds
-
-# C++ linting
-cd ..
-cpplint --repository=. --recursive \
-  --filter=-build/c++11,-runtime/references,-readability/braces,-whitespace,-legal,-build/include \
-  ./src ./include ./lib/Hoymiles ./lib/MqttSubscribeParser ./lib/TimeoutHelper ./lib/ResetReason
-# Takes ~10 seconds
-```
-
-### Available Build Environments
-Default CI environments (use any of these with `pio run -e <environment>`):
-- `generic_esp32_4mb_no_ota` - 4MB ESP32, no OTA support
-- `generic_esp32_8mb` - 8MB ESP32 with OTA
-- `generic_esp32s3` - ESP32-S3
-- `generic_esp32s3_usb` - ESP32-S3 with USB (default)
-
-### Webapp Development
-The webapp can be developed independently:
-
-```bash
-cd webapp
-yarn dev      # Start development server (if network available)
-yarn preview  # Preview production build on port 4173
-```
-
-## Project Structure and Key Files
-
-### Repository Layout
-```
-├── .github/workflows/     # CI/CD pipelines
-├── webapp/               # Vue.js web application
-│   ├── src/             # Vue.js source code
-│   ├── package.json     # Node.js dependencies
-│   └── yarn.lock        # Lockfile for dependencies
-├── src/                 # C++ ESP32 firmware source
-├── include/             # C++ header files
-├── lib/                 # External C++ libraries
-├── pio-scripts/         # PlatformIO build scripts
-├── platformio.ini       # PlatformIO configuration
-└── webapp_dist/         # Built webapp (created by yarn build)
-```
-
-### Critical Files
-- `platformio.ini`: ESP32 environments and build configuration
-- `webapp/package.json`: Node.js scripts and dependencies
-- `pio-scripts/compile_webapp.py`: Automatically rebuilds webapp if needed
-- `src/main.cpp`: ESP32 firmware entry point
-
-## Validation and Testing
-
-### Manual Validation Steps
-After making changes, ALWAYS run this complete validation sequence:
-
-```bash
-# 1. Validate webapp
+# From the repository root, build web assets before firmware:
 cd webapp
 yarn install --immutable
-yarn lint
+yarn build
+cd ..
+pio run -e generic_esp32s3_usb_quad_psram
+```
+
+The firmware embeds `webapp_dist/`. `pio-scripts/compile_webapp.py` can rebuild
+assets when needed. First firmware builds may take tens of minutes while downloading
+the pinned ESP32 platform, libraries and tools; allow adequate command time.
+Network/download failures are build-environment limitations, not passing validation.
+Webapp installation also needs network access unless dependencies are cached.
+
+Build environments include `generic_esp32_4mb_no_ota`, `generic_esp32_8mb`,
+`generic_esp32s3`, `generic_esp32s3_usb`, `generic_esp32s3_usb_quad_psram` and
+`generic_esp32s3_usb_octal_psram`; consult `platformio.ini` for the full list.
+
+## Local validation
+
+Choose checks for the changed paths; report exactly what ran and any limitations.
+For frontend work:
+
+```bash
+cd webapp
+yarn test
+yarn type-check
+yarn lint                         # Applies fixes; review the diff afterward
 yarn prettier --check src/
 yarn build
+```
 
-# 2. Validate C++ code
-cd ..
+For a focused edit, ESLint/Prettier can target the changed component directly.
+For C++ changes, use the relevant native tests and repository lint filters:
+
+```bash
 cpplint --repository=. --recursive \
   --filter=-build/c++11,-runtime/references,-readability/braces,-whitespace,-legal,-build/include \
   ./src ./include ./lib/Hoymiles ./lib/MqttSubscribeParser ./lib/TimeoutHelper ./lib/ResetReason
 
-# 3. Attempt firmware build (may fail in restricted networks)
-pio run -e generic_esp32s3_usb
+# Obtain ArduinoJson v7.4.3 at work/ArduinoJson as in .github/workflows/test.yml:
+make -C test test ARDUINOJSON=../work/ArduinoJson/src
+git diff --check
 ```
 
-### CI/CD Validation
-The project uses these automated workflows:
-- **build.yml**: Full firmware builds for all environments
-- **cpplint.yml**: C++ code linting
-- **yarnlint.yml**: JavaScript/TypeScript linting
-- **yarnprettier.yml**: Code formatting validation
+[test/README.md](../test/README.md) documents individual native suites and rendered
+browser regressions. Browser fixtures never contact physical devices. Build firmware
+for affected environments when firmware changes warrant it; the full matrix and
+publication workflows run independently. Before recommending a firmware image for
+flashing, verify its source identity, target, size/SHA256 and normal OTA image;
+never use a factory image for OTA.
 
-### Automated Tests
+## Layout and development
 
-Native regression tests cover HEMS providers, profiles, control safety and firmware
-contracts. Run `make -C test test ARDUINOJSON=../work/ArduinoJson/src` after obtaining
-the pinned ArduinoJson dependency as in `.github/workflows/test.yml`.
-`yarn --cwd webapp test` runs frontend unit tests. Rendered browser regressions are
-listed in `test/README.md`; they use deterministic API fixtures and never contact
-physical devices.
+- `src/`, `include/`, `lib/`: firmware, headers and protocol libraries;
+  `src/main.cpp` is the firmware entry point.
+- `src/hems/`, `include/hems/`: HEMS control, providers, profiles, energy and optimizer.
+- `device-profiles/`: repository-backed Modbus profiles.
+- `webapp/src/`: Vue UI; `webapp/package.json` and `yarn.lock` define tooling.
+- `pio-scripts/`, `platformio.ini`: firmware build/packaging.
+- `docs/`, `test/`: HEMS contracts, state/evidence and deterministic regressions.
+- `.github/workflows/`: firmware build, native tests, C++ lint, frontend lint/format.
 
-## Common Issues and Troubleshooting
-
-### Build Failures
-1. **"HTTPClientError" during pio run**: Ensure unrestricted internet access is available for ESP32 platform downloads. Network firewalls or restrictions will cause firmware builds to fail. Contact repository administrators to configure network access if builds fail with network errors.
-2. **"yarn: command not found"**: Install Corepack with `npm install --global corepack@0.36.0`, then run `corepack enable`.
-3. **"Node version too old"**: Ensure Node.js 26 is installed and in PATH
-4. **"webapp_dist not found"**: Run `yarn build` in webapp directory first
-
-### Development Workflow
-1. Make code changes
-2. Run validation commands
-3. Build webapp (`yarn build`)
-4. Test firmware compilation (`pio run -e <environment>`)
-5. Commit only after all validations pass
-
-### Hardware Notes
-- Project targets ESP32, ESP32-S3, and ESP32-C3 microcontrollers
-- Supports various development boards (see platformio.ini environments)
-- Embedded web interface is served from ESP32 flash memory
-- Different memory configurations supported (4MB, 8MB, 16MB)
-
-## Key Integrations and Features
-- **Solar Inverter Communication**: Hoymiles protocol support
-- **Battery Management**: Multiple BMS types (JK BMS, Pylontech, etc.)
-- **Power Limiting**: Dynamic power control based on consumption
-- **Web Interface**: Real-time monitoring and configuration
-- **MQTT Integration**: Home automation compatibility
-- **Multiple Hardware Variants**: Various ESP32 board configurations
-
-Always reference these instructions to avoid common pitfalls and ensure consistent development practices.
+Use `yarn dev` in `webapp/` for development or `yarn preview` for a production
+preview on port 4173. If assets are missing, build the webapp first. If Yarn is
+missing, enable Corepack; if Node is incompatible, select Node 26. Diagnose actual
+PlatformIO download errors rather than changing firmware to hide network failures.

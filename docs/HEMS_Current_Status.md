@@ -2,7 +2,7 @@
 
 Snapshot: 2026-10-27. Product branch: `hems`. The promoted HEMS line includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30, plus **PR #35 runtime/PSRAM hardening and refreshed PR #31 CMT2300A rework, both merged**. PR #35 merged at `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`; PR #31 was rebased onto that hardened base.
 
-PR #26 was superseded by #27. PR #34/energy-management remains separate and unmerged; it has not been rebased or changed as part of this integration.
+PR #26 was superseded by #27. PR #34/energy-management remains separate, unmerged and physically unvalidated; it has not been rebased or changed as part of this integration.
 
 ## Usable control model
 
@@ -42,7 +42,7 @@ Settings owns normal storage-strategy configuration: reserve, maximum desired So
 
 Devices owns endpoints, bound profiles and expandable manual semantic controls. Repository-backed profile distribution is implemented: the browser retrieves a selected immutable profile, verifies size/SHA-256 and uses authenticated backend import/replacement; backend validation and in-use checks remain authoritative.
 
-Advanced Diagnostics exposes provider/control/system details, paginated optimizer rows and the on-demand browser-only support snapshot `opendtu-hems-diagnostics/v1`. It sequentially combines existing firmware, system, HEMS, tariff, forecast and optimizer APIs. Credentials are always redacted; network/location details remain opt-in. The snapshot is never persisted on LittleFS.
+Advanced Diagnostics exposes provider/control/system details, paginated optimizer rows and the on-demand browser-only support snapshot `opendtu-hems-diagnostics/v1`. It sequentially combines existing firmware, system, HEMS, tariff, forecast and optimizer APIs. The on-demand system request uses `heap_history=1`, including the existing bounded INTERNAL/PSRAM heap journal and allocation-failure records; ordinary polling is unchanged. Credentials are always redacted; network/location details remain opt-in. The snapshot is never persisted on LittleFS.
 
 ## Native providers and external data
 
@@ -134,6 +134,9 @@ Physical CMT validation remains limited to the previously tested behavior. **No 
 
 ## Recommended next validation sequence
 
+Follow the [hardware validation runbook](HEMS_Hardware_Validation.md) for procedures
+and result records. All control/dispatch cases remain pending until evidenced.
+
 1. Continue observing the combined hardened/CMT build on Device A using `generic_esp32s3_usb_quad_psram`. Record exact source/build identity and INTERNAL/PSRAM/stack diagnostics; validate refreshed CMT reception and recovery separately from the accepted PR #35 runtime run.
 2. Validate WARP3 semantic current/stop/release and Marstek bounded charge/discharge/stop/SoC/release against actual physical behavior, not just register readback.
 3. Exercise all storage/EVSE permission combinations in Monitor and Active, including communication interruption and recovery.
@@ -141,6 +144,27 @@ Physical CMT validation remains limited to the previously tested behavior. **No 
 5. Enable economic dispatch only after the semantic storage path is physically trusted; compare planned action, issued command, verified readback and actual battery behavior.
 6. Capture support snapshots and heap history around representative provider/dispatch runs. Use equivalent quiet-period comparisons when judging fragmentation or retention.
 7. Validate live Energy-Charts and Forecast.Solar provider behavior on-device without conflating successful desktop fixtures with ESP32 field validation.
+
+## Repository cleanup and deferred work
+
+PR #32 is superseded by this cleanup on current `hems`: its useful hardware runbook,
+on-demand heap-history export/regression and binding project-state maintenance
+rule are retained. Its old status/roadmap rewrites and no-PSRAM reference are
+obsolete after merged PRs #35/#31 and are deliberately excluded. The dispatch
+contract now identifies merged PR #25 instead of calling it Draft. No new physical
+validation is claimed.
+
+PR #33 is deferred/superseded, not merged or rebased. Preserve its
+`feature/hems-ev-shadow-simulation` branch and [design at the recorded head](https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/ac771b02266f9c0395f86519a660f845fbd2c125/docs/HEMS_Economic_EV_Charging.md)
+as future Economic EV Charging history. It depends on obsolete PR #32 head
+`59e5b22d` and overlaps optimizer/service/API/UI/snapshot areas that PR #34 will
+change. Revisit after #34's outcome: reassess intent/deadline, residual-PV/storage
+conflicts, bounded planning, deterministic scenarios and snapshot pagination against
+the then-current architecture and PSRAM budget. Its shadow planner is not current
+`hems` behavior and it implemented no automatic economic EVSE dispatch. Do not
+reuse its old baseline/hardware/status claims or blindly replay the four feature
+commits (`fc5dc2d6` through `ac771b02`). PR #34 remains separate, unmerged and
+physically unvalidated; this cleanup does not change it.
 
 ## Documentation invariant
 
