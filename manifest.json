@@ -1,0 +1,60 @@
+{
+  "branch": "cleanup/hems-project-state",
+  "builds": {
+    "generic_esp32_16mb_psram": {
+      "file": "opendtu-hems-generic_esp32_16mb_psram.bin",
+      "md5": "6b4e43993ab9560f1b5cbf358b02bb62",
+      "sha256": "dae0d051b1e5748c6a3b5f61f88d249cee2a8541ff278b0ef37dec96c3fc742a",
+      "size": 3043680
+    },
+    "generic_esp32_8mb": {
+      "file": "opendtu-hems-generic_esp32_8mb.bin",
+      "md5": "0aa0502942ce76c11cfd7a3b92d8ab3f",
+      "sha256": "6212a436752e078f2773aa1e36bf5eb3e943ad0c4b2881a6287f4bf0a74e1119",
+      "size": 2964512
+    },
+    "generic_esp32s3": {
+      "file": "opendtu-hems-generic_esp32s3.bin",
+      "md5": "6c329afc0a58a8199528f19ca78686c1",
+      "sha256": "1c8c96f33c0d5b2aaf421a0d56a029984f0440fb967d04f0d0e82abdcb36d591",
+      "size": 2873664
+    },
+    "generic_esp32s3_usb": {
+      "file": "opendtu-hems-generic_esp32s3_usb.bin",
+      "md5": "62b7b0719b106bdc07f89ecc3a7db610",
+      "sha256": "249681b7e4caf9b5902639814a5d225393c74955c9748cf8d4d3bdc22475b35e",
+      "size": 2878064
+    },
+    "generic_esp32s3_usb_octal_psram": {
+      "file": "opendtu-hems-generic_esp32s3_usb_octal_psram.bin",
+      "md5": "e865e6363bef845535e565e57eaedac0",
+      "sha256": "f38343a60f36d61ae81c50114a8ddd40be672283f7bd8642072da05460b20309",
+      "size": 2881632
+    },
+    "generic_esp32s3_usb_quad_psram": {
+      "file": "opendtu-hems-generic_esp32s3_usb_quad_psram.bin",
+      "md5": "ea1eda9e14ae3b0539674786ebe76977",
+      "sha256": "fb7c3d94d1c9d5de3b2f9573328caa78f16b9702f4ca9ac123912e9debaa04da",
+      "size": 2880480
+    },
+    "opendtufusionv2": {
+      "file": "opendtu-hems-opendtufusionv2.bin",
+      "md5": "5d963c39ada163409573df4c3c161099",
+      "sha256": "f166fbee68f4c247201191eccf6be24d0bccb1600ef7403ff4c4c41934d12790",
+      "size": 2878112
+    },
+    "opendtufusionv2_poe": {
+      "file": "opendtu-hems-opendtufusionv2_poe.bin",
+      "md5": "ec36df4ef5a1cfa37ffb829c9f87953d",
+      "sha256": "e39aabcb47a7adaac6dea5a89da5eaa0b33a5df300d1eafce7315fb9f8892dd2",
+      "size": 2878144
+    }
+  },
+  "channel": "pr-36",
+  "commit": "3c79273407d5bff1bda0788a8985df57923ff856",
+  "published_at": "2026-10-27T17:29:38Z",
+  "repository": "dawid-woitaschek/OpenDTU-HEMS",
+  "schema": "opendtu-hems-update/v1",
+  "source_commit": "d0138cb1079289814549bc3f7eebfb81edb10aff",
+  "tested_merge_commit": "3c79273407d5bff1bda0788a8985df57923ff856"
+}
