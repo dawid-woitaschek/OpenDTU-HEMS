@@ -1,5 +1,9 @@
 # Native energy runtime hardening
 
+Historical pass. For the newer Device A evidence, expected Full-HEMS PSRAM tier
+and unmerged runtime changes, see [runtime memory stability](HEMS_Runtime_Memory_Stability.md).
+Its PSRAM validation procedure supersedes the no-PSRAM target below.
+
 For the subsequent retry/reset pass and the current provider-first hardware procedure,
 see [retry and previous-boot diagnostics](HEMS_Retry_Reset_Diagnostics.md).
 

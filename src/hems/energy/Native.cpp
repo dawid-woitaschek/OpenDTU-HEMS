@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Native.h>
+#include <hems/Memory.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -234,7 +235,7 @@ bool aggregate(Series const& a, Series const& b, Series& out, char const*& error
 {
     error = "plane_horizon_mismatch";
     if (!a.count || !b.count) { return false; }
-    auto result = std::unique_ptr<Series>(new (std::nothrow) Series());
+    auto result = Memory::make<Series>();
     if (!result) { error = "insufficient_memory"; return false; }
     uint32_t start = std::max(a.intervals[0].start, b.intervals[0].start);
     uint32_t finish = std::min(a.intervals[a.count - 1].end, b.intervals[b.count - 1].end);

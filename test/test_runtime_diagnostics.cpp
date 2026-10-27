@@ -66,6 +66,7 @@ int main()
     HeapJournal heap;
     HeapSample sample;
     sample.uptimeMs = 12; sample.freeInternal = 85000; sample.largestInternal = 27000;
+    sample.freePsram = 1800000; sample.minimumPsram = 1600000; sample.largestPsram = 1500000;
     sample.context.point = HeapPoint::Boot;
     heap.sample(sample);
     auto initial = heap.samples.cursor();
@@ -94,12 +95,17 @@ int main()
     assert(failure.function[0] == 'h' && failure.function[31] == 0);
     assert(failure.context.phase == Phase::Connect && failure.context.provider == HeapProvider::ForecastSolar && failure.context.plane == 1);
     assert(failure.checkpointUptimeMs == 129 && failure.checkpointFreeInternal == 85000 && failure.checkpointLargestInternal == 27000);
+    assert(failure.checkpointFreePsram == 1800000 && failure.checkpointLargestPsram == 1500000);
     json.clear(); heapFailureJson(failure, json.to<JsonObject>());
     failure = {}; // JSON must not point to a transient stack snapshot.
     assert(json["function"].as<std::string>().find("heap_caps_calloc") == 0);
     assert(json["phase"] == "connect" && json["provider"] == "forecast_solar" && json["last_checkpoint_age_ms"] == 16);
     json.clear(); heapSampleJson(row, json.to<JsonObject>());
     assert(json["fragmentation_percent"] == 68 && json["plane"] == 1);
+    assert(json["free_psram_bytes"] == 1800000 && json["minimum_psram_bytes"] == 1600000);
+    assert(json["psram_fragmentation_percent"] == 16);
+    json.clear(); heapSampleJson(HeapSample{}, json.to<JsonObject>());
+    assert(json["free_psram_bytes"] == 0 && json["psram_fragmentation_percent"] == 0);
     assert(fragmentationPercent(0, 0) == 0 && fragmentationPercent(1, 2) == 0 && fragmentationPercent(1024, 1024) == 0);
     HeapJournal noSamples;
     noSamples.failed(42, 4, nullptr, 10, {});

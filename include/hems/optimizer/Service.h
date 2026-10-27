@@ -2,7 +2,7 @@
 #pragma once
 #include <hems/optimizer/Planner.h>
 #include <hems/optimizer/PlanView.h>
-#include <memory>
+#include <hems/Memory.h>
 #include <mutex>
 namespace Hems::Optimizer {
 class Service {
@@ -34,7 +34,7 @@ private:
     uint32_t _planRevision = 0;
     char const* _replanReason = "startup";
     char const* _error = nullptr;
-    std::unique_ptr<Result> _result;
+    Memory::Ptr<Result> _result;
 };
 extern Service ShadowOptimizer;
 } // namespace Hems::Optimizer

@@ -41,6 +41,11 @@ ARDUINOJSON ?= ../.pio/libdeps/generic_esp32s3_usb/ArduinoJson/src
 
 all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_PROVIDER_CLEANUP) $(TEST_CONTROL_READINESS) $(TEST_ACTUATION_MAILBOX) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE) $(TEST_OPTIMIZER_SERVICE) $(TEST_TRANSPORT) $(TEST_NATIVE_ENERGY) $(TEST_SHADOW) $(TEST_ENERGY) $(TEST_ENERGY_SERVICE) $(TEST_ENERGY_RETRY) $(TEST_RUNTIME_DIAGNOSTICS) $(TEST_RESTART_HELPER) $(TEST_SETTINGS_STORES)
 
+all: test_hems_memory
+
+test_hems_memory: test_hems_memory.cpp ../include/hems/Memory.h ../src/hems/profiles/Profile.cpp
+	$(CXX) $(CXXFLAGS) -DESP32 -Imemory_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+
 all: test_economic_dispatch test_economic_integration $(TEST_ENERGY_CHARTS_V2)
 $(TEST_PROVIDER_CLEANUP): ../src/hems/economic/Dispatch.cpp economic_disabled.cpp
 test_economic_dispatch: test_economic_dispatch.cpp ../src/hems/economic/Dispatch.cpp
@@ -142,6 +147,7 @@ $(TEST_SETTINGS_STORES): test_settings_stores.cpp ../src/hems/evse/SettingsStore
 	$(CXX) $(CXXFLAGS) -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $^
 
 test: all
+	./test_hems_memory
 	./test_economic_dispatch
 	./test_economic_integration
 	python3 test_control_surface.py
@@ -181,6 +187,7 @@ test: all
 	./$(TEST_SETTINGS_STORES)
 
 clean:
+	rm -f test_hems_memory
 	rm -f $(TEST_ENERGY_CHARTS_V2)
 	rm -f test_economic_dispatch test_economic_integration
 	rm -f $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MODBUS_CLIENT) $(TEST_MODBUS_WRITE_CLIENT) $(TEST_PROFILES) $(TEST_PROFILE_CONTROL) $(TEST_PROFILE_CATALOG) $(TEST_MODBUS_PROFILES) $(TEST_CONTROL_EXECUTION) $(TEST_SEMANTIC_ACTUATORS) $(TEST_PROVIDER_CLEANUP) $(TEST_CONTROL_READINESS) $(TEST_ACTUATION_MAILBOX) $(TEST_STORAGE) $(TEST_HOST) $(TEST_HEMS_MODEL) $(TEST_HEMS_CONFIG) $(TEST_EV_PROTECTION) $(TEST_FIRMWARE_UPDATE) $(TEST_OPTIMIZER_SERVICE) $(TEST_TRANSPORT) $(TEST_NATIVE_ENERGY) $(TEST_SHADOW) $(TEST_ENERGY) $(TEST_ENERGY_SERVICE) $(TEST_ENERGY_RETRY) $(TEST_RUNTIME_DIAGNOSTICS) $(TEST_RESTART_HELPER) $(TEST_SETTINGS_STORES)

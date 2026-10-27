@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/profiles/Profile.h>
+#include <hems/Memory.h>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -201,7 +202,7 @@ struct alignas(std::max_align_t) Allocation { size_t size; };
 
 void* BoundedAllocator::allocate(size_t size) {
     if (size > _maximum - used) { return nullptr; }
-    auto p = static_cast<Allocation*>(malloc(sizeof(Allocation) + size));
+    auto p = static_cast<Allocation*>(_external ? Memory::allocate(sizeof(Allocation) + size) : malloc(sizeof(Allocation) + size));
     if (!p) { return nullptr; }
     p->size = size; used += size; if (used > peak) { peak = used; } return p + 1;
 }
@@ -213,7 +214,7 @@ void* BoundedAllocator::reallocate(void* pointer, size_t size) {
     if (!pointer) { return allocate(size); }
     auto p = static_cast<Allocation*>(pointer) - 1; size_t old = p->size;
     if (size > _maximum - (used - old)) { return nullptr; }
-    auto replacement = static_cast<Allocation*>(realloc(p, sizeof(Allocation) + size));
+    auto replacement = static_cast<Allocation*>(_external ? Memory::reallocate(p, sizeof(Allocation) + size) : realloc(p, sizeof(Allocation) + size));
     if (!replacement) { return nullptr; }
     replacement->size = size; used = used - old + size; if (used > peak) { peak = used; } return replacement + 1;
 }

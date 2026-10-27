@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Provider.h>
+#include <hems/Memory.h>
 #include <algorithm>
 #include <cstring>
 #include <memory>
@@ -141,7 +142,7 @@ bool parseSeries(JsonVariantConst json, Domain domain, Series& output, char cons
 {
     error = "invalid_payload";
     auto format = json["schema"].as<char const*>();
-    auto candidate = std::unique_ptr<Series>(new (std::nothrow) Series());
+    auto candidate = Memory::make<Series>();
     if (!candidate) { error = "insufficient_memory"; return false; }
     if (!format || strcmp(format, schema(domain)) || !text(json["source"], candidate->source, sizeof(candidate->source))
             || !candidate->source[0] || !seconds(json["generated_at"], MinUtc, UINT32_MAX)) { return false; }

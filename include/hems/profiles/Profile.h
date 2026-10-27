@@ -86,16 +86,18 @@ inline bool hasControl(Profile const& profile)
 }
 static_assert(sizeof(Profile) <= 4096, "Profile model must fit the no-PSRAM transient budget");
 struct Value { bool valid = false; bool boolean = false; double number = 0; Type type = Type::Uint16; };
-// Allocations are capped including ArduinoJson string allocations and reallocation.
+// Allocations are capped including ArduinoJson strings and reallocation.
+// external opts provider documents into explicit PSRAM placement (hems/Memory.h).
 class BoundedAllocator : public ArduinoJson::Allocator {
 public:
-    explicit BoundedAllocator(size_t maximum = MaxJsonMemory) : _maximum(maximum) {}
+    explicit BoundedAllocator(size_t maximum = MaxJsonMemory, bool external = false) : _maximum(maximum), _external(external) {}
     void* allocate(size_t size) override;
     void deallocate(void* pointer) override;
     void* reallocate(void* pointer, size_t size) override;
     size_t used = 0, peak = 0;
 private:
     size_t _maximum;
+    bool _external;
 };
 bool parse(char const* json, size_t size, Profile& output, char const*& error);
 void serialize(Profile const& profile, JsonObject root);

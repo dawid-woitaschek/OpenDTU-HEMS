@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/optimizer/Service.h>
 #include <RuntimeDiagnostics.h>
+#include <hems/Memory.h>
 #include <hems/energy/Service.h>
 #include <hems/Controller.h>
 #include <LittleFS.h>
@@ -153,7 +154,7 @@ void Service::run()
         _pending = false; c = _config; generation = _generation; _lastRunMs = millis(); _attempted = true;
     }
     Diagnostics::Scope activity(Diagnostics::Component::Optimizer, Diagnostics::Operation::Calculate);
-    auto result = std::unique_ptr<Result>(new (std::nothrow) Result());
+    auto result = Memory::make<Result>();
     if (!result) {
         std::lock_guard<std::mutex> lock(_mutex);
         if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); }
@@ -161,8 +162,8 @@ void Service::run()
     }
     result->config = c; result->inputs = liveInputs(); result->energyRevision = Energy::EnergyData.revision();
     {
-        auto tariff = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
-        auto forecast = std::unique_ptr<Energy::Series>(new (std::nothrow) Energy::Series());
+        auto tariff = Memory::make<Energy::Series>();
+        auto forecast = Memory::make<Energy::Series>();
         if (!tariff || !forecast) {
             std::lock_guard<std::mutex> lock(_mutex);
             if (generation == _generation) { _error = "insufficient_memory"; _result.reset(); }

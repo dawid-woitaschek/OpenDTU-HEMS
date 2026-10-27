@@ -3,11 +3,17 @@
 #include <new>
 // Inject only request/aggregation Series allocation failures, leaving JSON and
 // the task/configuration seams unchanged.
-static unsigned failSeriesAllocation = 0;
+static unsigned failSeriesAllocation = 0, liveSeries = 0;
 void* operator new(std::size_t size, std::nothrow_t const&) noexcept
 {
     if (size == sizeof(Hems::Energy::Series) && failSeriesAllocation && !--failSeriesAllocation) { return nullptr; }
-    try { return ::operator new(size); } catch (std::bad_alloc const&) { return nullptr; }
+    try { auto p = ::operator new(size); if (size == sizeof(Hems::Energy::Series)) { ++liveSeries; } return p; } catch (std::bad_alloc const&) { return nullptr; }
+}
+void operator delete(void* pointer) noexcept { std::free(pointer); }
+void operator delete(void* pointer, std::size_t size) noexcept
+{
+    if (size == sizeof(Hems::Energy::Series)) { assert(liveSeries); --liveSeries; }
+    ::operator delete(pointer);
 }
 int main()
 {
@@ -93,26 +99,29 @@ int main()
     for (unsigned i = 0; i < 5; ++i) { time_t t = now + i * 3600; gmtime_r(&t, &utc); strftime(key, sizeof(key), "%Y-%m-%d %H:%M:%S", &utc); doc["result"]["watt_hours_period"][key] = i ? 1000 : 0; }
     httpBody.clear(); serializeJson(doc, httpBody);
     // One, two and six configured planes all use the same serial worker.
+    duringSolar = [&](unsigned n) { assert(liveSeries == (n == 1 ? 0U : 1U)); };
+    duringDelay = [&] { assert(liveSeries == 1); };
     for (unsigned count : {1U, 2U, 6U}) {
         settings.planeCount = count;
         for (auto& plane : settings.planes) { plane.enabled = true; strcpy(plane.name, "PV"); plane.peakW = 1000; }
         assert(service.configure(Domain::Forecast, settings)); solarRequests = 0; delays.clear(); testNow += 15000;
         scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
         assert(data.count == 4 && data.intervals[0].value == int(count * 1000) && status.planningUsable);
-        assert(solarRequests == count && tasks.size() == 1);
+        assert(solarRequests == count && tasks.size() == 1 && liveSeries == 0);
         assert(delays.size() == count - 1); for (auto delay : delays) { assert(delay >= 5000); }
     }
+    duringSolar = {}; duringDelay = {};
     settings.planeCount = 2; strcpy(settings.planes[0].name, "West"); strcpy(settings.planes[1].name, "East"); assert(service.configure(Domain::Forecast, settings));
     solarRequests = 0; testNow += 15000; scheduler.execute(); runWorkers();
     service.snapshot(Domain::Forecast, data, status); assert(data.intervals[0].value == 2000);
     auto accepted = data; auto fetchedAt = status.fetchedAt;
     // HTTP succeeds but the now-deferred destination allocation fails on the
-    // first or second plane: preserve the last complete aggregate atomically.
+    // first/second plane or aggregation: preserve the last complete aggregate atomically.
     Settings disabledTariff; assert(service.configure(Domain::Tariff, disabledTariff));
-    for (unsigned plane : { 1U, 2U }) {
+    for (unsigned plane : { 1U, 2U, 3U }) {
         testNow += 7200000; solarRequests = 0; failSeriesAllocation = plane;
         scheduler.execute(); runWorkers(); service.snapshot(Domain::Forecast, data, status);
-        assert(!failSeriesAllocation && solarRequests == plane);
+        assert(!failSeriesAllocation && solarRequests == std::min(plane, 2U) && liveSeries == 0);
         assert(status.hasData && !strcmp(status.error, "insufficient_memory") && status.fetchedAt == fetchedAt);
         assert(data.count == accepted.count && data.generatedAt == accepted.generatedAt);
         for (unsigned i = 0; i < data.count; ++i) { assert(data.intervals[i].value == accepted.intervals[i].value); }

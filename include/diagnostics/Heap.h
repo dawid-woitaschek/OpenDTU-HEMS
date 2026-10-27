@@ -19,16 +19,19 @@ struct HeapContext {
 struct HeapSample {
     uint32_t uptimeMs = 0, freeInternal = 0, minimumInternal = 0, largestInternal = 0;
     uint32_t allocatedInternal = 0, freeBlocks = 0, allocatedBlocks = 0, stackFree = 0;
+    uint32_t freePsram = 0, minimumPsram = 0, largestPsram = 0;
+    uint32_t allocatedPsram = 0, freePsramBlocks = 0, allocatedPsramBlocks = 0;
     HeapContext context;
 };
 struct HeapFailure {
     uint32_t requested = 0, capabilities = 0, uptimeMs = 0;
     // Cached checkpoint values, deliberately NOT described as failure-instant readings.
     uint32_t checkpointUptimeMs = 0, checkpointFreeInternal = 0, checkpointLargestInternal = 0;
+    uint32_t checkpointFreePsram = 0, checkpointLargestPsram = 0;
     HeapContext context;
     char function[32] {};
 };
-static_assert(sizeof(HeapSample) == 40 && sizeof(HeapFailure) == 64, "Keep heap diagnostics fixed and small");
+static_assert(sizeof(HeapSample) == 64 && sizeof(HeapFailure) == 72, "Keep heap diagnostics fixed and small");
 template<typename T, size_t Capacity> struct HeapRing {
     struct Cursor { uint32_t sequence; uint8_t count; };
     void push(T const& value) {
@@ -74,6 +77,8 @@ struct HeapJournal {
             failure.checkpointUptimeMs = checkpoint.uptimeMs;
             failure.checkpointFreeInternal = checkpoint.freeInternal;
             failure.checkpointLargestInternal = checkpoint.largestInternal;
+            failure.checkpointFreePsram = checkpoint.freePsram;
+            failure.checkpointLargestPsram = checkpoint.largestPsram;
             failure.context.point = checkpoint.context.point;
         }
         if (function) {
@@ -82,7 +87,7 @@ struct HeapJournal {
         failures.push(failure);
     }
 };
-static_assert(sizeof(HeapJournal) <= 1024, "Heap diagnostics must stay below one KiB");
+static_assert(sizeof(HeapJournal) <= 1536, "Heap diagnostics must stay below 1.5 KiB");
 inline unsigned fragmentationPercent(uint32_t free, uint32_t largest)
 {
     return free && largest <= free ? static_cast<uint64_t>(free - largest) * 100 / free : 0;

@@ -2,6 +2,7 @@
 #include <hems/energy/Native.h>
 #include <RuntimeDiagnostics.h>
 #include <hems/energy/Trust.h>
+#include <hems/profiles/Profile.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <Arduino.h>
@@ -42,24 +43,51 @@ private:
     NativeInfo& _info;
     Diagnostics::HeapProvider _provider;
 };
+// ArduinoJson calls read() for JSON syntax. Refill a small fixed window using
+// only currently available bytes; never ask Stream::readBytes to wait for an
+// entire window. The idle timeout and total GET+body deadline remain independent.
 struct Reader {
     WiFiClient& stream;
     int length;
+    uint32_t started;
     size_t remaining = MaxPayload + 1, consumed = 0;
     bool expired = false, timedOut = false;
-    uint32_t started = millis();
+    uint8_t buffer[256];
+    size_t position = 0, buffered = 0;
+    Reader(WiFiClient& input, int size, uint32_t start) : stream(input), length(size), started(start) {}
+    bool refill() {
+        if (position < buffered) { return true; }
+        if (!remaining || (length >= 0 && consumed == static_cast<size_t>(length))) { return false; }
+        uint32_t waiting = millis();
+        for (;;) {
+            auto now = millis();
+            if (now - started >= 15000) { expired = true; return false; }
+            int available = stream.available();
+            if (available > 0) {
+                auto count = std::min(sizeof(buffer), std::min(remaining, static_cast<size_t>(available)));
+                if (length >= 0) { count = std::min(count, static_cast<size_t>(length) - consumed); }
+                int read = stream.read(buffer, count);
+                if (millis() - started >= 15000) { expired = true; return false; }
+                if (read > 0) { position = 0; buffered = read; return true; }
+            }
+            if (!stream.connected()) { return false; }
+            if (millis() - waiting >= 5000) { timedOut = true; return false; }
+            delay(1);
+        }
+    }
     int read() {
-        if (!remaining || (length >= 0 && consumed == static_cast<size_t>(length))) { return -1; }
-        if (millis() - started >= 15000) { expired = true; return -1; }
-        if (!stream.available() && !stream.connected()) { return -1; }
-        uint8_t c;
-        auto count = stream.readBytes(&c, 1);
-        if (millis() - started >= 15000) { expired = true; return -1; }
-        if (count != 1) { timedOut = stream.connected(); return -1; }
-        --remaining; ++consumed; return c;
+        if (!refill()) { return -1; }
+        --remaining; ++consumed;
+        return buffer[position++];
     }
     size_t readBytes(char* data, size_t length) {
-        size_t n = 0; for (; n < length; ++n) { auto c = read(); if (c < 0) { break; } data[n] = c; } return n;
+        size_t copied = 0;
+        while (copied < length && refill()) {
+            auto count = std::min(length - copied, buffered - position);
+            memcpy(data + copied, buffer + position, count);
+            position += count; consumed += count; remaining -= count; copied += count;
+        }
+        return copied;
     }
 };
 char const* transportError(int code, NativeInfo const& info)
@@ -75,7 +103,7 @@ char const* transportError(int code, NativeInfo const& info)
     }
 }
 } // namespace
-bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& info, char const*& error)
+static bool request(char const* url, Source source, JsonDocument& doc, NativeInfo& info, char const*& error)
 {
     info = {}; info.before = memorySample();
     auto provider = source == Source::EnergyCharts ? Diagnostics::HeapProvider::EnergyCharts : Diagnostics::HeapProvider::ForecastSolar;
@@ -93,6 +121,8 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     if (!http->begin(*client, url)) { return false; }
     http->setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
     http->setConnectTimeout(5000); http->setTimeout(5000); http->setUserAgent("OpenDTU-HEMS");
+    // Fresh HTTPClient: collectHeaders is called once. In Arduino 2.0.17 an
+    // allocation failure here leaves its initially-null header pointer safe to destroy.
     char const* headers[] = { "Retry-After" }; http->collectHeaders(headers, 1);
     uint32_t started = millis();
     Diagnostics::workerPhase(Diagnostics::Phase::TlsHttp);
@@ -112,7 +142,9 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     }
     if (http->getSize() > static_cast<int>(MaxPayload)) { error = "provider_payload_too_large"; http->end(); return false; }
     // Filter out unrelated fields before allocation. Neither cap reserves a payload buffer.
-    JsonDocument filter;
+    // Allow the larger native-host ArduinoJson pool too; this is a cap, not a reservation.
+    Profiles::BoundedAllocator filterAllocator(12288, true);
+    JsonDocument filter(&filterAllocator);
     if (source == Source::EnergyCharts) {
         for (auto field : { "schema_version", "endpoint", "country", "bidding_zone", "timezone", "resolution",
                 "interval_minutes", "unit", "generated_at", "available_from", "available_until", "license", "deprecated" }) { filter[field] = true; }
@@ -127,11 +159,12 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     }
     if (filter.overflowed()) { error = "insufficient_memory"; http->end(); return false; }
     Diagnostics::workerPhase(Diagnostics::Phase::Decode);
-    Reader reader { *http->getStreamPtr(), http->getSize() };
+    Reader reader { *http->getStreamPtr(), http->getSize(), started };
     auto decoded = deserializeJson(doc, reader, DeserializationOption::Filter(filter), DeserializationOption::NestingLimit(6));
     // Consume the entire HTTP body, bounded by Content-Length (if present), bytes and time.
     int c; bool trailing = false;
     while (!decoded && (c = reader.read()) >= 0) { if (c > 32) { trailing = true; break; } }
+    if (millis() - started >= 15000) { reader.expired = true; }
     info.payloadBytes = reader.consumed; info.decoded = memorySample(); info.durationMs = millis() - started;
     Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::Parsed, provider);
     bool truncated = http->getSize() >= 0 && reader.consumed != static_cast<size_t>(http->getSize());
@@ -142,5 +175,18 @@ bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& 
     else if (!ok) { error = "malformed_or_oversized_json"; }
     else { error = nullptr; }
     http->end(); return ok;
+}
+bool providerGet(char const* url, Source source, JsonDocument& doc, NativeInfo& info, char const*& error)
+{
+    // nothrow covers only the outer operator new. Arduino constructors and
+    // HTTPClient header storage also allocate; unwind request-local RAII on OOM.
+    // Do not catch arbitrary exceptions, asserts, or allocator corruption.
+    try {
+        return request(url, source, doc, info, error);
+    } catch (std::bad_alloc const&) {
+        doc.clear();
+        error = "insufficient_memory";
+        return false;
+    }
 }
 } // namespace Hems::Energy

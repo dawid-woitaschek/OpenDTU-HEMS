@@ -117,6 +117,10 @@ void heapCheckpoint(HeapPoint point, HeapProvider provider, int8_t plane)
     sample.minimumInternal = info.minimum_free_bytes; sample.largestInternal = info.largest_free_block;
     sample.allocatedInternal = info.total_allocated_bytes;
     sample.freeBlocks = info.free_blocks; sample.allocatedBlocks = info.allocated_blocks;
+    heap_caps_get_info(&info, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    sample.freePsram = info.total_free_bytes; sample.minimumPsram = info.minimum_free_bytes;
+    sample.largestPsram = info.largest_free_block; sample.allocatedPsram = info.total_allocated_bytes;
+    sample.freePsramBlocks = info.free_blocks; sample.allocatedPsramBlocks = info.allocated_blocks;
     sample.stackFree = uxTaskGetStackHighWaterMark(nullptr);
     Lock lock;
     sample.context = heapContext(); sample.context.point = point; sample.context.provider = provider;

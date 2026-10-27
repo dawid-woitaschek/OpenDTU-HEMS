@@ -31,6 +31,16 @@ int main()
     assert(!checkedGet("http://api.energy-charts.info/v2/price",Source::EnergyCharts,doc,info,error));
     assert(!checkedGet("https://api.energy-charts.info.attacker.test/",Source::EnergyCharts,doc,info,error));
     assert(!checkedGet("https://api.forecast.solar/",Source::EnergyCharts,doc,info,error));
+    for (int point = 1; point <= 6; ++point) {
+        allocationFault = point;
+        assert(!get() && !strcmp(error, "insufficient_memory"));
+        assert(doc.isNull());
+        allocationFault = 0; assert(get());
+    }
+    arbitraryFault = true;
+    try { get(); assert(false); } catch (std::runtime_error const&) {}
+    arbitraryFault = false;
+    assert(activeClients == 0 && activeHttp == 0 && get());
     beginAvailable = false; assert(!get() && !strcmp(error, "provider_begin_failed")); beginAvailable = true;
     transportCode=-1; assert(!get() && !strcmp(error,"provider_connect_failed")); // TCP/socket and generic TLS -1 remain ambiguous.
     assert(info.httpStatus == -1 && !strcmp(info.httpError, "connection refused") && info.dns == 1);
@@ -66,7 +76,26 @@ int main()
     transportBody="{}"; contentLength=MaxPayload+1; assert(!get());
     contentLength=5; assert(!get()); // Truncated Content-Length must not accept a complete JSON prefix.
     contentLength=MaxPayload; transportBody="{}"+std::string(MaxPayload-2,' '); assert(get());
-    contentLength=-1; transportBody="{}"+std::string(MaxPayload,' '); assert(!get());
+    contentLength=-1; transportBody="{}"+std::string(MaxPayload-2,' '); assert(get());
+    assert(info.payloadBytes == MaxPayload);
+    socketReads=availableChecks=connectionChecks=0;
+    assert(get() && socketReads < 200 && availableChecks < 200);
+    transportBody.push_back(' '); assert(!get() && info.payloadBytes == MaxPayload+1);
+    // Prefetch must stop at Content-Length, leaving subsequent socket bytes alone.
+    transportBody="{}NEXT"; contentLength=2; assert(get() && info.payloadBytes == 2 && extraAfterBody == 4);
+    contentLength=-1;
+    // Short reads, fragmented delivery and delayed availability remain stream-safe.
+    transportBody="{\"data\":[]} ";
+    maxReadSize=1; assert(get() && info.payloadBytes == transportBody.size()); maxReadSize=SIZE_MAX;
+    availableAt=transportNow+4999; assert(get()); availableAt=0;
+    availableAt=transportNow+5001; assert(!get() && !strcmp(error,"provider_body_timeout")); availableAt=0;
+    // GET time counts against the total deadline; even a trickling body is bounded.
+    getDelay=14999; readDelay=2; assert(!get() && !strcmp(error,"provider_body_timeout"));
+    getDelay=0; readDelay=0;
+    transportBody="{}"+std::string(512,' '); maxReadSize=1; readDelay=100;
+    assert(!get() && !strcmp(error,"provider_body_timeout")); maxReadSize=SIZE_MAX; readDelay=0;
+    // Unsigned elapsed-time arithmetic survives the millis() wrap.
+    transportNow=UINT32_MAX-10; availableAt=0; getDelay=20; assert(get()); getDelay=0; transportNow=0;
     transportBody.clear(); serializeJson(ProviderFixtures::prices(2, 1792180800), transportBody);
     for (unsigned i = 0; i < 6; ++i) { assert(get()); assert(activeClients == 0 && activeHttp == 0); }
     assert(tlsHost == "api.energy-charts.info" && caInstalled);

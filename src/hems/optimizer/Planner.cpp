@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/optimizer/Planner.h>
+#include <hems/Memory.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -167,7 +168,7 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     }
     // Exclude PV from the whole plan if any slot is uncovered; never mix unknown PV with invented zero.
     if (!out.pvIncluded) { for (size_t i = 0; i < out.count; ++i) { out.steps[i].pvW = 0; } }
-    auto w = std::unique_ptr<Workspace>(new (std::nothrow) Workspace());
+    auto w = Memory::make<Workspace>();
     if (!w) { return fail("insufficient_memory"); }
     uint32_t lower = goals.reserveWh, upper = goals.ceilingWh;
     out.initialWh = std::llround(storage.socPct.value * c.capacityWh / 100.0);
