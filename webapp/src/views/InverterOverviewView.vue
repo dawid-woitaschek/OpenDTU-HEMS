@@ -27,18 +27,20 @@
                     <div class="card-body">
                         <div class="small text-body-secondary mb-2">{{ $t('hems.DataAge') }}: {{ age(inv) }}</div>
                         <p v-if="state(inv) !== 'reachable'" class="small text-warning-emphasis">
-                            {{ $t('redesign.lastKnownHelp') }}
+                            {{ $t('redesign.inverterMeasurementsUnavailable') }}
                         </p>
                         <dl class="row mb-2">
                             <dt class="col-7 fw-normal">{{ $t('redesign.acOutput') }}</dt>
-                            <dd class="col-5 fw-semibold">{{ value(inv.AC?.[0]?.Power?.v, 'W') }}</dd>
+                            <dd class="col-5 fw-semibold">{{ value(inv, inv.AC?.[0]?.Power?.v, 'W') }}</dd>
                             <dt class="col-7 fw-normal">{{ $t('redesign.confirmedLimit') }}</dt>
                             <dd class="col-5">
-                                {{ value(inv.limit_relative, '%')
-                                }}<span v-if="inv.limit_absolute >= 0"> · {{ value(inv.limit_absolute, 'W') }}</span>
+                                {{ value(inv, inv.limit_relative, '%')
+                                }}<span v-if="state(inv) === 'reachable' && inv.limit_absolute >= 0">
+                                    · {{ value(inv, inv.limit_absolute, 'W') }}</span
+                                >
                             </dd>
                             <dt class="col-7 fw-normal">{{ $t('storage.Temperature') }}</dt>
-                            <dd class="col-5">{{ value(inverterTemperature(inv), '°C') }}</dd>
+                            <dd class="col-5">{{ value(inv, inverterTemperature(inv), '°C') }}</dd>
                             <dt class="col-7 fw-normal label-with-help">
                                 {{ $t('redesign.recordedEvents') }} <HelpHint :text="$t('redesign.eventHistoryHelp')" />
                             </dt>
@@ -68,8 +70,8 @@ const { data, inverters, connection, loading, unavailable, reload } = useLiveDat
 const { locale } = useI18n();
 onMounted(reload);
 const state = (inv: Inverter) => inverterState(inv, connection.value === 'connected' && !unavailable.value);
-const value = (number: number | null | undefined, unit: string) =>
-    number != null && Number.isFinite(number) && (unit !== '%' || number >= 0)
+const value = (inv: Inverter, number: number | null | undefined, unit: string) =>
+    state(inv) === 'reachable' && number != null && Number.isFinite(number) && (unit !== '%' || number >= 0)
         ? `${number.toLocaleString(locale.value, { maximumFractionDigits: 1 })} ${unit}`
         : '—';
 const age = (inv: Inverter) =>

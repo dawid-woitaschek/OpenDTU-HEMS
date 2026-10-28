@@ -18,6 +18,12 @@ async function assertHelpPlacement(page) {
         return h.closest('label') || !h.closest('.label-with-help, h2, h3, legend, summary, .card-header');
     }).map(h => h.outerHTML)), [], 'Every help button is attached to a label or heading, outside control labels');
 }
+async function currentMeasurements(card) {
+    return (await card.locator('dl dd').allTextContents()).slice(0, 3).map(text => text.trim().replace(/\s+/g, ' '));
+}
+async function assertMeasurementsUnavailable(card) {
+    assert.deepEqual(await currentMeasurements(card), ['—', '—', '—'], 'Unverified output, limit and temperature must not look like current numeric measurements');
+}
 try {
     for (const locale of (process.env.REDESIGN_LOCALES?.split(',') || ['en', 'de'])) for (const width of (process.env.REDESIGN_WIDTHS?.split(',').map(Number) || [320, 768, 1440])) {
         const fixture = createHemsFixture(), live = createLiveFixture(), posts = [], sockets = [], requests = [];
@@ -128,12 +134,32 @@ try {
         sockets.at(-1).send(JSON.stringify({ inverters: [east] }));
         await page.locator('[data-inverter="100000000001"]').getByText('425 W', { exact: true }).waitFor();
         assert.equal(await page.locator('.inverter-summary').count(), 2);
-        east.reachable = false; east.AC[0].Power.v = 0;
+        const eastCard = page.locator('[data-inverter="100000000001"]');
+        east.AC[0].Power.v = 0; east.INV[0].Temperature.v = 0; east.limit_relative = 0; east.limit_absolute = 0;
         sockets.at(-1).send(JSON.stringify({ inverters: [east] }));
-        await page.locator('[data-inverter="100000000001"]').getByText(locale === 'de' ? 'Nicht erreichbar' : 'Unreachable', { exact: true }).waitFor();
-        assert.match(await page.locator('[data-inverter="100000000001"]').innerText(), locale === 'de' ? /zuletzt bekannte/i : /last-known/i);
+        await eastCard.getByText('0 °C', { exact: true }).waitFor();
+        assert.deepEqual(await currentMeasurements(eastCard), ['0 W', '0 % · 0 W', '0 °C'], 'Verified, fresh zero values remain valid measurements');
+        east.reachable = false;
+        sockets.at(-1).send(JSON.stringify({ inverters: [east] }));
+        await eastCard.getByText(locale === 'de' ? 'Nicht erreichbar' : 'Unreachable', { exact: true }).waitFor();
+        await assertMeasurementsUnavailable(eastCard);
+        assert.match(await eastCard.innerText(), locale === 'de' ? /Messwerte sind nicht bestätigt/ : /measurements cannot be verified/);
+        // Nonzero retained readings are also unavailable when stale or polling is disabled.
+        Object.assign(east, structuredClone(live.inverters[0])); east.data_age_ms = 61000;
+        sockets.at(-1).send(JSON.stringify({ inverters: [east] }));
+        await eastCard.getByText(locale === 'de' ? 'Zuletzt bekannte Daten' : 'Last-known data', { exact: true }).waitFor();
+        await assertMeasurementsUnavailable(eastCard);
+        east.poll_enabled = false;
+        sockets.at(-1).send(JSON.stringify({ inverters: [east] }));
+        await eastCard.getByText(locale === 'de' ? 'Abfrage deaktiviert' : 'Polling disabled', { exact: true }).waitFor();
+        await assertMeasurementsUnavailable(eastCard);
+        Object.assign(east, structuredClone(live.inverters[0]));
+        sockets.at(-1).send(JSON.stringify({ inverters: [east] }));
+        await eastCard.getByText('400 W', { exact: true }).waitFor();
         closeConnections = true; sockets.at(-1).close();
         await page.locator('.live-connection-dot[data-state="disconnected"]').waitFor({ state: 'attached' });
+        await assertMeasurementsUnavailable(eastCard);
+        await assertMeasurementsUnavailable(page.locator('[data-inverter="100000000002"]'));
         for (const [oldPath, canonical] of [['/hems', '/'], ['/info/hems', '/'], ['/hems/devices', '/energy/integrations'], ['/settings/battery', '/plant/battery'], ['/plant/solar', '/plant/solar-charger'], ['/settings/solarcharger', '/plant/solar-charger'], ['/settings/powerlimiter', '/energy/power-control'], ['/plant/inverters/power-limit', '/energy/power-control']]) {
             await page.goto(baseUrl + oldPath); await page.waitForURL('**' + canonical);
         }

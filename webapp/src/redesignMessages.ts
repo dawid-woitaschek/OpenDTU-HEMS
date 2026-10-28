@@ -73,6 +73,8 @@ export const redesignMessages = {
             disabled: 'Polling disabled',
             lastKnownHelp:
                 'These are last-known or unverified values. Measurements older than 60 seconds, unreachable devices and a lost live connection are not current.',
+            inverterMeasurementsUnavailable:
+                'Current measurements cannot be verified. Live values and the confirmed limit are unavailable.',
             acOutput: 'AC output',
             confirmedLimit: 'Confirmed limit',
             recordedEvents: 'Recorded events',
@@ -206,6 +208,8 @@ export const redesignMessages = {
             disabled: 'Abfrage deaktiviert',
             lastKnownHelp:
                 'Dies sind zuletzt bekannte oder unbestätigte Werte. Messwerte älter als 60 Sekunden, nicht erreichbare Geräte und eine unterbrochene Live-Verbindung gelten nicht als aktuell.',
+            inverterMeasurementsUnavailable:
+                'Aktuelle Messwerte sind nicht bestätigt. Live-Werte und das bestätigte Limit sind nicht verfügbar.',
             acOutput: 'AC-Leistung',
             confirmedLimit: 'Bestätigtes Limit',
             recordedEvents: 'Aufgezeichnete Ereignisse',
