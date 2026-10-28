@@ -1,12 +1,7 @@
 <template>
-    <BasePage
-        :title="$t('console.Console')"
-        :isLoading="dataLoading"
-        :showWebSocket="true"
-        :isWebsocketConnected="isWebsocketConnected"
-    >
+    <BasePage :title="$t('console.Console')" :isLoading="dataLoading">
         <CardElement :text="$t('console.VirtualDebugConsole')" textVariant="text-bg-primary">
-            <div class="btn-toolbar mb-3" role="toolbar">
+            <div class="btn-toolbar row-gap-2 mb-3" role="toolbar">
                 <div class="input-group me-2">
                     <div class="input-group-text" id="btnSearch">
                         <BIconSearch />
@@ -16,12 +11,16 @@
                         type="text"
                         class="form-control"
                         :placeholder="$t('console.RegularExpression')"
-                        aria-label="Search"
+                        :aria-label="$t('console.RegularExpression')"
                         aria-describedby="btnSearch"
                     />
                 </div>
 
-                <div class="btn-group me-2" role="group" aria-label="Filter by level">
+                <div
+                    class="btn-group me-2"
+                    role="group"
+                    :aria-label="$t('console.LogLevel', { cnt: activeLevels.length })"
+                >
                     <div class="dropdown">
                         <button
                             class="btn btn-outline-secondary dropdown-toggle"
@@ -84,7 +83,7 @@
                     </button>
                 </div>
 
-                <div class="col-auto ms-auto mt-2">
+                <div class="col-auto ms-auto mt-2 mw-100">
                     <div class="form-check form-switch">
                         <input
                             class="form-check-input"

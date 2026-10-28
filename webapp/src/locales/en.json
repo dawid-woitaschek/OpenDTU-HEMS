@@ -1100,7 +1100,6 @@
         "DisplayLanguage": "Display language",
         "en": "English",
         "de": "German",
-        "fr": "French",
         "Leds": "LEDs",
         "EqualBrightness": "Equal brightness",
         "LedBrightness": "LED {led} brightness ({brightness})"

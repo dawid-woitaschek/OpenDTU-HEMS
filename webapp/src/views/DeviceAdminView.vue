@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="$t('deviceadmin.DeviceManager')" :isLoading="dataLoading || pinMappingLoading || languageLoading">
+    <BasePage :title="$t('deviceadmin.DeviceManager')" :isLoading="dataLoading || pinMappingLoading">
         <BootstrapAlert
             v-model="alert.show"
             dismissible
@@ -166,11 +166,11 @@
                                 <div class="col-sm-10">
                                     <select class="form-select" v-model="deviceConfigList.display.locale">
                                         <option
-                                            v-for="(locale, index) in displayLocaleList"
+                                            v-for="locale in displayLocaleList"
                                             :key="locale.code"
                                             :value="locale.code"
                                         >
-                                            {{ $t((index < 3 ? `deviceadmin.` : ``) + locale.name) }}
+                                            {{ $t('deviceadmin.' + locale.name) }}
                                         </option>
                                     </select>
                                 </div>
@@ -282,7 +282,6 @@ export default defineComponent({
         return {
             dataLoading: true,
             pinMappingLoading: true,
-            languageLoading: true,
             deviceConfigList: {} as DeviceConfig,
             pinMappingList: {} as PinMapping,
             alert: {} as AlertResponse,
@@ -296,7 +295,6 @@ export default defineComponent({
             displayLocaleList: [
                 { code: 'en', name: 'en' },
                 { code: 'de', name: 'de' },
-                { code: 'fr', name: 'fr' },
             ],
             diagramModeList: [
                 { key: 0, value: 'off' },
@@ -308,7 +306,6 @@ export default defineComponent({
     created() {
         this.getDeviceConfig();
         this.getPinMappingList();
-        this.getLanguageList();
     },
     watch: {
         equalBrightnessCheckVal: function (val) {
@@ -325,15 +322,6 @@ export default defineComponent({
         },
     },
     methods: {
-        getLanguageList() {
-            this.languageLoading = true;
-            fetch('/api/i18n/languages')
-                .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data) => {
-                    this.displayLocaleList.push(...data);
-                    this.languageLoading = false;
-                });
-        },
         getPinMappingList() {
             this.pinMappingLoading = true;
             fetch('/api/file/get?file=pin_mapping.json', { headers: authHeader() })
@@ -363,6 +351,8 @@ export default defineComponent({
                 .then((response) => handleResponse(response, this.$emitter, this.$router))
                 .then((data) => {
                     this.deviceConfigList = data;
+                    if (!['de', 'en'].includes(this.deviceConfigList.display.locale))
+                        this.deviceConfigList.display.locale = 'en';
                     if (this.deviceConfigList.curPin.name === '') {
                         this.deviceConfigList.curPin.name = 'Default';
                     }

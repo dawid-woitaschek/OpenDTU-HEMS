@@ -22,7 +22,7 @@
                 <div class="row mb-3">
                     <label for="inputTimezone" class="col-sm-2 col-form-label">{{ $t('ntpadmin.Timezone') }}</label>
                     <div class="col-sm-10">
-                        <select class="form-select" v-model="timezoneSelect">
+                        <select id="inputTimezone" class="form-select" v-model="timezoneSelect">
                             <option v-for="name in Object.keys(timezoneList ?? {})" :key="name" :value="name">
                                 {{ name }}
                             </option>
@@ -59,12 +59,14 @@
                 />
 
                 <div class="row mb-3">
-                    <label class="col-sm-2 col-form-label">
-                        {{ $t('ntpadmin.SunSetType') }}
-                        <BIconInfoCircle v-tooltip :title="$t('ntpadmin.SunSetTypeHint')" />
-                    </label>
+                    <div class="col-sm-2 col-form-label">
+                        <span class="label-with-help"
+                            ><label for="inputSunsetType">{{ $t('ntpadmin.SunSetType') }}</label
+                            ><HelpHint :text="$t('ntpadmin.SunSetTypeHint')"
+                        /></span>
+                    </div>
                     <div class="col-sm-10">
-                        <select class="form-select" v-model="ntpConfigList.sunsettype">
+                        <select id="inputSunsetType" class="form-select" v-model="ntpConfigList.sunsettype">
                             <option v-for="sunsettype in sunsetTypeList" :key="sunsettype.key" :value="sunsettype.key">
                                 {{ $t(`ntpadmin.` + sunsettype.value) }}
                             </option>
@@ -91,6 +93,7 @@
 </template>
 
 <script lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -100,16 +103,15 @@ import type { AlertResponse } from '@/types/AlertResponse';
 import type { NtpConfig } from '@/types/NtpConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { defineComponent } from 'vue';
-import { BIconInfoCircle } from 'bootstrap-icons-vue';
 
 export default defineComponent({
     components: {
+        HelpHint,
         BasePage,
         BootstrapAlert,
         CardElement,
         FormFooter,
         InputElement,
-        BIconInfoCircle,
     },
     data() {
         return {

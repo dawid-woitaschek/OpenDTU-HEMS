@@ -1,21 +1,15 @@
 <template>
     <BasePage
-        :title="$t('home.LiveData')"
+        :title="$t('redesign.inverterLiveData')"
         :isLoading="dataLoading"
         :isWideScreen="true"
-        :showWebSocket="true"
-        :isWebsocketConnected="isWebsocketConnected"
         @reload="reloadData"
     >
+        <div v-if="liveConnection !== 'connected' || liveUnavailable" class="alert alert-secondary" role="status">
+            {{ $t('redesign.lastKnownHelp') }}
+        </div>
         <HintView :hints="liveData.hints" />
-        <InverterTotalInfo
-            :totalData="liveData.total"
-            :hasInverters="hasInverters"
-            :solarChargerData="liveData.solarcharger"
-            :totalBattData="liveData.battery"
-            :powerMeterData="liveData.power_meter"
-            :gridChargerData="liveData.gridcharger"
-        />
+        <p v-if="!inverterData.length" class="text-body-secondary">{{ $t('redesign.noInverters') }}</p>
         <div class="row gy-3 mt-0">
             <div class="col-sm-3 col-md-2" :style="[inverterData.length == 1 ? { display: 'none' } : {}]">
                 <div
@@ -181,6 +175,15 @@
                             </div>
                         </div>
                         <div class="card-body">
+                            <p
+                                v-if="
+                                    inverterState(inverter, liveConnection === 'connected' && !liveUnavailable) !==
+                                    'reachable'
+                                "
+                                class="small text-warning-emphasis"
+                            >
+                                {{ $t('redesign.lastKnownHelp') }}
+                            </p>
                             <div class="row flex-row-reverse flex-wrap-reverse g-3">
                                 <template
                                     v-for="chanType in [
@@ -311,8 +314,10 @@
                                                     </tr>
                                                     <tr>
                                                         <td>
-                                                            {{ $t('home.Rssi') }}
-                                                            <BIconInfoCircle v-tooltip :title="$t('home.RssiHint')" />
+                                                            <span class="label-with-help"
+                                                                >{{ $t('home.Rssi') }}
+                                                                <HelpHint :text="$t('home.RssiHint')"
+                                                            /></span>
                                                         </td>
                                                         <td>
                                                             {{ $t('home.dBm', { dbm: $n(inverter.radio_stats.rssi) }) }}
@@ -349,9 +354,6 @@
                 </div>
             </div>
         </div>
-        <SolarChargerView v-if="liveData.solarcharger.enabled" />
-        <BatteryView v-if="liveData.battery.enabled" />
-        <GridChargerView v-if="liveData.gridcharger.enabled" />
     </BasePage>
 
     <ModalDialog modalId="eventView" :title="$t('home.EventLog')" :loading="eventLogLoading">
@@ -508,6 +510,7 @@
 </template>
 
 <script lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import DataAgeDisplay from '@/components/DataAgeDisplay.vue';
@@ -516,12 +519,8 @@ import EventLog from '@/components/EventLog.vue';
 import GridProfile from '@/components/GridProfile.vue';
 import HintView from '@/components/HintView.vue';
 import InverterChannelInfo from '@/components/InverterChannelInfo.vue';
-import InverterTotalInfo from '@/components/InverterTotalInfo.vue';
 import { LimitType } from '@/types/LimitConfig';
 import ModalDialog from '@/components/ModalDialog.vue';
-import SolarChargerView from '@/components/SolarChargerView.vue';
-import GridChargerView from '@/components/GridChargerView.vue';
-import BatteryView from '@/components/BatteryView.vue';
 import type { DevInfoStatus } from '@/types/DevInfoStatus';
 import type { EventlogItems } from '@/types/EventlogStatus';
 import type { GridProfileRawdata } from '@/types/GridProfileRawdata';
@@ -529,13 +528,12 @@ import type { GridProfileStatus } from '@/types/GridProfileStatus';
 import type { LimitConfig } from '@/types/LimitConfig';
 import type { LimitStatus } from '@/types/LimitStatus';
 import type { Inverter, LiveData } from '@/types/LiveDataStatus';
-import { authHeader, authUrl, handleResponse, isLoggedIn } from '@/utils/authentication';
+import { authHeader, handleResponse, isLoggedIn } from '@/utils/authentication';
 import * as bootstrap from 'bootstrap';
 import {
     BIconArrowCounterclockwise,
     BIconBroadcast,
     BIconCpu,
-    BIconInfoCircle,
     BIconJournalText,
     BIconOutlet,
     BIconPower,
@@ -544,10 +542,12 @@ import {
     BIconToggleOn,
 } from 'bootstrap-icons-vue';
 import { defineComponent } from 'vue';
-import WebSocketService from '@/utils/websocketService';
+import { inverterState } from '@/utils/inverterPresentation';
+import { useLiveData } from '@/utils/liveData';
 
 export default defineComponent({
     components: {
+        HelpHint,
         BasePage,
         BootstrapAlert,
         DataAgeDisplay,
@@ -556,31 +556,34 @@ export default defineComponent({
         GridProfile,
         HintView,
         InverterChannelInfo,
-        InverterTotalInfo,
         ModalDialog,
         BIconArrowCounterclockwise,
         BIconBroadcast,
         BIconCpu,
-        BIconInfoCircle,
+
         BIconJournalText,
         BIconOutlet,
         BIconPower,
         BIconSpeedometer,
         BIconToggleOff,
         BIconToggleOn,
-        SolarChargerView,
-        GridChargerView,
-        BatteryView,
+    },
+    setup() {
+        const shared = useLiveData();
+        return {
+            sharedLive: shared.data,
+            sharedInverters: shared.inverters,
+            sharedLoading: shared.loading,
+            reloadShared: shared.reload,
+            liveConnection: shared.connection,
+            liveUnavailable: shared.unavailable,
+        };
     },
     data() {
         return {
             isLogged: isLoggedIn(),
 
-            socket: {} as WebSocketService,
             heartInterval: 0,
-            dataAgeTimers: {} as Record<string, number>,
-            dataLoading: true,
-            liveData: {} as LiveData,
             isFirstFetchAfterConnect: true,
             eventLogView: {} as bootstrap.Modal,
             eventLogList: {} as EventlogItems,
@@ -616,13 +619,10 @@ export default defineComponent({
             alertTypePower: 'info',
             showAlertPower: false,
             successCommandPower: '',
-
-            isWebsocketConnected: false,
         };
     },
     created() {
-        this.getInitialData();
-        this.initSocket();
+        this.reloadShared();
         this.$emitter.on('logged-in', () => {
             this.isLogged = this.isLoggedIn();
         });
@@ -636,29 +636,18 @@ export default defineComponent({
         this.gridProfileView = new bootstrap.Modal('#gridProfileView');
         this.limitSettingView = new bootstrap.Modal('#limitSettingView');
         this.powerSettingView = new bootstrap.Modal('#powerSettingView');
-    },
-    unmounted() {
-        this.socket?.close();
+        this.selectInitialInverter();
     },
     updated() {
-        console.log('Updated');
-        // Select first tab
-        if (this.isFirstFetchAfterConnect) {
-            console.log('isFirstFetchAfterConnect');
-
-            this.$nextTick(() => {
-                console.log('nextTick');
-                const firstTabEl = document.querySelector('#v-pills-tab:first-child button');
-                if (firstTabEl != null) {
-                    this.isFirstFetchAfterConnect = false;
-                    console.log('Show');
-                    const firstTab = new bootstrap.Tab(firstTabEl);
-                    firstTab.show();
-                }
-            });
-        }
+        this.selectInitialInverter();
     },
     computed: {
+        liveData(): LiveData {
+            return this.sharedLive as LiveData;
+        },
+        dataLoading(): boolean {
+            return this.sharedLoading || !this.sharedLive;
+        },
         currentLimitAbsolute(): string {
             if (this.currentLimitList.max_power > 0) {
                 return this.$n(
@@ -672,121 +661,25 @@ export default defineComponent({
             return this.$n(this.currentLimitList.limit_relative, 'decimalOneDigit');
         },
         inverterData(): Inverter[] {
-            return this.liveData.inverters.slice().sort((a: Inverter, b: Inverter) => {
-                return a.order - b.order;
-            });
-        },
-        hasInverters(): boolean {
-            return this.liveData?.inverters?.length > 0 || false;
+            return this.sharedInverters;
         },
     },
     methods: {
         isLoggedIn,
-        getInitialData(triggerLoading: boolean = true) {
-            if (triggerLoading) {
-                this.dataLoading = true;
-            }
-            fetch('/api/livedata/status', { headers: authHeader() })
-                .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data) => {
-                    this.liveData = data;
-                    if (triggerLoading) {
-                        this.dataLoading = false;
-                    }
-                });
+        inverterState,
+        selectInitialInverter() {
+            if (!this.isFirstFetchAfterConnect) return;
+            this.$nextTick(() => {
+                const tab =
+                    document.getElementById('v-pills-' + String(this.$route.query.inverter) + '-tab') ||
+                    document.querySelector('#v-pills-tab button');
+                if (!tab) return;
+                this.isFirstFetchAfterConnect = false;
+                bootstrap.Tab.getOrCreateInstance(tab).show();
+            });
         },
         reloadData() {
-            this.socket?.close();
-
-            this.getInitialData(false);
-            this.initSocket();
-        },
-        handleMessage(event: MessageEvent) {
-            if (!event.data || event.data === '{}') {
-                this.socket?.close(); // force reconnect
-                this.initSocket();
-                return;
-            }
-
-            const newData = JSON.parse(event.data);
-
-            if (typeof newData.solarcharger !== 'undefined') {
-                Object.assign(this.liveData.solarcharger, newData.solarcharger);
-            }
-            if (typeof newData.gridcharger !== 'undefined') {
-                Object.assign(this.liveData.gridcharger, newData.gridcharger);
-            }
-            if (typeof newData.battery !== 'undefined') {
-                Object.assign(this.liveData.battery, newData.battery);
-            }
-            if (typeof newData.power_meter !== 'undefined') {
-                Object.assign(this.liveData.power_meter, newData.power_meter);
-            }
-
-            if (typeof newData.total === 'undefined') {
-                return;
-            }
-
-            Object.assign(this.liveData.total, newData.total);
-            Object.assign(this.liveData.hints, newData.hints);
-
-            const idx = this.liveData.inverters.findIndex((i) => i.serial === newData.inverters[0].serial);
-
-            if (idx == -1) {
-                Object.assign(this.liveData.inverters, newData.inverters);
-                this.liveData.inverters.forEach((inv) => this.resetDataAging(inv));
-            } else if (this.liveData.inverters[idx]) {
-                Object.assign(this.liveData.inverters[idx], newData.inverters[0]);
-                this.resetDataAging(this.liveData.inverters[idx]);
-            }
-        },
-        initSocket() {
-            console.log('Starting connection to WebSocket Server');
-
-            const { protocol, host } = location;
-            const authString = authUrl();
-            const webSocketUrl = `${protocol === 'https:' ? 'wss' : 'ws'}://${authString}${host}/livedata`;
-
-            this.socket = new WebSocketService(webSocketUrl, {
-                onMessage: this.handleMessage,
-                onOpen: () => {
-                    console.log('WebSocket connected');
-                    this.isWebsocketConnected = true;
-                },
-                onClose: () => {
-                    console.log('WebSocket closed');
-                    this.isWebsocketConnected = false;
-                },
-            });
-
-            // Listen to window events , When the window closes , Take the initiative to disconnect websocket Connect
-            window.onbeforeunload = () => {
-                this.socket?.close();
-            };
-
-            this.socket?.connect();
-        },
-        resetDataAging(inv: Inverter) {
-            if (this.dataAgeTimers[inv.serial] !== undefined) {
-                clearTimeout(this.dataAgeTimers[inv.serial]);
-            }
-
-            const nextMs = 1000 - (inv.data_age_ms % 1000);
-            this.dataAgeTimers[inv.serial] = setTimeout(() => {
-                this.doDataAging(inv.serial);
-            }, nextMs);
-        },
-        doDataAging(serial: string) {
-            const inv = this.liveData?.inverters?.find((inv) => inv.serial === serial);
-            if (inv === undefined) {
-                return;
-            }
-
-            inv.data_age_ms += 1000;
-
-            this.dataAgeTimers[serial] = setTimeout(() => {
-                this.doDataAging(serial);
-            }, 1000);
+            this.reloadShared();
         },
         onShowEventlog(serial: string) {
             this.eventLogLoading = true;

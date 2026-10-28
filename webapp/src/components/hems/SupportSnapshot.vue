@@ -92,23 +92,6 @@ const texts: Record<string, SnapshotCopy> = {
         copyFailed: 'Clipboard access is unavailable in this browser context. Download remains available.',
         lastSize: 'Last snapshot size',
     },
-    fr: {
-        title: 'Support et diagnostic',
-        description:
-            "Crée à la demande un instantané JSON à partir des API de diagnostic existantes. Le fichier est assemblé uniquement dans le navigateur et n'est pas stocké sur l'OpenDTU.",
-        privacy:
-            'Les mots de passe, jetons, clés, cookies et identifiants sont toujours supprimés. Les données réseau et de localisation sont masquées par défaut.',
-        includeNetwork: 'Inclure les adresses réseau, noms d’hôte et URL',
-        includeLocation: 'Inclure la localisation PV / les coordonnées',
-        download: 'Télécharger le diagnostic',
-        clipboard: 'Copier dans le presse-papiers',
-        collecting: 'Collecte des diagnostics …',
-        downloaded: 'Instantané de diagnostic créé.',
-        copied: 'Instantané de diagnostic copié dans le presse-papiers.',
-        copyFailed:
-            'L’accès au presse-papiers n’est pas disponible dans ce contexte. Le téléchargement reste disponible.',
-        lastSize: 'Taille du dernier instantané',
-    },
 };
 
 const { locale } = useI18n();

@@ -68,15 +68,147 @@ The accepted PR #35 run does not validate these later changes.
 
 ## Product UI
 
-Four peer views use the existing OpenDTU visual language: Overview (`/hems`), Settings (`/hems/settings`), Devices (`/hems/devices`) and Advanced Diagnostics (`/hems/diagnostics`). Legacy aliases remain supported.
+The unified WebUI and its focused human-centered UX/IA cleanup are **unmerged
+work on `redesign-v1`, draft [PR #37](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/37)**,
+based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
 
-Overview shows fresh energy values, effective tariff prices, interactive tariff/PV charts and provider readiness. The generated storage plan is a first-class daily-use surface: current planned action, next action change, merged charge/hold/discharge blocks, expected SoC progression, modeled benefit and compact strategy summary.
+- One Overview answers current energy flow, price, PV outlook and the next
+  battery action. Each current fact appears once. Price/forecast charts and the
+  detailed battery schedule, economics and assumptions are expandable. EV
+  protection appears as concise relevant status instead of a large duplicated
+  Automation card. `/hems` and `/info/hems` still redirect to `/`.
+- The persistent sidebar is authoritative, with parent/child selection for routed
+  subpages, restrained icons and a mobile menu. Start contains only Overview.
+  Inverters has Overview, Live Data and Configuration children;
+  System status/configuration subpages retain their
+  context. The redundant horizontal Energy Management tabs are removed.
+- Plant **Solar Charger / Solarladeregler** (`/plant/solar-charger`) owns solar
+  charge-controller telemetry and connection settings. It does not display
+  normalized total PV as device-specific power. `/plant/solar` and
+  `/settings/solarcharger` redirect here. Total PV remains Solar on Overview.
+- `/plant/inverters` is a concise per-inverter overview: reachability/data age,
+  AC output, confirmed limit, temperature and recorded events where available.
+  Event counts are explicitly historical, not claims about current active faults.
+  The existing API exposes DPL's last aggregate output target, not a per-inverter
+  allocation; the UI identifies that distinction. Detailed channels, radio
+  statistics, Grid Profile, device information, event logs and manual power/limit
+  actions belong to `/plant/inverters/live`, with inverter-specific shortcuts
+  and a separate Configuration destination. `/live` is a compatibility redirect
+  that retains the selected inverter query. The technical page does not render
+  cross-device totals or solar-charger, battery, grid-charger or meter telemetry;
+  those devices retain their canonical Plant pages. `/` remains the only
+  cross-device summary. Existing inverter channels, selector and actions are
+  preserved without duplicating the concise inverter overview. Initial inverter
+  selection also works when entering with an already populated shared snapshot.
+- Power Control / DPL configuration belongs to `/energy/power-control`.
+  `/plant/inverters/power-limit` and `/settings/powerlimiter` redirect there.
+  Physical battery/wallbox connections, profile binding and scoped manual controls
+  remain under their devices; imported/repository profiles remain under
+  Integrations. Planning preserves all existing API payloads, modes, permissions,
+  control types, UTC deadlines and the separate execution opt-in. Readiness and
+  deep economic interpretation belong to Diagnostics rather than duplicated
+  settings summaries. Disabled PV planes keep their unused fields collapsed;
+  azimuth help belongs to the angle label. Overview plan summaries show actions
+  and times; step prices, predicted SoC and reasons remain in the expanded plan.
+- App owns exactly one `/livedata` WebSocket. The persistent header displays
+  neutral connecting/unknown, green connected and red disconnected status with
+  DE/EN accessible help, without a pulse. Inverter Live Data, the inverter overview and
+  overview limits consume the shared snapshot. Partial inverter frames preserve
+  other devices, ages advance in the browser, and an HTTP refresh cannot replace
+  newer live frames while still discovering configuration changes. Aborted
+  owners cannot overwrite newer snapshots, and authorization changes do not
+  cause a logout/reconnect loop.
+  Device reachability is separate from this transport indicator. The inverter
+  overview shows `—` for current AC output, temperature and the confirmed limit
+  whenever the inverter is unreachable, polling is disabled, data is older than
+  60 seconds or measurements are otherwise unverified. Cached zero or nonzero
+  readings are not presented as current. Recorded event counts remain explicitly
+  historical; technical Live Data may retain explicitly labeled last-known
+  readings. This affects presentation only, not backend control/freshness gates.
+- Help buttons stay directly beside their field label or section heading,
+  including legacy DTU/inverter/DPL hints. Inputs and interactive help are outside
+  each other's labels. Help supports hover, keyboard focus, click/tap toggle,
+  outside dismissal and Escape, with viewport-safe positioning. Reserve, upper
+  SoC, charging, discharge and execution use distinct concise explanations.
+- **German and English are the only UI languages.** French assets/messages are
+  removed; browser `fr`/other unsupported preferences fall back to English.
+  Uploaded language packs cannot extend the UI's language list. Firmware language
+  registration ignores unsupported packs, including older uploaded French files.
+  Device display settings/migration and event-log presentation likewise support
+  EN/DE, with English fallback for old unsupported locales. French display/event
+  strings are removed; the 131 alarm identifiers, protocol parsing, German/English
+  alarm messages and 13 German/English display format pairs are preserved.
+  These changes affect presentation, not HEMS control behavior.
+  Obsolete Greek, Spanish, Italian and Polish pack files are removed.
+  `lang/README.md` documents the fixed language set and the existing EN/DE
+  device-display overrides; uploaded packs do not add selector languages or
+  replace bundled WebUI/event/alarm translations.
+- The supplied official `OpenDTU_HEMS_logo_transparent.svg` is a WebUI asset and
+  replaces the header house icon beside the existing clickable wordmark. The
+  SVG is decorative beside the product text; its colors/proportions and the
+  live-connection indicator to the right are preserved in both themes.
+  The logo is bundled as a data URL inside the firmware's embedded `app.js`;
+  a standalone Vite `/assets/` file is not served by the firmware. The regression
+  checks this delivery constraint, with a firmware-route HTTP fixture available
+  for production-build browser tests.
+  The delivery fix passed type/build/lint checks and light/dark header browser
+  checks at 320/1440 px against that fixture, including the firmware's gzip and
+  HTML fallback behavior. This remains software validation, not on-device proof.
+  No fixture/mock readings are included in the production UI.
 
-Settings owns normal storage-strategy configuration: reserve, maximum desired SoC, grid-charging permission, economic-discharge permission and optional one-time target/deadline. Normal settings also expose energy-flow goals, household-load estimation and an explicit reference preset. Advanced settings contain wear/margin, terminal assumptions and monetary hysteresis. English/German/French summaries separate planned/commanded actions, import/export, wear, inventory and forecast coverage. Economic dispatch remains a separate explicit default-off opt-in.
+The preceding UX/IA pass on **2026-10-28** passed:
 
-Devices owns endpoints, bound profiles and expandable manual semantic controls. Repository-backed profile distribution is implemented: the browser retrieves a selected immutable profile, verifies size/SHA-256 and uses authenticated backend import/replacement; backend validation and in-use checks remain authoritative.
+- WebUI TypeScript checking (`vue-tsc --build`), production Vite build, source
+  ESLint/Prettier checks and `git diff --check`.
+- Focused Node tests for shared live-state ownership and refresh/frame ordering,
+  stale/unreachable values, aborted-owner isolation, strict locale fallback,
+  admin persistence/error handling, HEMS presentation/support snapshots,
+  energy-management settings, exact tariff units and profile-catalog integrity.
+- `test/test_redesign_browser.mjs` against the served production build at
+  `HEMS_BASE_URL=http://127.0.0.1:5174`: English/German primary and System routes
+  at 320/768/1440 px, no page overflow/runtime errors, nested active navigation,
+  physical-device ownership, attached help placement, keyboard/touch/outside/
+  Escape dismissal, one live connection across navigation, last-known values,
+  legacy redirects, unsupported locale fallback, unchanged planning/deadline
+  payloads and no browsing-triggered device commands. It now runs in the HEMS
+  browser regression workflow. Fixture-based screenshots were reviewed on
+  desktop/mobile, including the inverter summary and planning forms; German
+  long titles and the Console auto-scroll switch now wrap within the viewport.
+- Existing HEMS and economic browser regressions at 320/360/768/1440 px:
+  dark mode/contrast, keyboard/touch/DST charts, stale/partial/missing data,
+  tariff/PV saves, Monitor isolation, execution opt-in, manual pause and explicit
+  resume. Expanded details remain covered rather than removing those checks.
+- Modernization browser regressions at 360/1440 px: firmware stale/race states,
+  import/update/integrity/backend/network failures, manual fallback/export,
+  repository imports under Integrations and imported storage/EVSE profile
+  selection on the corresponding physical device pages.
+- Source integrity review preserved every EN/DE alarm message and display format
+  while removing the French columns; this is not a firmware-build claim.
 
-Advanced Diagnostics exposes provider/control/system details, paginated optimizer rows and the on-demand browser-only support snapshot `opendtu-hems-diagnostics/v1`. It sequentially combines existing firmware, system, HEMS, tariff, forecast and optimizer APIs. The on-demand system request uses `heap_history=1`, including the existing bounded INTERNAL/PSRAM heap journal and allocation-failure records; ordinary polling is unchanged. Credentials are always redacted; network/location details remain opt-in. The snapshot is never persisted on LittleFS.
+Final cleanup verification on **2026-10-28** passed focused WebUI type checking,
+production build, changed-source ESLint/Prettier checks, the shared-state/locale
+Node regression and the redesign browser regression in EN/DE at 320/1440 px.
+The browser checks distinguish verified current zero readings from unreachable
+zero frames, and require `—` for unverified AC output, temperature and limits
+after stale data, disabled polling or connection loss. A repository asset guard
+rejects unsupported locale packs. No controller, event/alarm parser or display
+implementation changed in this follow-up; EN/DE behavior is preserved.
+
+The inverter Live Data ownership follow-up on **2026-10-29** passed focused
+WebUI type checking, production build, changed-source ESLint/Prettier checks,
+the shared-state/navigation Node regression and EN/DE browser checks at
+320/1440 px against the firmware-route fixture. With other devices enabled,
+the technical page renders only inverter data and opens no unrelated device
+live requests/sockets. Tests cover nested active navigation, `/live` redirects
+including selected-inverter queries, cached-snapshot selection, AC/DC/INV
+channels, device/Grid Profile/event dialogs, existing manual limit/power
+payloads and a single app-owned live connection across sidebar navigation.
+All action requests are intercepted fixtures, not physical commands.
+
+Cleanup validation is software-only and browser requests use intercepted API
+fixtures. Physical ESP32/device and live-installation visual validation remain
+pending. The full local CI/firmware matrix was not run, and GitHub Actions were
+not queried, awaited or monitored. `redesign-v1` / PR #37 remains unmerged.
 
 ## Native providers and external data
 

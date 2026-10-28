@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="$t('powerlimiteradmin.PowerLimiterSettings')" :isLoading="dataLoading">
+    <BasePage :title="$t('redesign.powerControl')" :isLoading="dataLoading">
         <BootstrapAlert
             v-model="showAlert"
             dismissible
@@ -105,10 +105,12 @@
                     v-if="isEnabled && (governingBatteryPoweredInverters || governingSmartBufferPoweredInverters)"
                 >
                     <div class="row mb-3">
-                        <label for="inverter_restart" class="col-sm-4 col-form-label">
-                            {{ $t('powerlimiteradmin.InverterRestartHour') }}
-                            <BIconInfoCircle v-tooltip :title="$t('powerlimiteradmin.InverterRestartHint')" />
-                        </label>
+                        <div class="col-sm-4 col-form-label">
+                            <span class="label-with-help"
+                                ><label for="inverter_restart">{{ $t('powerlimiteradmin.InverterRestartHour') }}</label
+                                ><HelpHint :text="$t('powerlimiteradmin.InverterRestartHint')"
+                            /></span>
+                        </div>
                         <div class="col-sm-8">
                             <select
                                 id="inverter_restart"
@@ -430,6 +432,7 @@
 </template>
 
 <script lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import { defineComponent } from 'vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
@@ -437,7 +440,6 @@ import { handleResponse, authHeader } from '@/utils/authentication';
 import CardElement from '@/components/CardElement.vue';
 import FormFooter from '@/components/FormFooter.vue';
 import InputElement from '@/components/InputElement.vue';
-import { BIconInfoCircle } from 'bootstrap-icons-vue';
 import type {
     PowerLimiterConfig,
     PowerLimiterInverterConfig,
@@ -447,12 +449,12 @@ import type {
 
 export default defineComponent({
     components: {
+        HelpHint,
         BasePage,
         BootstrapAlert,
         CardElement,
         FormFooter,
         InputElement,
-        BIconInfoCircle,
     },
     data() {
         return {

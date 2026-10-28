@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="$t('gridchargeradmin.ChargerSettings')" :isLoading="dataLoading">
+    <BasePage :title="$t('gridchargeradmin.ChargerSettings')" :isLoading="dataLoading" :embedded="embedded">
         <BootstrapAlert
             v-model="showAlert"
             dismissible
@@ -279,6 +279,7 @@ export default defineComponent({
         FormFooter,
         InputElement,
     },
+    props: { embedded: Boolean },
     data() {
         return {
             dataLoading: true,

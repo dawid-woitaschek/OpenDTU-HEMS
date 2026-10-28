@@ -9,6 +9,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '../work/browser/n
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
 const catalog = JSON.parse(readFileSync('work/profile-catalog/catalog.json', 'utf8'));
 const manifest = { schema: 'opendtu-hems-update/v1', repository: 'dawid-woitaschek/OpenDTU-HEMS', channel: 'pr-25', branch: 'feature/hems-economic-dispatch', commit: '1'.repeat(40), source_commit: '2'.repeat(40), published_at: '2026-10-19T12:00:00Z', builds: { generic_esp32s3_usb: { file: 'opendtu-hems-generic_esp32s3_usb.bin', size: 100, md5: 'a'.repeat(32), sha256: 'b'.repeat(64) } } };
+const baseUrl = process.env.HEMS_BASE_URL || 'http://127.0.0.1:5173';
 const errors = [];
 try {
     for (const width of [360, 1440]) {
@@ -52,10 +53,10 @@ try {
                 : path === '/api/hems/config' ? fixture.config : path === '/api/hems/status' ? fixture.status
                 : path === '/api/hems/profiles' ? { profiles: installed, corrupt_slots: 0 }
                 : path === '/api/hems/profiles/evse-binding' ? fixture.binding
-                : path.endsWith('/i18n/languages') ? [] : {};
+                : path.endsWith('/i18n/languages') ? [] : path.endsWith('/config') ? { enabled: false } : {};
             return route.fulfill({ json: body });
         });
-        await page.goto('http://127.0.0.1:5173/firmware/upgrade');
+        await page.goto(baseUrl + '/firmware/upgrade');
         const channel = page.locator('#firmware-update-channel');
         await page.getByText('The installed firmware is already the current image in this update channel.', { exact: true }).waitFor();
         await channel.fill('deinemutter');
@@ -77,7 +78,7 @@ try {
         await late.fulfill({ json: { ...manifest, channel: 'slow' } });
         await page.waitForTimeout(100);
         assert.equal(await page.locator('code').filter({ hasText: /^slow$/ }).count(), 0);
-        await page.goto('http://127.0.0.1:5173/hems/devices');
+        await page.goto(baseUrl + '/energy/integrations');
         const profilePanel = page.locator('.card').filter({ has: page.getByRole('heading', { name: 'Repository profiles', exact: true }) });
         await profilePanel.getByText(catalog.profiles[0].id, { exact: true }).waitFor();
         assert.equal(remote.filter(url => url.includes('/device-profiles/')).length, 0);
@@ -96,7 +97,22 @@ try {
         assert.ok(await card.getByRole('button', { name: 'Update / Replace', exact: true }).isDisabled());
         assert.equal(remote.filter(url => url.includes('/device-profiles/')).length, 4);
         assert.equal(posts.length, 2); // backend rejection and successful import; integrity failures never POST
-        assert.ok(await page.locator('select option').filter({ hasText: entry.id }).count() > 0);
+        assert.equal(await page.locator('#hems-storage-profile, #hems-evse-profile').count(), 0, 'Integration management contains no physical profile binding forms');
+        const physical = category => category === 'storage' ? '/plant/battery' : '/plant/wallbox';
+        const select = category => category === 'storage' ? '#hems-storage-profile' : '#hems-evse-profile';
+        await page.goto(baseUrl + physical(entry.category));
+        await page.locator(select(entry.category) + ' option').filter({ hasText: entry.id }).waitFor({ state: 'attached' });
+        assert.equal(await page.locator(select(entry.category) + ' option').filter({ hasText: entry.id }).isDisabled(), false);
+        await page.goto(baseUrl + '/energy/integrations');
+        const other = catalog.profiles.find(p => p.category !== entry.category);
+        assert.ok(other, 'Catalog has both storage and EVSE profiles');
+        const otherCard = profilePanel.locator('.border.rounded').filter({ hasText: other.id });
+        await otherCard.getByRole('button', { name: 'Import', exact: true }).click();
+        await otherCard.getByText('Installed · matches repository', { exact: true }).waitFor();
+        await page.goto(baseUrl + physical(other.category));
+        await page.locator(select(other.category) + ' option').filter({ hasText: other.id }).waitFor({ state: 'attached' });
+        assert.equal(await page.locator(select(other.category) + ' option').filter({ hasText: other.id }).isDisabled(), false);
+        await page.goto(baseUrl + '/energy/integrations');
         installed[0].content_sha256 = '0'.repeat(64); await page.reload();
         await profilePanel.getByText('Installed · differs from repository', { exact: true }).waitFor();
         page.once('dialog', dialog => dialog.accept());
@@ -109,7 +125,9 @@ try {
             await profilePanel.locator('.alert-warning').waitFor();
             await profilePanel.getByText('Manual file import (fallback)', { exact: true }).click();
             assert.ok(await page.locator('#profile-json').isVisible());
-            assert.ok(await profilePanel.getByRole('button', { name: 'Export', exact: true }).isEnabled());
+            const exports = profilePanel.getByRole('button', { name: 'Export', exact: true });
+            assert.equal(await exports.count(), installed.length);
+            for (const button of await exports.all()) assert.ok(await button.isEnabled());
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         assert.equal(posts.filter(p => /command|control|config/.test(p.path)).length, 0);

@@ -41,7 +41,7 @@ const original = { enabled: true, provider: 'energy_charts', url: '', planes: []
     markup_micros_per_kwh: 1234, monthly_micros: 9990000,
 }, refresh_seconds: 3600, max_age_seconds: 3600, horizon_seconds: 86400 };
 const state = compile(component.match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1] + '\nexport { drafts, feeds, usable, unavailable, save, load, refresh, errors };', {
-    vue: { ref: value => ({ value }), computed: fn => ({ get value() { return fn(); } }), reactive: value => value, onMounted() {}, onUnmounted() {}, getCurrentInstance: () => ({ appContext: { config: { globalProperties: {} } } }) },
+    vue: { ref: value => ({ value }), computed: fn => ({ get value() { return fn(); } }), reactive: value => value, watchEffect() {}, onMounted() {}, onUnmounted() {}, getCurrentInstance: () => ({ appContext: { config: { globalProperties: {} } } }) },
     'vue-i18n': { useI18n },
     'vue-router': { useRouter: () => ({}) }, '@/utils/tariffUnits': units,
     '@/utils/hemsPresentation': compile(readFileSync(new URL('../webapp/src/utils/hemsPresentation.ts', import.meta.url), 'utf8')),

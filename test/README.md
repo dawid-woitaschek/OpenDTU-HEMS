@@ -97,7 +97,7 @@ disable/re-enable, explicit profile requirements and permission reload.
 
 Run `yarn --cwd webapp test` after dependency installation. This retains Admin/auth
 and tariff canonical-unit/save tests and adds deterministic calendar, classification,
-price/forecast/freshness/provider-message and en/de/fr structural checks.
+price/forecast/freshness/provider-message and en/de structural checks.
 
 For rendered hardware-free evidence, install Playwright into a scratch directory
 (e.g. `npm install --prefix work/browser playwright`), start
@@ -209,5 +209,31 @@ checks six-hour verified history checkpoints, failed rename, reboot and corrupte
 history; `test_economic_integration` checks coordinated manual/worker revocation,
 stale meter and unavailable DPL. All remain hardware-free. See
 [behavior, configuration, measured resources and remaining hardware facts](../docs/HEMS_Energy_Management.md).
-`yarn --cwd webapp test` includes explicit preset/opt-in and en/de/fr coverage.
+`yarn --cwd webapp test` includes explicit preset/opt-in and en/de coverage.
 
+
+### Redesign UX/IA regression
+
+`node test/test_webui_state.mjs` exercises shared live-connection ownership,
+partial snapshots, refresh/frame ordering, last-known data, stale-owner isolation
+and the strict EN/DE locale policy. `node test/test_redesign_browser.mjs` audits primary routes in
+English/German at 320/768/1440 px, nested sidebar selection, physical-device
+ownership, help placement/touch/outside/Escape behavior, connection status and
+unchanged planning payloads. It is included in the HEMS browser regression job.
+Inverter technical Live Data is checked with other devices enabled: only
+inverter telemetry is rendered, no unrelated device live views fetch/open
+sockets, dialogs and manual inverter payloads remain functional, and `/live`
+bookmarks preserve inverter selection through the canonical redirect.
+
+Browser suites accept `HEMS_BASE_URL` (default `http://127.0.0.1:5173`) so the
+same flows can target a served production build. `PLAYWRIGHT_MODULE` and
+`CHROMIUM_PATH` select an isolated browser installation. All device/provider
+requests in these suites are intercepted; they do not validate physical hardware.
+
+For firmware asset delivery checks, build the WebUI and run
+`python3 test/fixtures/embedded_webapp_server.py`, then set
+`HEMS_BASE_URL=http://127.0.0.1:5174` for the browser suite. This server mirrors
+the firmware's fixed embedded-file routes, gzip responses and HTML fallback.
+Serving every file in `webapp_dist` hides missing firmware asset routes.
+The header regression requires a bundled SVG data URL, so a standalone logo
+request cannot silently pass even when running against Vite.

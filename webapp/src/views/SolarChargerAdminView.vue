@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="$t('solarchargeradmin.SolarChargerSettings')" :isLoading="dataLoading">
+    <BasePage :title="$t('solarchargeradmin.SolarChargerSettings')" :isLoading="dataLoading" :embedded="embedded">
         <BootstrapAlert
             v-model="showAlert"
             dismissible
@@ -221,6 +221,7 @@ export default defineComponent({
         FormFooter,
         InputElement,
     },
+    props: { embedded: Boolean },
     data() {
         return {
             dataLoading: true,

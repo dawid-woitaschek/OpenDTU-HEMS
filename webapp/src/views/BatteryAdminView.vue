@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="$t('batteryadmin.BatterySettings')" :isLoading="dataLoading">
+    <BasePage :title="$t('batteryadmin.BatterySettings')" :isLoading="dataLoading" :embedded="embedded">
         <BootstrapAlert
             v-model="showAlert"
             dismissible
@@ -865,6 +865,7 @@ export default defineComponent({
         FormFooter,
         InputElement,
     },
+    props: { embedded: Boolean },
     data() {
         return {
             dataLoading: true,

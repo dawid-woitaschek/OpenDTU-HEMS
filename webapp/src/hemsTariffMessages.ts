@@ -42,25 +42,4 @@ export const hemsTariffMessages = {
                 'Niedrig, normal und hoch beschreiben nur das relative Preisniveau innerhalb des jeweiligen lokalen Kalendertags; sie sind keine Steuerregeln und garantieren keine Einsparung. HEMS bestimmt eine zeitgewichtete robuste p10–p90-Preisspanne und teilt diese Preisspanne in ein unteres, mittleres und oberes Drittel. Beträgt die robuste Tagesspanne weniger als 2 ct/kWh (0,02 Währungseinheiten/kWh bei anderen Währungen), bleibt der gesamte Tag normal. Unvollständige Tage verwenden nur verfügbare Daten. Optimierer und Dispatch verwenden immer die exakten numerischen Preise und niemals diese Anzeigekategorien.',
         },
     },
-    fr: {
-        hemsUi: {
-            devicesManualControls: 'Configuration des appareils et commandes manuelles',
-            stateAndError: 'État / dernière erreur',
-            generationAndFetch: 'Génération fournisseur / récupération',
-            sourceAndTransportAge: 'Âge de la réponse fournisseur / récupération (s)',
-            providerDeprecated:
-                'Le fournisseur a annoncé la suppression de ce point d’accès. Les données précédentes sont conservées.',
-            nextRefresh: 'Prochaine actualisation',
-            planeNotAttempted:
-                'Non demandé pendant cette actualisation ; un plan précédent a pu échouer ou épuiser le quota.',
-            cheap: 'Bas',
-            normal: 'Normal',
-            expensive: 'Élevé',
-            nextcheap: 'Prochaine période à prix bas',
-            nextexpensive: 'Prochaine période à prix élevé',
-            relativePrices: 'Niveau de prix par jour civil',
-            classificationHint:
-                'Bas, normal et élevé décrivent uniquement les niveaux de prix relatifs de chaque jour civil local ; ce ne sont pas des règles de contrôle et ils ne garantissent aucune économie. HEMS calcule une plage de prix robuste p10–p90 pondérée par la durée et divise cette plage en tiers inférieur, médian et supérieur. Si la plage quotidienne robuste est inférieure à 2 ct/kWh (0,02 unité monétaire/kWh hors EUR), toute la journée reste normale. Les journées incomplètes utilisent uniquement les données disponibles. L’optimiseur et le dispatch utilisent toujours les prix numériques exacts, jamais ces catégories d’affichage.',
-        },
-    },
 } as const;

@@ -159,6 +159,7 @@ jobs:
           node test/test_hems_browser.mjs
           node test/test_economic_browser.mjs
           node test/test_modernization_browser.mjs
+          node test/test_redesign_browser.mjs
       - name: Keep browser evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -166,6 +167,7 @@ jobs:
           name: hems-browser-evidence
           path: |
             work/screenshots
+            work/redesign-screenshots
             work/vite.log
 
   publish_firmware_channel:

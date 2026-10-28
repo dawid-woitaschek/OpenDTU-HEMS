@@ -36,7 +36,48 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
 2. **Correct actual WARP/Marstek mapping or lifecycle issues** found on hardware. Verify Marstek V148 power/SoC scaling, sign, persistence and command/watchdog behavior. Do not invent lifecycle architecture without hardware evidence.
 3. **Live provider/on-device validation:** Energy-Charts v2 HTTPS/parser/heap/stack and Forecast.Solar DNS/TLS/resources, scheduling/quota behavior and real multi-plane responses. Prior successful no-PSRAM runs do not establish long-term stability; the accepted PR #35 PSRAM run covers approximately 21 hours on Device A, with representative provider-specific live runs and retained diagnostics still useful for broader coverage.
 4. **Economic optimizer/dispatch real-input validation:** confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Merged PR #34 adds learned-load coverage/fallback, wear, terminal valuation and monetary hysteresis. Validate planned versus commanded versus measured flows, zero/changing export limits, stale telemetry, device failures and strict PV-only startup. Measure INTERNAL/PSRAM free/largest blocks, stack watermarks, planning latency, TLS headroom and DPL responsiveness on the combined PSRAM build. Physical charge/discharge and export transients remain gates.
-5. **Product UX / planning presentation:** perform real-device visual validation and polish of Overview, Settings, Devices and Diagnostics. Keep one authoritative control model; tariff categories remain presentation-only.
+5. **Product UX / unified WebUI (`redesign-v1`, unmerged draft PR #37):** the first
+   redesign and a focused UX/IA cleanup are implemented separately from `hems`,
+   based on `6b45ebcd`. One concise Overview replaces the classic/HEMS split;
+   price, forecast and battery-plan details expand without repeated current facts.
+   The sidebar owns navigation and nested active states. Plant distinguishes
+   Solarladeregler / Solar Charger from total Solar and offers a human-readable
+   inverter summary separate from detailed Live Data. Start contains only
+   Overview; Plant > Inverters owns Overview, Live Data and Configuration.
+   `/plant/inverters/live` contains inverter technical telemetry, dialogs and
+   manual actions; `/live` redirects there, preserving inverter selection.
+   The technical page no longer renders cross-device totals or appended solar,
+   battery or grid-charger views. `/` is the only cross-device summary, and each
+   physical device retains its own Plant telemetry page. DPL configuration belongs
+   to Energiemanagement. Header connection state comes from one app-owned live
+   socket; device health and current/last-known values remain distinct. Unverified
+   inverter overview measurements and limits show `—`, including cached zero
+   values. Help stays attached to labels/headings and supports touch, outside
+   dismissal and keyboard use. German and English are the complete supported locale set;
+   obsolete non-DE/EN pack assets are removed and language-pack documentation
+   describes only the supported set and existing EN/DE display overrides.
+   Existing APIs, permissions, forms and opt-in behavior remain authoritative;
+   firmware changes only remove unsupported presentation locales and provide
+   English fallbacks for old display settings. Existing alarm identifiers and
+   German/English messages are preserved. The header uses the supplied official
+   OpenDTU-HEMS SVG beside the existing wordmark, replacing the house icon;
+   the live-connection indicator remains to the right.
+   The SVG is bundled into embedded JavaScript rather than relying on an
+   unserved `/assets/` URL; header regression checks enforce this constraint.
+   Focused frontend/type/build/Node checks and all four intercepted-API browser
+   suites passed locally; the route audit covers EN/DE at 320/768/1440 px,
+   including attached help and mobile overflow fixes. [Current status](HEMS_Current_Status.md#product-ui)
+   records their scope and remaining live-device visual/physical validation.
+   The final telemetry/pack cleanup passed focused type/build/lint/Node checks
+   and EN/DE browser checks at 320/1440 px, covering unreachable zero frames,
+   stale readings, disabled polling and connection loss. Existing EN/DE
+   event/alarm/display implementation is unchanged by this follow-up.
+   The inverter Live Data ownership follow-up (2026-10-29) passed focused
+   frontend/type/build/lint/Node and EN/DE browser checks at 320/1440 px,
+   including redirects, nested selection, retained dialogs/manual payloads and
+   absence of unrelated device live views without additional live sockets.
+   PR #37 remains unmerged; no remote CI result is asserted. Tariff bands remain
+   presentation-only.
 6. **CMT2300A hardware follow-up:** refreshed PR #31 is merged. Local integration validation: all 36 native test executables and the control-surface guard passed, including PSRAM allocation/JSON failure recovery and CMT receive-flag handling. Production configuration compatibility and firmware channel/provenance tests passed; Hoymiles and changed wrapper/test sources passed cpplint with the repository filters. Source parity, hardening ancestry/scope and `git diff --check` passed. The `generic_esp32s3_usb_quad_psram` and `generic_esp32s3_usb` firmware builds passed with the existing embedded web assets; the frontend hook was skipped using `GITHUB_ACTIONS=true`. GitHub Actions were not queried or awaited.
 
 Physical CMT validation remains limited to previously tested behavior; no new hardware validation occurred for the upstream refresh. Exercise reception/recovery and module compatibility on the combined build. Address later failures with rollback or targeted fixes; source/build checks do not establish RF reliability.

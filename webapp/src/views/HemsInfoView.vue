@@ -1,6 +1,5 @@
 <template>
     <BasePage :title="$t('hemsUi.overviewTitle')" :isLoading="loading" show-reload @reload="load">
-        <HemsNav />
         <div v-if="offline" class="alert alert-warning" role="alert">{{ $t('hems.StatusUnavailable') }}</div>
         <template v-if="status">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -26,59 +25,98 @@
                         )
                     }}</span>
                 </div>
-                <RouterLink to="/hems/settings" class="btn btn-outline-primary btn-sm">{{
+                <RouterLink to="/energy/planning" class="btn btn-outline-primary btn-sm">{{
                     $t('hemsUi.settings')
                 }}</RouterLink>
             </div>
             <div class="row g-3">
-                <div v-for="card in cards" :key="card.name" class="col-6 col-xl-3">
-                    <section class="card h-100">
+                <div v-for="card in cards" :key="card.name" class="col-12 col-sm-6 col-xl-3">
+                    <section
+                        :id="'overview-' + card.name"
+                        class="card h-100 overview-card"
+                        :class="'overview-card-' + card.name"
+                    >
                         <div class="card-body">
                             <h2 class="h6 text-body-secondary d-flex align-items-center gap-2">
-                                <component :is="card.icon" />{{ $t('hemsUi.' + card.name) }}
+                                <component :is="card.icon" aria-hidden="true" />{{ $t('hemsUi.' + card.name) }}
+                                <HelpHint v-if="card.name === 'pv'" :label="$t('redesign.powerLimit')">
+                                    <DplLimitInfo />
+                                    <strong class="d-block">{{ $t('redesign.powerLimit') }}</strong>
+                                    <span class="d-block mb-1">{{ $t('redesign.limitHelp') }}</span>
+                                    <span v-if="liveUnavailable || !live?.inverters?.length">{{
+                                        $t('hemsUi.unavailable')
+                                    }}</span>
+                                    <span
+                                        v-for="inverter in liveUnavailable ? [] : liveInverters"
+                                        :key="inverter.serial"
+                                        class="d-block mt-1"
+                                    >
+                                        {{ inverter.name }}:
+                                        {{
+                                            inverterState(
+                                                inverter,
+                                                liveConnection === 'connected' && !liveUnavailable
+                                            ) === 'reachable' && inverter.limit_relative >= 0
+                                                ? number(inverter.limit_relative, '%')
+                                                : '—'
+                                        }}
+                                        <template
+                                            v-if="
+                                                inverterState(
+                                                    inverter,
+                                                    liveConnection === 'connected' && !liveUnavailable
+                                                ) === 'reachable' && inverter.limit_absolute >= 0
+                                            "
+                                        >
+                                            · {{ power(inverter.limit_absolute) }}</template
+                                        >
+                                        <span class="d-block small"
+                                            >{{ $t('hems.DataAge') }}: {{ number(inverter.data_age, 's') }} ·
+                                            {{
+                                                $t(
+                                                    'redesign.' +
+                                                        inverterState(
+                                                            inverter,
+                                                            liveConnection === 'connected' && !liveUnavailable
+                                                        )
+                                                )
+                                            }}</span
+                                        >
+                                    </span>
+                                </HelpHint>
+                                <HelpHint v-else :text="$t('redesign.' + card.name + 'Help')" />
                             </h2>
-                            <div class="fs-2 fw-semibold lh-sm my-2">{{ card.value }}</div>
+                            <div class="overview-value fs-2 fw-semibold lh-sm my-2">{{ card.value }}</div>
                             <div class="fw-medium">{{ $t('hemsUi.' + card.state) }}</div>
                             <div v-if="card.detail" class="small text-body-secondary mt-1">{{ card.detail }}</div>
-                            <div v-if="card.health" class="small text-warning-emphasis mt-2">
+                            <div
+                                v-if="card.health"
+                                :class="[
+                                    'small mt-2',
+                                    ['notConfigured', 'disabled'].includes(card.health)
+                                        ? 'text-body-secondary'
+                                        : 'text-warning-emphasis',
+                                ]"
+                            >
                                 {{ $t('hemsUi.' + card.health) }}
                             </div>
                         </div>
                     </section>
                 </div>
             </div>
-            <CardElement :text="$t('hemsUi.automation')" textVariant="text-bg-primary" add-space>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <h2 class="h6">{{ $t('hemsUi.evProtection') }}</h2>
-                        <div class="fw-semibold">{{ $t('hemsUi.' + protection) }}</div>
-                        <p
-                            v-if="!offline && status.shadow.ev_protection.state === 'waiting'"
-                            class="small text-body-secondary mb-0"
-                        >
-                            {{ $t('hemsUi.protectionWaiting') }}
-                        </p>
-                        <p
-                            v-else-if="!offline && !status.shadow.ev_protection.charging_known"
-                            class="small text-body-secondary mb-0"
-                        >
-                            {{ $t('hemsUi.evStateUnknown') }}
-                        </p>
-                    </div>
-                    <div class="col-md-6">
-                        <dl class="row mb-0">
-                            <dt class="col-6 fw-normal">{{ $t('hemsUi.storagePermission') }}</dt>
-                            <dd class="col-6">{{ permission('storage') }}</dd>
-                            <dt class="col-6 fw-normal">{{ $t('hemsUi.evsePermission') }}</dt>
-                            <dd class="col-6">{{ permission('evse') }}</dd>
-                        </dl>
-                    </div>
-                </div>
-                <p class="small text-body-secondary mb-0 mt-3">{{ $t('hemsUi.modeSummary' + status.state) }}</p>
-            </CardElement>
+            <div
+                v-if="protection !== 'protectionIdle' && protection !== 'unavailable'"
+                class="d-flex flex-wrap align-items-center gap-2 mt-3 small"
+                role="status"
+            >
+                <span class="label-with-help"
+                    >{{ $t('hemsUi.evProtection') }} <HelpHint :text="$t('redesign.protectionHelp')"
+                /></span>
+                <strong>{{ $t('hemsUi.' + protection) }}</strong>
+            </div>
         </template>
-        <HemsEnergyPanel view="overview" @health="providerIssue = $event" />
-        <HemsStorageSchedulePanel />
+        <div class="row g-3 mt-1"><HemsEnergyPanel view="overview" compact @health="providerIssue = $event" /></div>
+        <HemsStorageSchedulePanel id="overview-plan" />
     </BasePage>
 </template>
 <script setup lang="ts">
@@ -87,14 +125,22 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { BIconPlug, BIconSun, BIconBatteryHalf, BIconEvStation } from 'bootstrap-icons-vue';
 import BasePage from '@/components/BasePage.vue';
-import CardElement from '@/components/CardElement.vue';
-import HemsNav from '@/components/hems/HemsNav.vue';
+import DplLimitInfo from '@/components/hems/DplLimitInfo.vue';
+import HelpHint from '@/components/HelpHint.vue';
+import { inverterState } from '@/utils/inverterPresentation';
+import { useLiveData } from '@/utils/liveData';
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
 import HemsStorageSchedulePanel from '@/components/hems/HemsStorageSchedulePanel.vue';
 import type { HemsStatus, HemsSignal } from '@/types/HemsStatus';
 import { signalValue } from '@/utils/hemsPresentation';
 import { authHeader, handleResponse } from '@/utils/authentication';
 const { t, locale } = useI18n();
+const {
+    data: live,
+    inverters: liveInverters,
+    unavailable: liveUnavailable,
+    connection: liveConnection,
+} = useLiveData();
 const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
 const router = useRouter();
 const status = ref<HemsStatus>(),
@@ -145,7 +191,7 @@ const cards = computed(() => {
             value: power(grid),
             state: grid === null ? 'unavailable' : grid > 0 ? 'importing' : grid < 0 ? 'exporting' : 'balanced',
             detail: '',
-            health: signalHealth(n?.grid.power_w),
+            health: live.value?.power_meter?.enabled === false ? 'notConfigured' : signalHealth(n?.grid.power_w),
             icon: icons[0],
         },
         {
@@ -153,7 +199,10 @@ const cards = computed(() => {
             value: power(pv),
             state: pv === null ? 'unavailable' : pv > 0 ? 'producing' : 'idle',
             detail: '',
-            health: signalHealth(n?.pv.power_w),
+            health:
+                live.value && !live.value?.inverters?.length && !live.value.solarcharger?.enabled
+                    ? 'notConfigured'
+                    : signalHealth(n?.pv.power_w),
             icon: icons[1],
         },
         {
@@ -192,11 +241,6 @@ const protection = computed(() => {
     if (p.would_block_storage_discharge) return 'protectionShadow';
     return p.charging_known ? 'protectionIdle' : 'unavailable';
 });
-function permission(name: 'storage' | 'evse') {
-    return offline.value
-        ? t('hemsUi.unavailable')
-        : t(status.value?.actuation[name].control_mode === 'hems' ? 'hemsUi.hemsControl' : 'hemsUi.monitorOnly');
-}
 let timer: ReturnType<typeof setTimeout> | undefined,
     disposed = false,
     fetching = false;

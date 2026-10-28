@@ -1,10 +1,14 @@
 <template>
-    <CardElement :text="t('hemsUi.optimizer')" textVariant="text-bg-primary" add-space>
+    <CardElement
+        :text="t('hemsUi.optimizer')"
+        :help="t('redesign.optimizerHelp')"
+        textVariant="text-bg-primary"
+        add-space
+    >
         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
             <span class="badge text-bg-secondary">{{ t('hemsUi.planning') }}</span>
             <strong>{{ t(plan?.dispatch?.enabled ? 'hemsUi.dispatchEnabled' : 'hemsUi.shadowOnly') }}</strong>
         </div>
-        <p class="small text-body-secondary">{{ t('hemsUi.dispatchHint') }}</p>
         <div v-if="plan?.dispatch && !error" class="border rounded p-3 mb-3" role="status">
             <div class="fw-semibold">{{ dispatchLabel(plan.dispatch.state) }}</div>
             <div class="small text-body-secondary mt-1">
@@ -72,11 +76,11 @@
             </ul>
             <RouterLink
                 v-if="plan.blockers.length && props.view === 'overview'"
-                to="/hems/settings"
+                to="/energy/planning"
                 class="small d-inline-block mb-3"
                 >{{ t('hemsUi.reviewPrerequisites') }}</RouterLink
             >
-            <template v-if="hasResult">
+            <template v-if="hasResult && props.view !== 'settings'">
                 <div class="row g-3 mb-3">
                     <div class="col-sm-6">
                         <div class="small text-body-secondary">{{ t('hemsUi.modeledSavings') }}</div>
@@ -133,29 +137,41 @@
                         {{ t('hemsUi.optimizedCost') }}: {{ money(plan.optimized_cost_nano) }}
                     </p>
                 </details>
-                <RouterLink v-if="props.view === 'overview'" to="/hems/diagnostics" class="small d-inline-block mt-3">{{
-                    t('hemsUi.fullSchedule')
-                }}</RouterLink>
+                <RouterLink
+                    v-if="props.view === 'overview'"
+                    to="/energy/diagnostics"
+                    class="small d-inline-block mt-3"
+                    >{{ t('hemsUi.fullSchedule') }}</RouterLink
+                >
             </template>
             <form v-if="draft && props.view === 'settings'" class="mt-4" @submit.prevent="save">
-                <label class="form-check-label d-block mb-3"
-                    ><input
+                <div class="form-check mb-3">
+                    <input
                         id="optimizer-enabled"
                         v-model="draft.enabled"
                         type="checkbox"
                         class="form-check-input me-2"
-                    />{{ t('hemsUi.enableShadow') }}</label
-                >
-                <label class="form-check-label d-block mb-3"
-                    ><input
+                    /><FieldLabel
+                        for-id="optimizer-enabled"
+                        :text="t('hemsUi.enableShadow')"
+                        :help="t('redesign.shadowHelp')"
+                        label-class="form-check-label"
+                    />
+                </div>
+                <div class="form-check mb-3">
+                    <input
                         id="optimizer-soc-confirm"
                         v-model="draft.soc_bounds_configured"
                         type="checkbox"
                         class="form-check-input me-2"
-                    />{{ t('hemsUi.confirmSoc') }}</label
-                >
+                    /><FieldLabel
+                        for-id="optimizer-soc-confirm"
+                        :text="t('hemsUi.confirmSoc')"
+                        :help="t('redesign.socConfirmHelp')"
+                        label-class="form-check-label"
+                    />
+                </div>
 
-                <EnergyManagementSettings v-model="draft.energy_management" @reference="applyReference" />
                 <label for="optimizer-expected_base_load_w" class="form-label">{{ t('hemsUi.baseLoad') }} (W)</label>
                 <input
                     id="optimizer-expected_base_load_w"
@@ -168,13 +184,17 @@
                     required
                 />
                 <fieldset class="border rounded p-3 mb-3" v-if="draft.policies">
-                    <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.storagePolicies') }}</legend>
-                    <p class="form-text mt-0">{{ t('hemsUi.policyHint') }}</p>
+                    <legend class="float-none w-auto fs-6 px-1">
+                        {{ t('hemsUi.storagePolicies') }}
+                    </legend>
                     <div class="row g-3">
                         <div class="col-sm-6">
-                            <label for="optimizer-min_soc_pct" class="form-label"
-                                >{{ t('hemsUi.batteryReserve') }} (%)</label
-                            >
+                            <FieldLabel
+                                for-id="optimizer-min_soc_pct"
+                                :text="t('hemsUi.batteryReserve') + ' (%)'"
+                                :help="t('redesign.reserveHelp')"
+                                label-class="form-label"
+                            />
                             <input
                                 id="optimizer-min_soc_pct"
                                 v-model.number="draft.min_soc_pct"
@@ -187,9 +207,12 @@
                             />
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-max_soc_pct" class="form-label"
-                                >{{ t('hemsUi.maxDesiredSoc') }} (%)</label
-                            >
+                            <FieldLabel
+                                for-id="optimizer-max_soc_pct"
+                                :text="t('hemsUi.maxDesiredSoc') + ' (%)'"
+                                :help="t('redesign.maxSocHelp')"
+                                label-class="form-label"
+                            />
                             <input
                                 id="optimizer-max_soc_pct"
                                 v-model.number="draft.max_soc_pct"
@@ -202,9 +225,12 @@
                             />
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-grid-charging" class="form-label">{{
-                                t('hemsUi.gridCharging')
-                            }}</label>
+                            <FieldLabel
+                                for-id="optimizer-grid-charging"
+                                :text="t('hemsUi.gridCharging') + ''"
+                                :help="t('redesign.gridChargeHelp')"
+                                label-class="form-label"
+                            />
                             <select
                                 id="optimizer-grid-charging"
                                 v-model="draft.policies.grid_charging_allowed"
@@ -215,9 +241,12 @@
                             </select>
                         </div>
                         <div class="col-sm-6">
-                            <label for="optimizer-economic-discharge" class="form-label">{{
-                                t('hemsUi.economicDischarge')
-                            }}</label>
+                            <FieldLabel
+                                for-id="optimizer-economic-discharge"
+                                :text="t('hemsUi.economicDischarge') + ''"
+                                :help="t('redesign.dischargeHelp')"
+                                label-class="form-label"
+                            />
                             <select
                                 id="optimizer-economic-discharge"
                                 v-model="draft.policies.discharge_allowed"
@@ -228,14 +257,19 @@
                             </select>
                         </div>
                     </div>
-                    <label class="form-check-label d-block my-3"
-                        ><input
+                    <div class="form-check mb-3">
+                        <input
                             id="optimizer-target-enabled"
                             v-model="draft.policies.target_enabled"
                             type="checkbox"
                             class="form-check-input me-2"
-                        />{{ t('hemsUi.targetCharge') }}</label
-                    >
+                        /><FieldLabel
+                            for-id="optimizer-target-enabled"
+                            :text="t('hemsUi.targetCharge')"
+                            :help="t('redesign.targetHelp')"
+                            label-class="form-check-label"
+                        />
+                    </div>
                     <div v-if="draft.policies.target_enabled" class="row g-3">
                         <div class="col-sm-4">
                             <label for="optimizer-target-soc" class="form-label"
@@ -266,25 +300,36 @@
                             />
                         </div>
                     </div>
-                    <p class="form-text mb-0">{{ t('hemsUi.targetHint') }}</p>
                 </fieldset>
 
                 <div class="border rounded p-3 mb-3">
-                    <label class="form-check-label d-block mb-2">
+                    <div class="form-check mb-3">
                         <input
                             id="optimizer-dispatch-enabled"
                             v-model="draft.dispatch_enabled"
                             type="checkbox"
                             class="form-check-input me-2"
+                        /><FieldLabel
+                            for-id="optimizer-dispatch-enabled"
+                            :text="t('hemsUi.enableDispatch')"
+                            :help="t('redesign.dispatchHelp')"
+                            label-class="form-check-label"
                         />
-                        <strong>{{ t('hemsUi.enableDispatch') }}</strong>
-                    </label>
-                    <p class="form-text mb-0">{{ t('hemsUi.dispatchOptInHint') }}</p>
+                    </div>
                 </div>
 
                 <details class="border rounded p-3 mb-3">
-                    <summary>{{ t('hemsUi.advancedSettings') }}</summary>
-                    <p class="form-text mt-3">{{ t('hemsUi.optimizerConfigHint') }}</p>
+                    <summary>{{ t('hemsUi.energyManagement') }}</summary>
+                    <EnergyManagementSettings
+                        class="mt-3"
+                        v-model="draft.energy_management"
+                        @reference="applyReference"
+                    />
+                </details>
+                <details class="border rounded p-3 mb-3">
+                    <summary>
+                        {{ t('redesign.advancedOptimizer') }}
+                    </summary>
                     <div class="row g-3 mt-1">
                         <div v-for="field in advancedFields" :key="field.key" class="col-sm-6">
                             <label :for="`optimizer-${field.key}`" class="form-label"
@@ -427,6 +472,7 @@
     </CardElement>
 </template>
 <script setup lang="ts">
+import FieldLabel from '@/components/FieldLabel.vue';
 import EnergyManagementSummary from '@/components/hems/EnergyManagementSummary.vue';
 import EnergyManagementSettings from '@/components/hems/EnergyManagementSettings.vue';
 import { defaultEnergyManagement, type EnergyManagement } from '@/utils/hemsEnergyManagement';

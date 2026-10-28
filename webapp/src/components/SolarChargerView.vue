@@ -6,6 +6,9 @@
     </div>
 
     <template v-else>
+        <p v-if="!Object.keys(solarcharger.instances || {}).length" class="text-body-secondary">
+            {{ $t('redesign.solarTelemetryUnavailable') }}
+        </p>
         <div class="row gy-3 mt-0" v-for="(item, serial) in solarcharger.instances" :key="serial">
             <div class="tab-content col-sm-12 col-md-12" id="v-pills-tabContent">
                 <div class="card">
@@ -163,7 +166,7 @@ export default defineComponent({
                     this.dplData = root['dpl'];
                     this.solarcharger = root['solarcharger'];
                     this.dataLoading = false;
-                    this.resetDataAging(Object.keys(root['solarcharger']['instances']));
+                    this.resetDataAging(Object.keys(root['solarcharger']['instances'] || {}));
                 });
         },
         handleMessage(event: MessageEvent) {
@@ -176,7 +179,7 @@ export default defineComponent({
                 Object.assign(this.solarcharger.instances, root['solarcharger']['instances']);
             }
 
-            this.resetDataAging(Object.keys(root['solarcharger']['instances']));
+            this.resetDataAging(Object.keys(root['solarcharger']['instances'] || {}));
             this.dataLoading = false;
         },
         initSocket() {

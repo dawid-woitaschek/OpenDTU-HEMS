@@ -172,7 +172,14 @@ void I18nClass::readConfig(String file)
     lang.name = String(doc["meta"]["name"] | "");
     lang.filename = file;
 
-    if (lang.code != "" && lang.name != "") {
+    // UI/display language support is deliberately limited to German and English.
+    // Ignore older uploaded language packs instead of re-exposing them after restart.
+    if (lang.code != "de" && lang.code != "en") {
+        f.close();
+        return;
+    }
+
+    if (lang.name != "") {
         _availLanguages.push_back(lang);
     } else {
         ESP_LOGE(TAG, "Invalid meta data");

@@ -1,7 +1,8 @@
 <template>
     <fieldset class="border rounded p-3 mb-3">
-        <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.energyManagement') }}</legend>
-        <p class="form-text mt-0">{{ t('hemsUi.managementHint') }}</p>
+        <legend class="float-none w-auto fs-6 px-1 label-with-help">
+            {{ t('hemsUi.energyManagement') }} <HelpHint :text="t('hemsUi.managementHint')" />
+        </legend>
         <button type="button" class="btn btn-outline-secondary mb-3" @click="applyReference">
             {{ t('hemsUi.referencePreset') }}
         </button>
@@ -13,13 +14,17 @@
                 class="form-check-input me-2"
             />{{ t('hemsUi.coordinateOptIn') }}</label
         >
-        <label for="energy-preference" class="form-label">{{ t('hemsUi.operatingPreference') }}</label>
+        <FieldLabel
+            for-id="energy-preference"
+            :text="t('hemsUi.operatingPreference')"
+            :help="t('hemsUi.preferenceHint')"
+            label-class="form-label"
+        />
         <select id="energy-preference" v-model.number="model.preference" class="form-select mb-3">
             <option :value="0">{{ t('hemsUi.economicPreference') }}</option>
             <option :value="1">{{ t('hemsUi.localFirst') }}</option>
             <option :value="2">{{ t('hemsUi.exportFirst') }}</option>
         </select>
-        <p class="form-text">{{ t('hemsUi.preferenceHint') }}</p>
         <div v-for="field in permissions" :key="field" class="form-check mb-2">
             <input :id="`energy-${field}`" v-model="model[field]" type="checkbox" class="form-check-input" />
             <label :for="`energy-${field}`" class="form-check-label">{{ t('hemsUi.' + field) }}</label>
@@ -35,18 +40,25 @@
             class="form-control mb-3"
             required
         />
-        <label for="energy-load-source" class="form-label">{{ t('hemsUi.householdLoad') }}</label>
+        <FieldLabel
+            for-id="energy-load-source"
+            :text="t('hemsUi.householdLoad')"
+            :help="t('hemsUi.learningHint')"
+            label-class="form-label"
+        />
         <select id="energy-load-source" v-model="model.automatic_load" class="form-select">
             <option :value="false">{{ t('hemsUi.fixedLoad') }}</option>
             <option :value="true">{{ t('hemsUi.automaticLoad') }}</option>
         </select>
-        <p class="form-text">{{ t('hemsUi.learningHint') }}</p>
         <p v-if="model.enabled && model.wear_source === 0" class="alert alert-warning">
             {{ t('hemsUi.wearAcknowledgementHint') }}
         </p>
         <details class="mt-3">
-            <summary>{{ t('hemsUi.advancedSettings') }}</summary>
-            <p class="form-text">{{ t('hemsUi.economicsHint') }}</p>
+            <summary>
+                <span class="label-with-help"
+                    >{{ t('hemsUi.advancedSettings') }} <HelpHint :text="t('hemsUi.economicsHint')"
+                /></span>
+            </summary>
             <label for="energy-wear-source" class="form-label">{{ t('hemsUi.wearSource') }}</label>
             <select
                 id="energy-wear-source"
@@ -84,16 +96,25 @@
                     />
                 </div>
             </div>
-            <label class="form-check-label d-block mt-3"
-                ><input v-model="model.terminal_price_configured" type="checkbox" class="form-check-input me-2" />{{
-                    t('hemsUi.explicitTerminalPrice')
-                }}</label
-            >
-            <p class="form-text">{{ t('hemsUi.terminalHint') }}</p>
+            <div class="form-check mt-3">
+                <input
+                    id="energy-terminal-price"
+                    v-model="model.terminal_price_configured"
+                    type="checkbox"
+                    class="form-check-input"
+                /><FieldLabel
+                    for-id="energy-terminal-price"
+                    :text="t('hemsUi.explicitTerminalPrice')"
+                    :help="t('hemsUi.terminalHint')"
+                    label-class="form-check-label"
+                />
+            </div>
         </details>
     </fieldset>
 </template>
 <script setup lang="ts">
+import FieldLabel from '@/components/FieldLabel.vue';
+import HelpHint from '@/components/HelpHint.vue';
 import { useI18n } from 'vue-i18n';
 import { referencePreset, type EnergyManagement } from '@/utils/hemsEnergyManagement';
 const model = defineModel<EnergyManagement>({ required: true });
