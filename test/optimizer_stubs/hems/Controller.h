@@ -7,6 +7,7 @@
 inline Hems::Model::SystemState optimizerState;
 inline Hems::Constraints::ConstraintSet optimizerConstraints;
 inline struct TestReadOnlyController {
+    Hems::Model::StoragePowerLimits getStoragePowerLimits() const { return {}; }
     uint64_t economicContextRevision() const { return 0; }
     Hems::Model::SystemState getNormalizedState() const { return optimizerState; }
     Hems::Model::StorageState getStoragePlanningState() const { return optimizerState.storage; }

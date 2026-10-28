@@ -1,5 +1,12 @@
 # Economic storage dispatch
 
+Current coordinated behavior is documented in [HEMS energy management](HEMS_Energy_Management.md).
+It adds explicit flow permissions/net export coordination, bounded local household
+learning, marginal cycle costs, terminal inventory valuation and fresh-plan
+hysteresis. That contract supersedes earlier constant-load, start-energy terminal
+floor and uncoordinated-release descriptions below. Historical resource figures
+remain measurements of their named earlier milestones.
+
 Implemented in merged PR #25 after policy PR #24 and included in `hems` through
 PR #28. Hardware-free validation does not establish physical battery behavior.
 Use the [hardware validation runbook](HEMS_Hardware_Validation.md) for the remaining

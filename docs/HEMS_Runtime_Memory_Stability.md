@@ -3,8 +3,9 @@
 PR #35 (`fix/hems-runtime-memory-stability`), based on `hems`
 `693eafe60fb2538ec11019dc0875737eb7e0495c`, is merged at
 `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`. The investigation and build figures
-below describe that runtime change. Refreshed PR #31/CMT is merged separately on
-this hardened base; PR #34/energy-management remains unmerged and untouched.
+below describe that runtime change. Refreshed PR #31/CMT and PR #34/energy
+management are merged on this base. Their new behavior remains physically
+unvalidated beyond previously recorded evidence.
 
 ## Physical evidence supplied for this work
 
@@ -201,6 +202,6 @@ failures, resets and watchdogs. Stack headroom should remain at least 2 KiB (pre
 3 KiB); no stack reduction is proposed. Earlier working targets of 25.6 kB INTERNAL
 minimum and 20.48 kB largest during HTTPS are validation targets, not guarantees.
 
-PR #34's larger planner/result/learning allocations should later inherit this base.
+PR #34's larger Result/Plan, Workspace, Series and optional learning snapshot now inherit this allocator. Its fixed retained learner stays static and bounded. See [energy-management integration evidence](HEMS_Energy_Management.md); the measurements above describe PR #35, not the combined build.
 CMT radio changes, trust-set pruning, SDK/TLS rebuilds, reserve tuning and no-PSRAM
 removal/deprecation remain outside this PR.

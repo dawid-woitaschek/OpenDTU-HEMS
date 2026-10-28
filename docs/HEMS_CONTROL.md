@@ -1,5 +1,13 @@
 # HEMS semantic control
 
+Current coordinated behavior is documented in [HEMS energy management](HEMS_Energy_Management.md).
+It adds explicit flow permissions/net export coordination, bounded local household
+learning, marginal cycle costs, terminal inventory valuation and fresh-plan
+hysteresis. That contract supersedes earlier constant-load, start-energy terminal
+floor and uncoordinated-release descriptions below. Historical resource figures
+remain measurements of their named earlier milestones.
+
+
 OpenDTU-HEMS is supervisory home-energy automation. It is not the primary safety controller of connected hardware; device protections remain authoritative. A failed command or lingering external-control mode is an operational problem. Operators can remove a wallbox from Modbus control or independently disconnect/reset storage.
 
 ## Permissions and modes

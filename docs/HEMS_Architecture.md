@@ -1,5 +1,13 @@
 # OpenDTU-HEMS Architecture
 
+Current coordinated behavior is documented in [HEMS energy management](HEMS_Energy_Management.md).
+It adds explicit flow permissions/net export coordination, bounded local household
+learning, marginal cycle costs, terminal inventory valuation and fresh-plan
+hysteresis. That contract supersedes earlier constant-load, start-energy terminal
+floor and uncoordinated-release descriptions below. Historical resource figures
+remain measurements of their named earlier milestones.
+
+
 > Status: supervisory control model; updated 2026-10-18.
 >
 > This document describes the intended design constraints and responsibilities of OpenDTU-HEMS. Individual implementation details may evolve as real hardware integrations are validated, but changes to the core principles should be deliberate and documented.

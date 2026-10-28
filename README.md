@@ -22,6 +22,9 @@ local/JSON inputs and MQTT integration are also available.
   pause economic automation until explicit Resume.
 - Energy-Charts DE-LU v2 pricing, Forecast.Solar, verified repository profile import,
   storage-plan presentation and on-demand redacted support snapshots with heap history.
+- Coordinated DPL/storage flows, independent export permissions, optional household-load
+  learning, battery-wear costs, terminal inventory valuation and monetary hysteresis
+  in the bounded global DP (merged PR #34; coordination and learning default off).
 - Runtime/PSRAM hardening and refreshed CMT2300A radio recovery/reception work.
 
 **Implemented does not mean physically validated.** PR #35's approximately 21-hour
@@ -29,7 +32,8 @@ Device A run with 2 MB PSRAM is accepted for the current runtime-hardening stage
 successful Forecast.Solar TLS cycles are recorded. WARP3/Marstek control lifecycles,
 EV Protection, physical economic charge/discharge, representative Energy-Charts
 ESP32 runs and the refreshed CMT behavior still need hardware validation.
-PR #34 energy management remains separate, unmerged and physically unvalidated.
+PR #34 energy management is merged; physical optimizer, coordination and dispatch
+validation remains pending on the combined PSRAM build.
 Economic EV Charging is deferred; PR #33 preserves its shadow-planning design/history.
 
 ## Hardware and getting started

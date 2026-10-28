@@ -187,7 +187,9 @@ provenance is in `test/fixtures/providers/README.md`. No test contacts a provide
 
 `test_hems_memory` compiles the production ESP32 placement path against a capability
 allocator seam: PSRAM vs absent-PSRAM selection, exhaustion without INTERNAL spill,
-and bounded JSON reallocation/accounting. `test_energy_service` tracks live Series
+and bounded JSON reallocation/accounting, including the expanded Plan and load
+Profile types. `test_optimizer_service` checks learning-snapshot exhaustion retains
+the published plan/pending request and recovers on retry. `test_energy_service` tracks live Series
 across one/two/six-plane requests and delays, plus destination/aggregation allocation
 failures with atomic last-good retention. `test_energy_transport` injects bad_alloc
 in library constructors, begin/header/connect/body calls, checks RAII and subsequent
@@ -197,3 +199,15 @@ truncation, trailing bytes, Content-Length isolation and bounded bulk socket rea
 `test_runtime_diagnostics` covers PSRAM history/serialization and cached failure
 samples, including absent-PSRAM zeros. These tests do not measure ESP32 stability;
 see [runtime memory stability](../docs/HEMS_Runtime_Memory_Stability.md).
+
+### Coordinated energy management
+
+`test_energy_management` exercises production flow decisions, DP economics,
+terminal valuation/replanning, load learning, DST and deterministic forecast-error
+and WARP-style reference comparisons. `test_optimizer_service` additionally
+checks six-hour verified history checkpoints, failed rename, reboot and corrupted
+history; `test_economic_integration` checks coordinated manual/worker revocation,
+stale meter and unavailable DPL. All remain hardware-free. See
+[behavior, configuration, measured resources and remaining hardware facts](../docs/HEMS_Energy_Management.md).
+`yarn --cwd webapp test` includes explicit preset/opt-in and en/de/fr coverage.
+

@@ -1,8 +1,8 @@
 # OpenDTU-HEMS current status
 
-Snapshot: 2026-10-27. Product branch: `hems`. The promoted HEMS line includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30, plus **PR #35 runtime/PSRAM hardening and refreshed PR #31 CMT2300A rework, both merged**. PR #35 merged at `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`; PR #31 was rebased onto that hardened base.
+Snapshot: 2026-10-28. Product branch: `hems`. The promoted HEMS line includes foundation/productization PR #23, policy PR #24, economic storage dispatch PR #25, modernization/provider/profile work PR #27, promotion PR #28, memory/TLS hardening PR #29 and promotion PR #30, plus **merged PR #35 runtime/PSRAM hardening, refreshed PR #31 CMT2300A rework, PR #36 cleanup and PR #34 coordinated energy management**. PR #35 merged at `f54da01e5fb5086fe5fdf448f7c4dd2e11ecdc3c`; PR #31 was rebased onto that hardened base.
 
-PR #26 was superseded by #27. PR #34/energy-management remains separate, unmerged and physically unvalidated; it has not been rebased or changed as part of this integration.
+PR #26 was superseded by #27. PR #34 was rebased onto hardened `hems` head `49a2526b` (including PRs #35, #31 and #36) and merged into `hems`. Its implementation is integrated; physical optimizer, coordination and dispatch validation remains pending.
 
 ## Usable control model
 
@@ -20,17 +20,51 @@ Durable recovery journals, ownership reconstruction, attestation and temporary-s
 
 ## Active EV protection
 
-Fresh EV charging immediately proposes discharge protection. Protection clears only after 120 seconds of continuously fresh not-charging observations; resumed charging cancels debounce, and unknown/stale telemetry cannot clear it.
+EV Protection defaults on; opted-in coordinated settings can explicitly disable it. When enabled, fresh EV charging immediately proposes discharge protection. Protection clears only after 120 seconds of continuously fresh not-charging observations; resumed charging cancels debounce, and unknown/stale telemetry cannot clear it.
 
-Active plus Storage HEMS control rejects new discharge commands while allowing charge commands. Semantic Stop is sent only for fresh observed storage discharge; charging and idle storage are left alone. After debounce, release is attempted only after an actual protection intervention that has not been superseded by charging or a later manual operating command. Monitor-only EVSE telemetry remains fully usable. Proposed versus actionable constraints and actual command results are observable. No automatic EVSE economic policy is installed.
+Active plus Storage HEMS control rejects new discharge commands while allowing charge commands. Semantic Stop is sent only for fresh observed storage discharge; charging and idle storage are left alone. After debounce, release is attempted only after an actual protection intervention that has not been superseded by charging or a later manual operating command. When coordination owns storage, protection hands Stop custody to Flow without a Release that could restore autonomous export. Monitor-only EVSE telemetry remains fully usable. Proposed versus actionable constraints and actual command results are observable. No automatic EVSE economic policy is installed.
 
 ## Economic optimizer and storage dispatch
 
-The bounded DP optimizer uses exact numeric prices, explicit efficiencies, power/SoC bounds, optional usable PV and terminal reserve. Tariff cheap/normal/expensive categories are presentation-only and never drive control logic.
+The bounded global DP optimizer uses exact numeric prices, explicit efficiencies, power/SoC bounds, optional usable PV and bounded terminal inventory valuation. Tariff cheap/normal/expensive categories are presentation-only and never drive control logic.
 
 Economic storage dispatch is implemented as a separate explicit default-off opt-in. It consumes only the authoritative current optimizer interval and issues semantic storage commands through the same readiness, generation, permission, worker, mailbox, profile-plan and readback paths used elsewhere.
 
 Manual storage commands persist a reboot-safe pause before queueing. Only authenticated explicit Resume clears that pause and requests fresh planning. Economic command ownership and cleanup remain source-specific; reboot reconstructs no ownership or plan. Software validation covers current-slot authority, revocation, retry bounds, stale/unreachable conditions, manual precedence, EV Protection precedence and semantic-only actuation. Physical charging/discharging behavior remains to be validated on the actual Marstek installation.
+
+## Merged PR #34 - coordinated energy management
+
+The existing bounded global DP (`T ≤ 256`, `S ≤ 54`, `O(T × S²)`) now includes
+independent PV/battery-export permissions and grid-export limits, local-first /
+economic / export-first preferences, marginal EFC-reference degradation costs,
+an optional conservative throughput margin, bounded terminal inventory valuation
+and monetary hysteresis comparing feasible alternatives on the same fresh inputs.
+Optional seven-day household-load learning uses 15-minute bins, measured EV-power
+exclusion, coverage reporting and an explicit constant fallback. Checksummed history
+checkpoints remain bounded to at most once per six hours on the existing worker.
+
+DPL remains the single coordinated Hoymiles writer. The expiring measured-flow
+envelope, device/global power ceilings, fresh worker authorization and manual /
+Protection ownership checks govern execution. Coordination and automatic learning
+default off; Active, Storage HEMS control and economic dispatch remain separate
+opt-ins. Compensation does not authorize battery export under coordination. Unknown
+wear is disclosed; active coordinated economics requires estimated or explicitly
+configured wear. Disable old WARP battery-writing rules before making HEMS the
+battery controller; WARP EV control can remain active.
+
+The expanded Result (including Plan), DP workspace, Series and optional learning
+snapshot use `hems/Memory.h`: PSRAM when present, no INTERNAL spill on PSRAM
+exhaustion, and ordinary 8-bit heap on no-PSRAM compatibility builds. The fixed
+2,160-byte retained learner stays in the service's static storage, like retained
+provider Series. Constant-load mode allocates no learning snapshot. Stable Result
+publication, scratch release before provider TLS, task stacks, provider bounds,
+verified TLS and the refreshed CMT implementation are preserved. No optimizer
+redesign, new worker or Economic EV Charging implementation is included.
+
+See [energy-management behavior and integration evidence](HEMS_Energy_Management.md).
+Physical Marstek/WARP behavior, DPL/export transients, telemetry alignment, learned
+load and optimizer timing/resources remain pending on the combined PSRAM build.
+The accepted PR #35 run does not validate these later changes.
 
 ## Product UI
 
@@ -38,7 +72,7 @@ Four peer views use the existing OpenDTU visual language: Overview (`/hems`), Se
 
 Overview shows fresh energy values, effective tariff prices, interactive tariff/PV charts and provider readiness. The generated storage plan is a first-class daily-use surface: current planned action, next action change, merged charge/hold/discharge blocks, expected SoC progression, modeled benefit and compact strategy summary.
 
-Settings owns normal storage-strategy configuration: reserve, maximum desired SoC, grid-charging permission, economic-discharge permission and optional one-time target/deadline. Battery/model parameters remain under collapsed Advanced settings. Economic dispatch remains a separate explicit default-off opt-in.
+Settings owns normal storage-strategy configuration: reserve, maximum desired SoC, grid-charging permission, economic-discharge permission and optional one-time target/deadline. Normal settings also expose energy-flow goals, household-load estimation and an explicit reference preset. Advanced settings contain wear/margin, terminal assumptions and monetary hysteresis. English/German/French summaries separate planned/commanded actions, import/export, wear, inventory and forecast coverage. Economic dispatch remains a separate explicit default-off opt-in.
 
 Devices owns endpoints, bound profiles and expandable manual semantic controls. Repository-backed profile distribution is implemented: the browser retrieves a selected immutable profile, verifies size/SHA-256 and uses authenticated backend import/replacement; backend validation and in-use checks remain authoritative.
 
@@ -97,6 +131,14 @@ validation; implementation details and investigation limits are in [runtime memo
 
 ## Validation and firmware
 
+Local PR #34 integration validation passed all 37 native executables and the
+control-surface guard, focused allocation-failure/retry regressions, production
+configuration/catalog/channel/provenance checks, frontend tests/type-check/build,
+all three intercepted-API browser suites and focused lint/format checks. Both
+`generic_esp32s3_usb_quad_psram` and `generic_esp32s3_usb` firmware builds passed
+with freshly built web assets. [Detailed results and resource limits](HEMS_Energy_Management.md#hardened-hems-integration-2026-10-28)
+remain separate from pending physical validation; GitHub Actions were not polled.
+
 Software validation accumulated through the merged milestones includes deterministic native controller/policy/provider/mailbox/executor coverage, all four permission combinations, Monitor manual commands, Active-only automatic commands, EV Protection/debounce, dispatch authority/revocation/retry/pause behavior, parser/catalog/planner/readback tests, frontend tests/builds and the firmware matrices documented in the respective PRs.
 
 Full-HEMS runtime reference: Device A, Fusion Board v2.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Existing no-PSRAM builds remain compatibility targets. Shield v1.1 remains the control-validation reference.
@@ -111,7 +153,7 @@ Full-HEMS runtime reference: Device A, Fusion Board v2.1, ESP32-S3, 8 MB flash, 
 **Still not physically validated / still open:**
 
 - Runtime scenarios beyond the supplied approximately 21-hour Device A run.
-- PR #34 energy-management changes (separate, unmerged).
+- Merged PR #34 energy-management behavior: learned-load fallback, economic/terminal/hysteresis decisions, measured-flow coordination, DPL zero/lower limits and real export transients; runtime resources and responsiveness on the combined PSRAM build.
 - WARP3 current/stop/release lifecycle end to end.
 - Marstek V148 acquire/charge/discharge/Stop/Release lifecycle, actual sign/scale and persistence/watchdog behavior.
 - EV Protection end to end against the physical WARP3/Marstek combination.
@@ -137,17 +179,17 @@ Physical CMT validation remains limited to the previously tested behavior. **No 
 Follow the [hardware validation runbook](HEMS_Hardware_Validation.md) for procedures
 and result records. All control/dispatch cases remain pending until evidenced.
 
-1. Continue observing the combined hardened/CMT build on Device A using `generic_esp32s3_usb_quad_psram`. Record exact source/build identity and INTERNAL/PSRAM/stack diagnostics; validate refreshed CMT reception and recovery separately from the accepted PR #35 runtime run.
+1. Continue observing the combined hardened/CMT/energy-management build on Device A using `generic_esp32s3_usb_quad_psram`. Record exact source/build identity and INTERNAL/PSRAM/stack diagnostics; validate refreshed CMT reception and recovery separately from the accepted PR #35 runtime run.
 2. Validate WARP3 semantic current/stop/release and Marstek bounded charge/discharge/stop/SoC/release against actual physical behavior, not just register readback.
 3. Exercise all storage/EVSE permission combinations in Monitor and Active, including communication interruption and recovery.
 4. Validate EV Protection end to end with real charging and storage discharge states, including the 120-second fresh-false release debounce.
-5. Enable economic dispatch only after the semantic storage path is physically trusted; compare planned action, issued command, verified readback and actual battery behavior.
+5. Enable economic dispatch/coordination only after the semantic storage path is physically trusted; compare plan, command, readback and measured battery/grid/PV behavior. Exercise zero/changing export limits, stale data, actuator failure, EV ownership handoff and strict PV-only startup; measure planning latency, TLS headroom and DPL responsiveness with learning enabled.
 6. Capture support snapshots and heap history around representative provider/dispatch runs. Use equivalent quiet-period comparisons when judging fragmentation or retention.
 7. Validate live Energy-Charts and Forecast.Solar provider behavior on-device without conflating successful desktop fixtures with ESP32 field validation.
 
 ## Repository cleanup and deferred work
 
-PR #32 is superseded by this cleanup on current `hems`: its useful hardware runbook,
+Merged PR #36 supersedes PR #32 on current `hems`: its useful hardware runbook,
 on-demand heap-history export/regression and binding project-state maintenance
 rule are retained. Its old status/roadmap rewrites and no-PSRAM reference are
 obsolete after merged PRs #35/#31 and are deliberately excluded. The dispatch
@@ -157,14 +199,12 @@ validation is claimed.
 PR #33 is deferred/superseded, not merged or rebased. Preserve its
 `feature/hems-ev-shadow-simulation` branch and [design at the recorded head](https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/ac771b02266f9c0395f86519a660f845fbd2c125/docs/HEMS_Economic_EV_Charging.md)
 as future Economic EV Charging history. It depends on obsolete PR #32 head
-`59e5b22d` and overlaps optimizer/service/API/UI/snapshot areas that PR #34 will
-change. Revisit after #34's outcome: reassess intent/deadline, residual-PV/storage
+`59e5b22d` and overlaps optimizer/service/API/UI/snapshot areas changed by merged PR #34. Future work must reassess intent/deadline, residual-PV/storage
 conflicts, bounded planning, deterministic scenarios and snapshot pagination against
-the then-current architecture and PSRAM budget. Its shadow planner is not current
+the current architecture and PSRAM budget. Its shadow planner is not current
 `hems` behavior and it implemented no automatic economic EVSE dispatch. Do not
 reuse its old baseline/hardware/status claims or blindly replay the four feature
-commits (`fc5dc2d6` through `ac771b02`). PR #34 remains separate, unmerged and
-physically unvalidated; this cleanup does not change it.
+commits (`fc5dc2d6` through `ac771b02`). PR #33 was not touched by PR #34 integration.
 
 ## Documentation invariant
 

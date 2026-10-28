@@ -43,7 +43,7 @@ all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MOD
 
 all: test_hems_memory
 
-test_hems_memory: test_hems_memory.cpp ../include/hems/Memory.h ../src/hems/profiles/Profile.cpp
+test_hems_memory: test_hems_memory.cpp ../include/hems/Memory.h ../include/hems/load/Profile.h ../include/hems/optimizer/Planner.h ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -DESP32 -Imemory_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
 all: test_economic_dispatch test_economic_integration $(TEST_ENERGY_CHARTS_V2) test_cmt_rx_state
@@ -205,3 +205,11 @@ help:
 	@echo "  test   - Build and run all tests"
 	@echo "  clean  - Remove test executables"
 	@echo "  help   - Show this help"
+
+all: test_energy_management
+test_energy_management: $(wildcard ../include/hems/flow/*.h ../include/hems/load/*.h ../include/hems/optimizer/*.h) test_energy_management.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+test: energy-management-test
+.PHONY: energy-management-test
+energy-management-test: test_energy_management
+	./test_energy_management

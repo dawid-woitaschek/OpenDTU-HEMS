@@ -7,9 +7,17 @@
 #include <cassert>
 #include <ctime>
 #include <iostream>
+#include <new>
 #include <vector>
+static bool failLoadSnapshot = false;
+void* operator new(std::size_t size, std::nothrow_t const&) noexcept
+{
+    if (size == sizeof(Hems::Load::Profile) && failLoadSnapshot) { return nullptr; }
+    try { return ::operator new(size); } catch (std::bad_alloc const&) { return nullptr; }
+}
 constexpr uint32_t Now=1792180800;
-extern "C" time_t time(time_t* out) noexcept { if(out) *out=Now; return Now; }
+static uint32_t fixtureUtc=Now;
+extern "C" time_t time(time_t* out) noexcept { if(out) *out=fixtureUtc; return fixtureUtc; }
 struct TestTask { void (*run)(void*); void* context; bool notified=false; };
 std::vector<TestTask*> tasks; TestTask* current;
 struct Idle {};
@@ -22,7 +30,10 @@ bool providerGet(char const*,Source,JsonDocument&,NativeInfo&,char const*& error
 }
 int main()
 {
-    using namespace Hems;
+    namespace Energy = Hems::Energy;
+    namespace Optimizer = Hems::Optimizer;
+    namespace Model = Hems::Model;
+    namespace Load = Hems::Load;
     Scheduler scheduler; Energy::EnergyData.init(scheduler); Optimizer::ShadowOptimizer.init();
     scheduler.execute(); workers(); assert(tasks.empty());
     Energy::Settings settings; settings.enabled=true; assert(Energy::EnergyData.configure(Energy::Domain::Tariff,settings));
@@ -32,6 +43,7 @@ int main()
     auto& storage=optimizerState.storage; storage.device.enabled=storage.device.reachable=storage.device.hasUpdate=true; storage.socPct=Model::Signal<double>::fresh(50);
     Optimizer::Config config; config.enabled=true; config.socBoundsConfigured=true; config.capacityWh=2000; config.minSoc=20; config.maxSoc=90;
     config.chargePermille=config.dischargePermille=950; config.maxChargeW=config.maxDischargeW=2000; config.baseLoadW=1000; config.effectivePrice=false; config.horizonSeconds=14400;
+    config.terminalPriceConfigured=true; config.terminalPriceMicros=50000;
     assert(Optimizer::ShadowOptimizer.configure(config)); scheduler.execute(); workers(); assert(tasks.size()==1);
     JsonDocument result; Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="ready" && result["shadow_only"]==true && result["device_writes"]==false);
@@ -50,6 +62,23 @@ int main()
         assert(result["state"] == "ready" && result["schedule"].size() == 16);
         assert(result["plan_revision"].as<uint32_t>() == ++revision);
     }
+    // Learning scratch exhaustion must preserve the published plan and pending
+    // request, then recover on the existing worker without changing authority.
+    config.automaticLoad = true; assert(Optimizer::ShadowOptimizer.configure(config));
+    testNow += 5000; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    revision = result["plan_revision"].as<uint32_t>(); assert(result["state"] == "ready");
+    failLoadSnapshot = true; assert(Optimizer::ShadowOptimizer.requestRecalculate());
+    testNow += 5000; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["state"] == "ready" && result["replan_pending"] == true);
+    assert(result["plan_revision"].as<uint32_t>() == revision);
+    failLoadSnapshot = false; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["state"] == "ready" && result["replan_pending"] == false);
+    assert(result["plan_revision"].as<uint32_t>() == revision + 1);
+    config.automaticLoad = false; assert(Optimizer::ShadowOptimizer.configure(config));
+    testNow += 5000; scheduler.execute(); workers();
     storage.socPct=Model::Signal<double>::stale(50); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="stale_inputs" && result["schedule"].size()==0);
     assert(Optimizer::ShadowOptimizer.requestRecalculate()); testNow += 5000; scheduler.execute(); workers();
@@ -78,6 +107,38 @@ int main()
     legacy["config"]["dispatch_enabled"] = "true"; Optimizer::Config rejected;
     assert(!Optimizer::parseConfig(legacy["config"], rejected));
     assert(Optimizer::ShadowOptimizer.configure(config)); assert(!Optimizer::ShadowOptimizer.requestRecalculate());
+    // Bounded production history checkpoints, reboot/readback and torn/corrupt
+    // files. Time and LittleFS are seams; the learner and persistence are real.
+    setenv("TZ","UTC",1); tzset();
+    Optimizer::Service learning; learning.init(); config.enabled=false; config.dispatchEnabled=false;
+    config.automaticLoad=true; assert(learning.configure(config));
+    optimizerState.grid.powerW=Model::Signal<double>::fresh(600);
+    optimizerState.pv.powerW=Model::Signal<double>::fresh(0);
+    optimizerState.storage.acPowerW=Model::Signal<double>::fresh(0);
+    for(unsigned day=0;day<3;++day) for(unsigned second=0;second<=900;second+=10) {
+        fixtureUtc=Now+day*86400+second; testNow+=10000;
+        scheduler.execute(); workers();
+    }
+    // Time passage, rather than sampling rate, authorizes another checkpoint.
+    fixtureUtc+=21600; testNow+=21600000; scheduler.execute(); workers();
+    auto history=testFiles.at("/hems-load.bin"); assert(history->size()==sizeof(Load::History)+4);
+    Load::Profile recovered; memcpy(&recovered.history,history->data(),sizeof(Load::History));
+    uint32_t hash=0; memcpy(&hash,history->data()+sizeof(Load::History),4);
+    assert(hash==Load::checksum(recovered.history));
+    auto estimate=recovered.estimate(Now+3*86400,200);
+    assert(estimate.learned && estimate.watts==600);
+    for(unsigned n=0;n<120;++n) { fixtureUtc+=10; testNow+=10000; scheduler.execute(); workers(); }
+    assert(testFiles.at("/hems-load.bin")==history); // No writes per sample/bin.
+    // A failed rename preserves the last durable checkpoint.
+    failCommit=true; fixtureUtc+=21600; testNow+=21600000; scheduler.execute(); workers(); failCommit=false;
+    assert(testFiles.at("/hems-load.bin")==history);
+    result.clear(); learning.serialize(result.to<JsonObject>(),false);
+    assert(result["last_error"]=="load_history_save_failed");
+    Optimizer::Service learningReboot; learningReboot.init(); result.clear(); learningReboot.serialize(result.to<JsonObject>(),false);
+    assert(result["load_history_days"].as<unsigned>()>=3);
+    (*history)[20]^=1;
+    Optimizer::Service corruptReboot; corruptReboot.init(); result.clear(); corruptReboot.serialize(result.to<JsonObject>(),false);
+    assert(result["load_history_days"]==0);
     for(auto t:tasks) delete t;
     std::cout<<"Production shared-worker optimizer settings, read-only integration, stale-input suppression, recalculation and persistence passed\n";
 }

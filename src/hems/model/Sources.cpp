@@ -60,7 +60,7 @@ Hems::Model::Signal<double> normalizedPvPower()
 
         ++observedSolarSources;
         totalPowerW += statistics->getChannelFieldValue(TYPE_AC, CH0, FLD_PAC);
-        if (!inverter->isReachable()) { anyStale = true; }
+        if (!inverter->isReachable() || millis() - statistics->getLastUpdate() > 10000) { anyStale = true; }
     }
 
     return Hems::Model::normalizePvPower(totalPowerW, configuredSolarSources,
@@ -73,7 +73,7 @@ namespace Hems::Model {
 void normalizeSources(SystemState& state)
 {
     auto grid = PowerMeter.getSnapshot();
-    state.grid.powerW = normalizeGridPower(grid.powerTotal, grid.valid, grid.lastUpdate > 0);
+    state.grid.powerW = normalizeGridPower(grid.powerTotal, grid.valid && millis() - grid.lastUpdate <= 5000, grid.lastUpdate > 0);
     state.pv.powerW = normalizedPvPower();
 }
 } // namespace Hems::Model

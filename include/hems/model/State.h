@@ -42,6 +42,11 @@ struct PvState {
     Signal<double> powerW;
 };
 
+struct StoragePowerLimits {
+    bool known = false;
+    uint32_t chargeW = 0, dischargeW = 0;
+};
+
 struct StorageState {
     DeviceState device;
     Signal<double> socPct;
