@@ -417,7 +417,14 @@
                     <p>Capability: {{ controlText(target.profile_info.control_reason) }}</p>
                     <p v-for="reason in target.blockers" :key="reason">{{ controlText(reason) }}</p>
                 </div>
-                <RouterLink to="/energy/integrations">{{ $t('hemsUi.devicesManualControls') }}</RouterLink>
+                <div class="d-flex flex-wrap gap-3">
+                    <RouterLink to="/plant/battery"
+                        >{{ $t('redesign.battery') }} · {{ $t('hemsUi.manualControls') }}</RouterLink
+                    >
+                    <RouterLink to="/plant/wallbox"
+                        >{{ $t('redesign.wallbox') }} · {{ $t('hemsUi.manualControls') }}</RouterLink
+                    >
+                </div>
             </CardElement>
         </details>
         <SystemDiagnostics />

@@ -450,7 +450,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, getCurrentInstance, onMounted, onUnmounted, reactive, ref, watchEffect } from 'vue';
 import { useRouter } from 'vue-router';
 import CardElement from '@/components/CardElement.vue';
 import { authHeader, handleResponse } from '@/utils/authentication';
@@ -480,7 +480,7 @@ import {
 } from '@/utils/hemsPresentation';
 import HelpHint from '@/components/HelpHint.vue';
 const props = defineProps<{ view?: EnergyView }>();
-const emit = defineEmits<{ health: [issue: boolean] }>();
+const emit = defineEmits<{ health: [issue: boolean]; summary: [values: { price: string; forecast: string }] }>();
 const { t, locale } = useI18n();
 const now = ref(Date.now() / 1000);
 const inspectedPeriod = ref<{ utc: number }>();
@@ -711,6 +711,13 @@ async function upload(kind: Kind, event: Event) {
     }
     input.value = '';
 }
+watchEffect(() => {
+    if (props.view === 'overview')
+        emit('summary', {
+            price: currentPrice('import_price_micros_per_kwh'),
+            forecast: energySummary(0, true),
+        });
+});
 onMounted(() => {
     domains.forEach((kind) => load(kind));
     timer = setInterval(

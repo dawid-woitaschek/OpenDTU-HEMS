@@ -1,6 +1,8 @@
 export const redesignMessages = {
     en: {
         redesign: {
+            priceHelp:
+                'The current import price includes configured tariff components. Unavailable or outdated prices are not shown as current.',
             dplTarget: 'Last dynamic power target (DPL)',
             dplTargetHelp:
                 'Last calculated aggregate inverter output target. The confirmed limit per inverter is listed separately.',
@@ -89,6 +91,8 @@ export const redesignMessages = {
     },
     de: {
         redesign: {
+            priceHelp:
+                'Der aktuelle Bezugspreis berücksichtigt die eingerichteten Tarifbestandteile. Fehlende oder veraltete Preise werden nicht als aktuell angezeigt.',
             dplTarget: 'Letztes dynamisches Leistungsziel (DPL)',
             dplTargetHelp:
                 'Zuletzt berechnetes gemeinsames Leistungsziel der Wechselrichter. Das bestätigte Limit je Wechselrichter wird separat aufgeführt.',

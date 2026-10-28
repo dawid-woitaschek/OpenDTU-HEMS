@@ -97,38 +97,62 @@
                     </section>
                 </div>
             </div>
-            <CardElement :text="$t('hemsUi.automation')" textVariant="text-bg-primary" add-space>
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <h2 class="h6">{{ $t('hemsUi.evProtection') }}</h2>
-                        <div class="fw-semibold">{{ $t('hemsUi.' + protection) }}</div>
-                        <p
-                            v-if="!offline && status.shadow.ev_protection.state === 'waiting'"
-                            class="small text-body-secondary mb-0"
-                        >
-                            {{ $t('hemsUi.protectionWaiting') }}
-                        </p>
-                        <p
-                            v-else-if="!offline && !status.shadow.ev_protection.charging_known"
-                            class="small text-body-secondary mb-0"
-                        >
-                            {{ $t('hemsUi.evStateUnknown') }}
-                        </p>
-                    </div>
-                    <div class="col-md-6">
-                        <dl class="row mb-0">
-                            <dt class="col-6 fw-normal">{{ $t('hemsUi.storagePermission') }}</dt>
-                            <dd class="col-6">{{ permission('storage') }}</dd>
-                            <dt class="col-6 fw-normal">{{ $t('hemsUi.evsePermission') }}</dt>
-                            <dd class="col-6">{{ permission('evse') }}</dd>
-                        </dl>
-                    </div>
+            <div class="row g-3 mt-1">
+                <div class="col-12 col-xxl-6">
+                    <CardElement :text="$t('hemsUi.automation')" textVariant="text-bg-primary" class="h-100">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <h2 class="h6">{{ $t('hemsUi.evProtection') }}</h2>
+                                <div class="fw-semibold">{{ $t('hemsUi.' + protection) }}</div>
+                                <p
+                                    v-if="!offline && status.shadow.ev_protection.state === 'waiting'"
+                                    class="small text-body-secondary mb-0"
+                                >
+                                    {{ $t('hemsUi.protectionWaiting') }}
+                                </p>
+                                <p
+                                    v-else-if="!offline && !status.shadow.ev_protection.charging_known"
+                                    class="small text-body-secondary mb-0"
+                                >
+                                    {{ $t('hemsUi.evStateUnknown') }}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <dl class="row mb-0">
+                                    <dt class="col-6 fw-normal">{{ $t('hemsUi.storagePermission') }}</dt>
+                                    <dd class="col-6">{{ permission('storage') }}</dd>
+                                    <dt class="col-6 fw-normal">{{ $t('hemsUi.evsePermission') }}</dt>
+                                    <dd class="col-6">{{ permission('evse') }}</dd>
+                                </dl>
+                            </div>
+                        </div>
+                        <HelpHint :text="$t('hemsUi.modeSummary' + status.state)" :label="$t('hemsUi.hemsMode')" />
+                    </CardElement>
                 </div>
-                <HelpHint :text="$t('hemsUi.modeSummary' + status.state)" :label="$t('hemsUi.hemsMode')" />
-            </CardElement>
+                <div v-for="kind in ['tariff', 'forecast'] as const" :key="kind" class="col-12 col-sm-6 col-xxl-3">
+                    <section class="card h-100">
+                        <div class="card-body">
+                            <h2 class="h6">
+                                {{ $t('hemsUi.' + kind) }}
+                                <HelpHint
+                                    :text="$t(kind === 'tariff' ? 'redesign.priceHelp' : 'hemsUi.forecastHint')"
+                                />
+                            </h2>
+                            <div class="small text-body-secondary">
+                                {{ $t(kind === 'tariff' ? 'hemsUi.effectiveNow' : 'hemsUi.remainingToday') }}
+                            </div>
+                            <a class="fs-4 fw-semibold text-decoration-none" :href="'#overview-' + kind">{{
+                                kind === 'tariff' ? feedSummary.price : feedSummary.forecast
+                            }}</a>
+                        </div>
+                    </section>
+                </div>
+            </div>
         </template>
         <HemsStorageSchedulePanel id="overview-plan" />
-        <div class="row g-3 mt-1"><HemsEnergyPanel view="overview" @health="providerIssue = $event" /></div>
+        <div class="row g-3 mt-1">
+            <HemsEnergyPanel view="overview" @health="providerIssue = $event" @summary="feedSummary = $event" />
+        </div>
     </BasePage>
 </template>
 <script setup lang="ts">
@@ -239,6 +263,7 @@ const cards = computed(() => {
     ];
 });
 const providerIssue = ref(false);
+const feedSummary = ref({ price: '—', forecast: '—' });
 const issues = computed(
     () => providerIssue.value || cards.value.some((c) => c.health && !['notConfigured', 'disabled'].includes(c.health))
 );

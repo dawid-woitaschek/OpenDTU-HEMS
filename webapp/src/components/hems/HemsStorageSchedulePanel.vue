@@ -14,7 +14,7 @@
         <p v-if="error" class="alert alert-warning" role="alert">{{ copy.loadFailed }} {{ error }}</p>
         <template v-if="plan && !error">
             <div
-                v-if="plan.dispatch"
+                v-if="plan.dispatch && (plan.dispatch.enabled || plan.dispatch.paused_manual)"
                 class="dispatch-strip rounded border p-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2"
                 role="status"
             >
