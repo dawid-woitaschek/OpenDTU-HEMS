@@ -931,6 +931,9 @@ bool ConfigurationClass::read()
     config.Display.Rotation = display["rotation"] | DISPLAY_ROTATION;
     config.Display.Contrast = display["contrast"] | DISPLAY_CONTRAST;
     strlcpy(config.Display.Locale, display["locale"] | DISPLAY_LOCALE, sizeof(config.Display.Locale));
+    if (strcmp(config.Display.Locale, "de") && strcmp(config.Display.Locale, "en")) {
+        strlcpy(config.Display.Locale, "en", sizeof(config.Display.Locale));
+    }
     config.Display.Diagram.Duration = display["diagram_duration"] | DISPLAY_DIAGRAM_DURATION;
     config.Display.Diagram.Mode = display["diagram_mode"] | DISPLAY_DIAGRAM_MODE;
 
@@ -1094,8 +1097,8 @@ void ConfigurationClass::migrate()
         case 1U:
             strlcpy(config.Display.Locale, "de", sizeof(config.Display.Locale));
             break;
-        case 2U:
-            strlcpy(config.Display.Locale, "fr", sizeof(config.Display.Locale));
+        default:
+            strlcpy(config.Display.Locale, "en", sizeof(config.Display.Locale));
             break;
         }
     }

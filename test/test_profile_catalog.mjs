@@ -51,6 +51,6 @@ for (const file of ['profileMessages', 'firmwareMessages', 'hemsTariffMessages']
     vm.runInNewContext(ts.transpileModule(readFileSync('webapp/src/' + file + '.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: messagesModule, exports: messagesModule.exports });
     const messages = Object.values(messagesModule.exports)[0];
     const keys = (value, prefix = '') => Object.entries(value).flatMap(([key, item]) => typeof item === 'object' ? keys(item, prefix + key + '.') : prefix + key).sort();
-    for (const locale of ['de', 'fr']) assert.equal(JSON.stringify(keys(messages[locale])), JSON.stringify(keys(messages.en)), file + ': ' + locale);
+    for (const locale of ['de']) assert.equal(JSON.stringify(keys(messages[locale])), JSON.stringify(keys(messages.en)), file + ': ' + locale);
 }
 console.log('Static catalog schema, bounded lazy fetch, installed comparison, pinned revision, network and integrity tests passed');

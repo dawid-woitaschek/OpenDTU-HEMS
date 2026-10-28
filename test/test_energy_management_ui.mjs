@@ -22,10 +22,10 @@ assert.equal(defaults.automatic_load, false); // No mutation of the saved object
 const settings = readFileSync(new URL('../webapp/src/components/hems/EnergyManagementSettings.vue', import.meta.url), 'utf8');
 const summary = readFileSync(new URL('../webapp/src/components/hems/EnergyManagementSummary.vue', import.meta.url), 'utf8');
 const keys = [...(settings + summary).matchAll(/hemsUi\.([a-zA-Z_]+)/g)].map(m => m[1]).filter(k => k !== 'optimizerStates');
-for (const locale of ['en', 'de', 'fr']) {
+for (const locale of ['en', 'de']) {
     const ui = JSON.parse(readFileSync(new URL(`../webapp/src/locales/${locale}.json`, import.meta.url), 'utf8')).hemsUi;
     for (const key of keys) assert.equal(typeof ui[key], 'string', `${locale}: ${key}`);
     for (const key of ['pv_export', 'battery_export', 'ev_protection', 'degradation_micros', 'buffer_micros', 'terminal_hours', 'terminal_price_micros', 'hysteresis_micros']) assert.equal(typeof ui[key], 'string', `${locale}: ${key}`);
 }
 assert.match(settings, /model.enabled && model.wear_source === 0/);
-console.log('Energy settings: explicit opt-in, reference goals without ratings/control grants, and en/de/fr labels passed');
+console.log('Energy settings: explicit opt-in, reference goals without ratings/control grants, and en/de labels passed');

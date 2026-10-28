@@ -11,6 +11,7 @@
 #include "WebApi_errors.h"
 #include "helper.h"
 #include <AsyncJson.h>
+#include <cstring>
 
 void WebApiDeviceClass::init(AsyncWebServer& server, Scheduler& scheduler)
 {
@@ -174,6 +175,9 @@ void WebApiDeviceClass::onDeviceAdminPost(AsyncWebServerRequest* request)
         config.Display.ScreenSaver = root["display"]["screensaver"].as<bool>();
         config.Display.Contrast = root["display"]["contrast"].as<uint8_t>();
         strlcpy(config.Display.Locale, root["display"]["locale"].as<String>().c_str(), sizeof(config.Display.Locale));
+        if (strcmp(config.Display.Locale, "de") && strcmp(config.Display.Locale, "en")) {
+            strlcpy(config.Display.Locale, "en", sizeof(config.Display.Locale));
+        }
         config.Display.Diagram.Duration = root["display"]["diagramduration"].as<uint32_t>();
         config.Display.Diagram.Mode = root["display"]["diagrammode"].as<DiagramMode_t>();
 

@@ -71,41 +71,4 @@ export const profileMessages = {
             },
         },
     },
-    fr: {
-        profiles: {
-            Repository: 'Profils du dépôt',
-            RepositoryHint:
-                'Profils vérifiés par le parseur du firmware. Le serveur valide chaque importation ; importer ne donne aucune autorisation de commande.',
-            Installed: 'Profils installés',
-            ManualImport: 'Importer un fichier manuellement (secours)',
-            CatalogLoading: 'Chargement du catalogue du dépôt…',
-            CatalogReload: 'Recharger le catalogue',
-            EvseCategory: 'EVSE',
-            UpdateReplace: 'Mettre à jour / Remplacer',
-            ConfirmReplace: 'Remplacer le profil installé « {id} » par la version du dépôt ?',
-            IdentityMetadata: 'Métadonnées d’identité',
-            RecoveryMetadata: 'Métadonnées de récupération',
-            Yes: 'Oui',
-            No: 'Non',
-            InvalidJson: 'JSON du profil invalide',
-            Preview:
-                '{id} : {schema}. Le serveur valide toutes les limites. Les appareils associés rechargent le profil sans redémarrage.',
-            CatalogState: {
-                missing: 'Non installé',
-                current: 'Installé · identique au dépôt',
-                different: 'Installé · différent du dépôt',
-                unknown: 'Installé · comparaison indisponible',
-            },
-            CatalogError: {
-                Network: 'Catalogue du dépôt indisponible. Vérifiez la connexion réseau du navigateur.',
-                NotFound: 'Le catalogue du dépôt n’a pas encore été publié.',
-                Unavailable: 'Le dépôt est actuellement indisponible.',
-                Malformed: 'Le catalogue du dépôt est mal formé.',
-                TooLarge: 'La réponse du dépôt dépasse la taille maximale.',
-                ProfileNotFound: 'Le profil sélectionné n’est plus disponible à cette révision du catalogue.',
-                Integrity: 'La taille ou le SHA-256 du profil sélectionné ne correspond pas.',
-                MalformedProfile: 'Le JSON ou l’identité du profil sélectionné est invalide.',
-            },
-        },
-    },
 };

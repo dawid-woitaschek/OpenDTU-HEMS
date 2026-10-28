@@ -216,7 +216,7 @@ assert.equal(schedule.socAt(scheduleSteps, 50, scheduleStart, scheduleStart), 50
 assert.equal(schedule.socAt(scheduleSteps, 50, scheduleStart, scheduleStart + 1800), 52);
 assert.equal(schedule.socAt(scheduleSteps, 50, scheduleStart, scheduleStart + 5400), 54);
 // Supported locales must have the same product keys and interpolation parameters.
-const messages = ['en', 'de', 'fr'].map(l => JSON.parse(readFileSync(new URL(`../webapp/src/locales/${l}.json`, import.meta.url), 'utf8')).hemsUi);
+const messages = ['en', 'de'].map(l => JSON.parse(readFileSync(new URL(`../webapp/src/locales/${l}.json`, import.meta.url), 'utf8')).hemsUi);
 const paths = (o, prefix = '') => Object.entries(o).flatMap(([key, value]) => typeof value === 'object' ? paths(value, prefix + key + '.') : [prefix + key]).sort();
 for (const locale of messages.slice(1)) assert.deepEqual(paths(locale), paths(messages[0]));
 for (const key of paths(messages[0])) {

@@ -693,7 +693,6 @@
             "DisplayLanguage": "Linuga Display",
             "en": "English",
             "de": "German",
-            "fr": "French",
             "Leds": "LEDs",
             "EqualBrightness": "Equalizza luminosità",
             "LedBrightness": "LED {led}, Luminosità ({brightness})"

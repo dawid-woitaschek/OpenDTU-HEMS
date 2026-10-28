@@ -10,7 +10,6 @@ import { redesignMessages } from './redesignMessages';
 export const allLocales = [
     { code: 'en', name: 'English' },
     { code: 'de', name: 'Deutsch' },
-    { code: 'fr', name: 'Français' },
 ];
 
 const dateTimeFormatsTemplate: IntlDateTimeFormat = {
@@ -82,7 +81,7 @@ allLocales.forEach((locale) => {
 export const i18n = createI18n({
     legacy: false,
     globalInjection: true,
-    locale: navigator.language.split('-')[0],
+    locale: supportedLocale(localStorage.getItem('locale') || navigator.language),
     fallbackLocale: allLocales[0]?.code ?? 'en',
     messages,
     datetimeFormats: dateTimeFormats,
@@ -99,62 +98,15 @@ for (const supplement of [
     Object.entries(supplement).forEach(([locale, messages]) => i18n.global.mergeLocaleMessage(locale, messages));
 }
 
-const dynamicLocales = await loadAvailLocales();
-allLocales.push(...dynamicLocales);
-
-if (localStorage.getItem('locale')) {
-    setLocale(localStorage.getItem('locale') || 'en');
-} else {
-    localStorage.setItem('locale', i18n.global.locale.value);
+// Built-in EN/DE are the complete supported set. Device language packs cannot expand it.
+localStorage.setItem('locale', i18n.global.locale.value);
+document.documentElement.lang = i18n.global.locale.value;
+export function supportedLocale(locale: string): 'en' | 'de' {
+    return locale.toLowerCase().split('-')[0] === 'de' ? 'de' : 'en';
 }
-
-// Set new locale.
-export async function setLocale(locale: string) {
-    // Load locale if not available yet.
-    if (!i18n.global.availableLocales.includes(locale)) {
-        const messages = await loadLocale(locale);
-
-        // fetch() error occurred.
-        if (messages === undefined) {
-            i18n.global.locale.value = allLocales[0]?.code ?? 'en';
-            return;
-        }
-
-        // Add locale.
-        i18n.global.setLocaleMessage(locale, messages.webapp);
-        i18n.global.setNumberFormat(locale, numberFormatTemplate);
-        i18n.global.setDateTimeFormat(locale, dateTimeFormatsTemplate);
-    }
-
-    // Set locale.
-    i18n.global.locale.value = locale;
-    localStorage.setItem('locale', i18n.global.locale.value);
-}
-
-// Fetch locale.
-async function loadLocale(locale: string) {
-    return fetch(`/api/i18n/language?code=${locale}`)
-        .then((response) => {
-            if (response.ok) {
-                return response.json();
-            }
-            throw new Error('Something went wrong!');
-        })
-        .catch((error) => {
-            console.error(error);
-        });
-}
-
-// Fetch available locales
-async function loadAvailLocales() {
-    return fetch('/api/i18n/languages')
-        .then((response) => {
-            if (response.ok) {
-                return response.json();
-            }
-            throw new Error('Something went wrong!');
-        })
-        .catch((error) => {
-            console.error(error);
-        });
+export function setLocale(locale: string) {
+    const supported = supportedLocale(locale);
+    i18n.global.locale.value = supported;
+    localStorage.setItem('locale', supported);
+    document.documentElement.lang = supported;
 }

@@ -693,7 +693,6 @@
             "DisplayLanguage": "Idioma de la Pantalla",
             "en": "Inglés",
             "de": "Alemán",
-            "fr": "Francés",
             "Leds": "LEDs",
             "EqualBrightness": "Brillo Equitativo",
             "LedBrightness": "Brillo del LED {led} ({brightness})"

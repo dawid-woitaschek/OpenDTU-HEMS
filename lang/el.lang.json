@@ -693,7 +693,6 @@
             "DisplayLanguage": "Γλώσσα οθόνης",
             "en": "English",
             "de": "Deutsch",
-            "fr": "Français",
             "Leds": "LEDs",
             "EqualBrightness": "Η ίδια φωτεινότητα",
             "LedBrightness": "Φωτεινότητα LED {led} ({brightness})"
