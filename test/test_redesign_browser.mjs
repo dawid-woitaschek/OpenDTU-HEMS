@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import { createHemsFixture, fixtureNow } from './fixtures/hems.mjs';
-import { createLiveFixture } from './fixtures/live.mjs';
+import { createLiveFixture, inverterUiResponse } from './fixtures/live.mjs';
+import { readFileSync } from 'node:fs';
 import { systemUiResponse } from './fixtures/system-ui.mjs';
 const require = createRequire(import.meta.url);
 const baseUrl = process.env.HEMS_BASE_URL || 'http://127.0.0.1:5173';
@@ -43,6 +44,13 @@ async function assertHeaderBranding(page) {
 try {
     for (const locale of (process.env.REDESIGN_LOCALES?.split(',') || ['en', 'de'])) for (const width of (process.env.REDESIGN_WIDTHS?.split(',').map(Number) || [320, 768, 1440])) {
         const fixture = createHemsFixture(), live = createLiveFixture(), posts = [], sockets = [], requests = [];
+        const home = JSON.parse(readFileSync(new URL(`../webapp/src/locales/${locale}.json`, import.meta.url))).home;
+        // Make unrelated devices genuinely enabled, so the old catch-all would mount them.
+        live.solarcharger = { enabled: true, power: { v: 3210.12, u: 'W', d: 2 } };
+        live.battery = { enabled: true, soc: { v: 78.91, u: '%', d: 2 } };
+        live.gridcharger = { enabled: true, Power: { v: 1234.56, u: 'W', d: 2 } };
+        live.inverters[0].DC = [{ name: { v: 0, u: 'PV input', d: 0 }, Power: { v: 123, u: 'W', d: 0 } }];
+        const deviceSockets = [];
         let offline = false, closeConnections = false, unauthorized = false;
         const context = await browser.newContext({ viewport: { width, height: 1000 }, locale, timezoneId: 'Europe/Berlin', hasTouch: width === 320 });
         const page = await context.newPage();
@@ -50,7 +58,9 @@ try {
         await page.clock.install({ time: fixtureNow * 1000 });
         await page.addInitScript(locale => { if (!localStorage.getItem('locale')) localStorage.setItem('locale', locale); localStorage.setItem('user', JSON.stringify({ authdata: btoa('fixture:fixture') })); }, locale);
         await page.routeWebSocket(/\/livedata$/, socket => { sockets.push(socket); if (closeConnections) socket.close(); });
-        await page.routeWebSocket(/\/(batterylivedata|solarchargerlivedata|gridchargerlivedata|console)$/, () => {});
+        for (const channel of ['batterylivedata', 'solarchargerlivedata', 'gridchargerlivedata', 'console']) {
+            await page.routeWebSocket(new RegExp('/' + channel + '$'), () => { deviceSockets.push(channel); });
+        }
         await page.route('https://raw.githubusercontent.com/**', route => route.fulfill({ status: 404, body: '' }));
         await page.route('**/api/**', async route => {
             const path = new URL(route.request().url()).pathname; requests.push(path);
@@ -69,12 +79,13 @@ try {
                 : path.startsWith('/api/hems/optimizer') ? fixture.optimizer
                 : path.startsWith('/api/hems/energy/tariff') ? fixture.tariff
                 : path.startsWith('/api/hems/energy/forecast') ? fixture.forecast
-                : systemUiResponse(path) ?? (path.endsWith('/config') ? { enabled: false } : {});
+                : inverterUiResponse(path) ?? systemUiResponse(path) ?? (path.endsWith('/config') ? { enabled: false } : {});
             return route.fulfill({ json: body });
         });
-        const primary = ['/', '/live', '/plant/inverters', '/plant/inverters/configuration', '/plant/solar-charger', '/plant/battery', '/plant/wallbox', '/plant/power-meter', '/energy/planning', '/energy/power-control', '/energy/integrations', '/energy/diagnostics'];
+        const primary = ['/', '/plant/inverters/live', '/plant/inverters', '/plant/inverters/configuration', '/plant/solar-charger', '/plant/battery', '/plant/wallbox', '/plant/power-meter', '/energy/planning', '/energy/power-control', '/energy/integrations', '/energy/diagnostics'];
         const system = ['/settings/network', '/info/network', '/settings/mqtt', '/info/mqtt', '/settings/ntp', '/info/ntp', '/settings/dtu', '/settings/device', '/settings/security', '/settings/logging', '/info/console', '/settings/config', '/firmware/upgrade', '/info/system', '/maintenance/reboot', '/about'];
         for (const path of [...primary, ...system]) {
+            const beforeRequests = requests.length, beforeDeviceSockets = deviceSockets.length;
             await page.goto(baseUrl + path);
             await page.locator('h1').waitFor();
             await page.waitForTimeout(100);
@@ -85,6 +96,8 @@ try {
             assert.equal(await page.locator('h1 .onlineMarker, h1 .offlineMarker').count(), 0);
             assert.equal(await page.locator('nav.nav-pills').count(), 0);
             await assertHelpPlacement(page);
+            assert.equal(await page.locator('#main-navigation .navigation-group').first().locator('a').count(), 1, 'Start contains only Overview');
+            assert.equal(await page.locator('#main-navigation a[href="/live"]').count(), 0);
             if (!['/', '/about'].includes(path)) assert.ok(await page.locator('#main-navigation .active').count() > 0, `${path}: sidebar locates the page`);
             if (path === '/') {
                 await assertHeaderBranding(page);
@@ -117,6 +130,39 @@ try {
                 assert.equal(await page.locator('#v-pills-tab, #gridProfileView, .radio-stats').count(), 0, 'Overview does not duplicate technical Live Data');
                 assert.equal(await page.locator('#main-navigation .nav-parent').filter({ hasText: locale === 'de' ? 'Wechselrichter' : 'Inverters' }).locator('..').getAttribute('class'), 'active-parent');
                 await page.screenshot({ path: `${screenshots}/${locale}-${width}-inverters.png`, fullPage: true });
+                assert.equal(await page.locator('[role="main"] a[href="/live"]').count(), 0);
+                assert.ok(await page.locator('[role="main"] a[href^="/plant/inverters/live"]').count() >= 3);
+            }
+            if (path === '/plant/inverters/live') {
+                assert.equal(await page.locator('.nav-children a.active').getAttribute('href'), path);
+                assert.equal(await page.locator('.active-parent > a.nav-parent[href="/plant/inverters"]').count(), 1);
+                assert.equal(await page.locator('#v-pills-tab button').count(), 2);
+                const panel = page.locator('#v-pills-100000000001');
+                await panel.waitFor({ state: 'visible' });
+                await panel.getByText('PV input', { exact: true }).waitFor();
+                assert.match(await panel.innerText(), /600 W/);
+                assert.equal(await page.locator('[role="main"] #v-pills-tabContent').count(), 1, 'No appended device live views');
+                assert.equal(await page.locator('.inverter-summary').count(), 0);
+                assert.doesNotMatch(await page.locator('[role="main"]').innerText(), /3[,.]?210[,.]12|78[,.]91|1[,.]?234[,.]56/, 'No cross-device summary telemetry');
+                assert.deepEqual(requests.slice(beforeRequests).filter(p => /\/api\/(battery|solarcharger|gridcharger)livedata\//.test(p)), [], 'Unrelated live views must not mount/fetch');
+                assert.equal(deviceSockets.length, beforeDeviceSockets, 'No device-specific live views open sockets');
+                const action = key => panel.locator(`button[title=${JSON.stringify(home[key])}], button[data-bs-original-title=${JSON.stringify(home[key])}]`);
+                for (const [key, id, endpoint] of [['ShowInverterInfo', 'devInfoView', '/api/devinfo/status'], ['ShowGridProfile', 'gridProfileView', '/api/gridprofile/status'], ['ShowEventlog', 'eventView', '/api/eventlog/status']]) {
+                    const requested = page.waitForRequest(r => new URL(r.url()).pathname === endpoint && new URL(r.url()).searchParams.get('inv') === '100000000001');
+                    await action(key).click(); await requested;
+                    const modal = page.locator('#' + id); await modal.waitFor({ state: 'visible' });
+                    await modal.locator('.modal-body .spinner-border').waitFor({ state: 'hidden' });
+                    await modal.locator('.btn-close').click(); await modal.waitFor({ state: 'hidden' });
+                }
+                await action('ShowSetInverterLimit').click();
+                await page.locator('#inputTargetLimit').fill('55');
+                await page.locator('#limitSettingView').getByRole('button', { name: home.SetNonPersistent, exact: true }).click();
+                await page.locator('#limitSettingView').waitFor({ state: 'hidden' });
+                assert.deepEqual(posts.findLast(p => p.path === '/api/limit/config').payload, { serial: '100000000001', limit_value: 55, limit_type: 1 });
+                await action('TurnOnOff').click();
+                await page.locator('#powerSettingView').getByRole('button', { name: home.TurnOff, exact: true }).click();
+                await page.locator('#powerSettingView').waitFor({ state: 'hidden' });
+                assert.deepEqual(posts.findLast(p => p.path === '/api/power/config').payload, { serial: '100000000001', power: false });
             }
             if (path === '/plant/inverters/configuration') assert.equal(await page.locator('.nav-children a.active').getAttribute('href'), path);
             if (path === '/plant/solar-charger') assert.equal(await page.locator('.overview-value').count(), 0, 'No aggregate PV value on solar-charger page');
@@ -144,10 +190,19 @@ try {
             }
         }
         assert.deepEqual(errors, [], 'Primary route audit has no runtime errors');
+        await page.goto(baseUrl + '/live?inverter=100000000002');
+        await page.waitForURL('**/plant/inverters/live?inverter=100000000002');
+        await page.locator('#v-pills-100000000002.active').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('.nav-children a.active').getAttribute('href'), '/plant/inverters/live');
         // SPA navigation shares exactly one socket and merges inverter frames without losing peers.
         await page.goto(baseUrl + '/plant/inverters');
         await page.locator('.live-connection-dot[data-state="connected"]').waitFor({ state: 'attached' });
         const initialSockets = sockets.length;
+        if (width < 992) await page.locator('[aria-controls="main-navigation"]').click();
+        await page.locator('#main-navigation .nav-children a[href="/plant/inverters/live"]').click();
+        await page.locator('#v-pills-100000000001.active').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('.nav-children a.active').getAttribute('href'), '/plant/inverters/live');
+        assert.equal(sockets.length, initialSockets, 'Inverter technical Live Data consumes the app-owned socket');
         if (width < 992) await page.locator('[aria-controls="main-navigation"]').click();
         await page.locator('#main-navigation a[href="/plant/inverters/configuration"]').click();
         assert.equal(await page.locator('.nav-children a.active').getAttribute('href'), '/plant/inverters/configuration');
@@ -184,7 +239,7 @@ try {
         await page.locator('.live-connection-dot[data-state="disconnected"]').waitFor({ state: 'attached' });
         await assertMeasurementsUnavailable(eastCard);
         await assertMeasurementsUnavailable(page.locator('[data-inverter="100000000002"]'));
-        for (const [oldPath, canonical] of [['/hems', '/'], ['/info/hems', '/'], ['/hems/devices', '/energy/integrations'], ['/settings/battery', '/plant/battery'], ['/plant/solar', '/plant/solar-charger'], ['/settings/solarcharger', '/plant/solar-charger'], ['/settings/powerlimiter', '/energy/power-control'], ['/plant/inverters/power-limit', '/energy/power-control']]) {
+        for (const [oldPath, canonical] of [['/live', '/plant/inverters/live'], ['/hems', '/'], ['/info/hems', '/'], ['/hems/devices', '/energy/integrations'], ['/settings/battery', '/plant/battery'], ['/plant/solar', '/plant/solar-charger'], ['/settings/solarcharger', '/plant/solar-charger'], ['/settings/powerlimiter', '/energy/power-control'], ['/plant/inverters/power-limit', '/energy/power-control']]) {
             await page.goto(baseUrl + oldPath); await page.waitForURL('**' + canonical);
         }
         await page.evaluate(() => localStorage.setItem('locale', 'fr'));

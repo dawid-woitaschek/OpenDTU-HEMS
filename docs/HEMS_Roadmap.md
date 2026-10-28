@@ -42,7 +42,13 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
    price, forecast and battery-plan details expand without repeated current facts.
    The sidebar owns navigation and nested active states. Plant distinguishes
    Solarladeregler / Solar Charger from total Solar and offers a human-readable
-   inverter summary separate from detailed Live Data. DPL configuration belongs
+   inverter summary separate from detailed Live Data. Start contains only
+   Overview; Plant > Inverters owns Overview, Live Data and Configuration.
+   `/plant/inverters/live` contains inverter technical telemetry, dialogs and
+   manual actions; `/live` redirects there, preserving inverter selection.
+   The technical page no longer renders cross-device totals or appended solar,
+   battery or grid-charger views. `/` is the only cross-device summary, and each
+   physical device retains its own Plant telemetry page. DPL configuration belongs
    to Energiemanagement. Header connection state comes from one app-owned live
    socket; device health and current/last-known values remain distinct. Unverified
    inverter overview measurements and limits show `—`, including cached zero
@@ -66,6 +72,10 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
    and EN/DE browser checks at 320/1440 px, covering unreachable zero frames,
    stale readings, disabled polling and connection loss. Existing EN/DE
    event/alarm/display implementation is unchanged by this follow-up.
+   The inverter Live Data ownership follow-up (2026-10-29) passed focused
+   frontend/type/build/lint/Node and EN/DE browser checks at 320/1440 px,
+   including redirects, nested selection, retained dialogs/manual payloads and
+   absence of unrelated device live views without additional live sockets.
    PR #37 remains unmerged; no remote CI result is asserted. Tariff bands remain
    presentation-only.
 6. **CMT2300A hardware follow-up:** refreshed PR #31 is merged. Local integration validation: all 36 native test executables and the control-surface guard passed, including PSRAM allocation/JSON failure recovery and CMT receive-flag handling. Production configuration compatibility and firmware channel/provenance tests passed; Hoymiles and changed wrapper/test sources passed cpplint with the repository filters. Source parity, hardening ancestry/scope and `git diff --check` passed. The `generic_esp32s3_usb_quad_psram` and `generic_esp32s3_usb` firmware builds passed with the existing embedded web assets; the frontend hook was skipped using `GITHUB_ACTIONS=true`. GitHub Actions were not queried or awaited.

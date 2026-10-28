@@ -78,8 +78,9 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   protection appears as concise relevant status instead of a large duplicated
   Automation card. `/hems` and `/info/hems` still redirect to `/`.
 - The persistent sidebar is authoritative, with parent/child selection for routed
-  subpages, restrained icons and a mobile menu. Inverters has Overview and
-  Configuration children; System status/configuration subpages retain their
+  subpages, restrained icons and a mobile menu. Start contains only Overview.
+  Inverters has Overview, Live Data and Configuration children;
+  System status/configuration subpages retain their
   context. The redundant horizontal Energy Management tabs are removed.
 - Plant **Solar Charger / Solarladeregler** (`/plant/solar-charger`) owns solar
   charge-controller telemetry and connection settings. It does not display
@@ -90,8 +91,15 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   Event counts are explicitly historical, not claims about current active faults.
   The existing API exposes DPL's last aggregate output target, not a per-inverter
   allocation; the UI identifies that distinction. Detailed channels, radio
-  statistics, Grid Profile, event logs and manual actions remain in `/live`,
-  with inverter-specific shortcuts and a separate Configuration destination.
+  statistics, Grid Profile, device information, event logs and manual power/limit
+  actions belong to `/plant/inverters/live`, with inverter-specific shortcuts
+  and a separate Configuration destination. `/live` is a compatibility redirect
+  that retains the selected inverter query. The technical page does not render
+  cross-device totals or solar-charger, battery, grid-charger or meter telemetry;
+  those devices retain their canonical Plant pages. `/` remains the only
+  cross-device summary. Existing inverter channels, selector and actions are
+  preserved without duplicating the concise inverter overview. Initial inverter
+  selection also works when entering with an already populated shared snapshot.
 - Power Control / DPL configuration belongs to `/energy/power-control`.
   `/plant/inverters/power-limit` and `/settings/powerlimiter` redirect there.
   Physical battery/wallbox connections, profile binding and scoped manual controls
@@ -104,7 +112,7 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   and times; step prices, predicted SoC and reasons remain in the expanded plan.
 - App owns exactly one `/livedata` WebSocket. The persistent header displays
   neutral connecting/unknown, green connected and red disconnected status with
-  DE/EN accessible help, without a pulse. Live Data, the inverter overview and
+  DE/EN accessible help, without a pulse. Inverter Live Data, the inverter overview and
   overview limits consume the shared snapshot. Partial inverter frames preserve
   other devices, ages advance in the browser, and an HTTP refresh cannot replace
   newer live frames while still discovering configuration changes. Aborted
@@ -185,6 +193,17 @@ zero frames, and require `—` for unverified AC output, temperature and limits
 after stale data, disabled polling or connection loss. A repository asset guard
 rejects unsupported locale packs. No controller, event/alarm parser or display
 implementation changed in this follow-up; EN/DE behavior is preserved.
+
+The inverter Live Data ownership follow-up on **2026-10-29** passed focused
+WebUI type checking, production build, changed-source ESLint/Prettier checks,
+the shared-state/navigation Node regression and EN/DE browser checks at
+320/1440 px against the firmware-route fixture. With other devices enabled,
+the technical page renders only inverter data and opens no unrelated device
+live requests/sockets. Tests cover nested active navigation, `/live` redirects
+including selected-inverter queries, cached-snapshot selection, AC/DC/INV
+channels, device/Grid Profile/event dialogs, existing manual limit/power
+payloads and a single app-owned live connection across sidebar navigation.
+All action requests are intercepted fixtures, not physical commands.
 
 Cleanup validation is software-only and browser requests use intercepted API
 fixtures. Physical ESP32/device and live-installation visual validation remain

@@ -220,6 +220,10 @@ and the strict EN/DE locale policy. `node test/test_redesign_browser.mjs` audits
 English/German at 320/768/1440 px, nested sidebar selection, physical-device
 ownership, help placement/touch/outside/Escape behavior, connection status and
 unchanged planning payloads. It is included in the HEMS browser regression job.
+Inverter technical Live Data is checked with other devices enabled: only
+inverter telemetry is rendered, no unrelated device live views fetch/open
+sockets, dialogs and manual inverter payloads remain functional, and `/live`
+bookmarks preserve inverter selection through the canonical redirect.
 
 Browser suites accept `HEMS_BASE_URL` (default `http://127.0.0.1:5173`) so the
 same flows can target a served production build. `PLAYWRIGHT_MODULE` and

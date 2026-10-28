@@ -26,6 +26,9 @@ const live = compile('utils/liveData.ts', { vue, './authentication': auth, './we
     fetch: async () => { if (pending) return pending; if (fail) throw Error('offline'); return new Response(JSON.stringify(source)); },
 });
 const helpers = compile('utils/inverterPresentation.ts', {});
+const navigation = compile('utils/hemsNavigation.ts', {}).mainNavigation;
+assert.deepEqual(Array.from(navigation.find(group => group.label === 'start').items, item => item.path), ['/']);
+assert.deepEqual(Array.from(navigation.find(group => group.label === 'plant').items.find(item => item.label === 'inverters').children, item => item.path), ['/plant/inverters', '/plant/inverters/live', '/plant/inverters/configuration']);
 live.startLiveData({}, {});
 const consumer = live.useLiveData();
 await consumer.reload();

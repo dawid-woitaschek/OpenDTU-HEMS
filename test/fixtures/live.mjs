@@ -9,3 +9,16 @@ export function createLiveFixture() {
         solarcharger: { enabled: false }, battery: { enabled: false }, gridcharger: { enabled: false }, power_meter: { enabled: true, Power: value(-245) },
     };
 }
+
+export function inverterUiResponse(path) {
+    const serial = '100000000001';
+    switch (path) {
+        case '/api/devinfo/status': return { valid_data: false };
+        case '/api/eventlog/status': return { count: 1, events: [{ message_id: 1, message: 'Recorded inverter event', start_time: 1, end_time: 2 }] };
+        case '/api/gridprofile/status': return { name: 'Inverter grid profile', version: '1', sections: [] };
+        case '/api/gridprofile/rawdata': return { raw: [1] };
+        case '/api/limit/status': return { [serial]: { limit_relative: 75, max_power: 800, limit_set_status: 'Ok' } };
+        case '/api/power/status': return { [serial]: { power_set_status: 'Ok' } };
+        default: return undefined;
+    }
+}

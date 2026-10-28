@@ -6,10 +6,7 @@ export interface NavigationItem {
 export const mainNavigation: { label: string; items: NavigationItem[] }[] = [
     {
         label: 'start',
-        items: [
-            { path: '/', label: 'overview' },
-            { path: '/live', label: 'live' },
-        ],
+        items: [{ path: '/', label: 'overview' }],
     },
     {
         label: 'plant',
@@ -19,6 +16,7 @@ export const mainNavigation: { label: string; items: NavigationItem[] }[] = [
                 label: 'inverters',
                 children: [
                     { path: '/plant/inverters', label: 'overview' },
+                    { path: '/plant/inverters/live', label: 'live' },
                     { path: '/plant/inverters/configuration', label: 'configuration' },
                 ],
             },

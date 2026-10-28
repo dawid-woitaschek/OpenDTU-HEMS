@@ -1,7 +1,9 @@
 <template>
     <BasePage :title="$t('redesign.inverters')" :isLoading="loading && !data" show-reload @reload="reload">
         <div class="d-flex flex-wrap gap-2 mb-3">
-            <RouterLink to="/live" class="btn btn-outline-primary btn-sm">{{ $t('redesign.detailedLive') }}</RouterLink>
+            <RouterLink to="/plant/inverters/live" class="btn btn-outline-primary btn-sm">{{
+                $t('redesign.detailedLive')
+            }}</RouterLink>
             <RouterLink to="/plant/inverters/configuration" class="btn btn-outline-secondary btn-sm">{{
                 $t('redesign.configuration')
             }}</RouterLink>
@@ -47,7 +49,7 @@
                             <dd class="col-5">{{ inv.events >= 0 ? inv.events : '—' }}</dd>
                         </dl>
                         <RouterLink
-                            :to="{ path: '/live', query: { inverter: inv.serial } }"
+                            :to="{ path: '/plant/inverters/live', query: { inverter: inv.serial } }"
                             class="btn btn-outline-primary btn-sm"
                             >{{ $t('redesign.detailedLive') }}</RouterLink
                         >

@@ -1,17 +1,15 @@
 <template>
-    <BasePage :title="$t('home.LiveData')" :isLoading="dataLoading" :isWideScreen="true" @reload="reloadData">
+    <BasePage
+        :title="$t('redesign.inverterLiveData')"
+        :isLoading="dataLoading"
+        :isWideScreen="true"
+        @reload="reloadData"
+    >
         <div v-if="liveConnection !== 'connected' || liveUnavailable" class="alert alert-secondary" role="status">
             {{ $t('redesign.lastKnownHelp') }}
         </div>
         <HintView :hints="liveData.hints" />
-        <InverterTotalInfo
-            :totalData="liveData.total"
-            :hasInverters="hasInverters"
-            :solarChargerData="liveData.solarcharger"
-            :totalBattData="liveData.battery"
-            :powerMeterData="liveData.power_meter"
-            :gridChargerData="liveData.gridcharger"
-        />
+        <p v-if="!inverterData.length" class="text-body-secondary">{{ $t('redesign.noInverters') }}</p>
         <div class="row gy-3 mt-0">
             <div class="col-sm-3 col-md-2" :style="[inverterData.length == 1 ? { display: 'none' } : {}]">
                 <div
@@ -356,9 +354,6 @@
                 </div>
             </div>
         </div>
-        <SolarChargerView v-if="liveData.solarcharger.enabled" />
-        <BatteryView v-if="liveData.battery.enabled" />
-        <GridChargerView v-if="liveData.gridcharger.enabled" />
     </BasePage>
 
     <ModalDialog modalId="eventView" :title="$t('home.EventLog')" :loading="eventLogLoading">
@@ -524,12 +519,8 @@ import EventLog from '@/components/EventLog.vue';
 import GridProfile from '@/components/GridProfile.vue';
 import HintView from '@/components/HintView.vue';
 import InverterChannelInfo from '@/components/InverterChannelInfo.vue';
-import InverterTotalInfo from '@/components/InverterTotalInfo.vue';
 import { LimitType } from '@/types/LimitConfig';
 import ModalDialog from '@/components/ModalDialog.vue';
-import SolarChargerView from '@/components/SolarChargerView.vue';
-import GridChargerView from '@/components/GridChargerView.vue';
-import BatteryView from '@/components/BatteryView.vue';
 import type { DevInfoStatus } from '@/types/DevInfoStatus';
 import type { EventlogItems } from '@/types/EventlogStatus';
 import type { GridProfileRawdata } from '@/types/GridProfileRawdata';
@@ -565,7 +556,6 @@ export default defineComponent({
         GridProfile,
         HintView,
         InverterChannelInfo,
-        InverterTotalInfo,
         ModalDialog,
         BIconArrowCounterclockwise,
         BIconBroadcast,
@@ -577,9 +567,6 @@ export default defineComponent({
         BIconSpeedometer,
         BIconToggleOff,
         BIconToggleOn,
-        SolarChargerView,
-        GridChargerView,
-        BatteryView,
     },
     setup() {
         const shared = useLiveData();
@@ -649,26 +636,10 @@ export default defineComponent({
         this.gridProfileView = new bootstrap.Modal('#gridProfileView');
         this.limitSettingView = new bootstrap.Modal('#limitSettingView');
         this.powerSettingView = new bootstrap.Modal('#powerSettingView');
+        this.selectInitialInverter();
     },
     updated() {
-        console.log('Updated');
-        // Select first tab
-        if (this.isFirstFetchAfterConnect) {
-            console.log('isFirstFetchAfterConnect');
-
-            this.$nextTick(() => {
-                console.log('nextTick');
-                const firstTabEl =
-                    document.getElementById('v-pills-' + String(this.$route.query.inverter) + '-tab') ||
-                    document.querySelector('#v-pills-tab:first-child button');
-                if (firstTabEl != null) {
-                    this.isFirstFetchAfterConnect = false;
-                    console.log('Show');
-                    const firstTab = new bootstrap.Tab(firstTabEl);
-                    firstTab.show();
-                }
-            });
-        }
+        this.selectInitialInverter();
     },
     computed: {
         liveData(): LiveData {
@@ -692,13 +663,21 @@ export default defineComponent({
         inverterData(): Inverter[] {
             return this.sharedInverters;
         },
-        hasInverters(): boolean {
-            return this.liveData?.inverters?.length > 0 || false;
-        },
     },
     methods: {
         isLoggedIn,
         inverterState,
+        selectInitialInverter() {
+            if (!this.isFirstFetchAfterConnect) return;
+            this.$nextTick(() => {
+                const tab =
+                    document.getElementById('v-pills-' + String(this.$route.query.inverter) + '-tab') ||
+                    document.querySelector('#v-pills-tab button');
+                if (!tab) return;
+                this.isFirstFetchAfterConnect = false;
+                bootstrap.Tab.getOrCreateInstance(tab).show();
+            });
+        },
         reloadData() {
             this.reloadShared();
         },

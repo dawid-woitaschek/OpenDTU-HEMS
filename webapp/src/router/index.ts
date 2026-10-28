@@ -58,7 +58,8 @@ const router = createRouter({
         { path: '/hems/profiles', redirect: '/energy/integrations' },
         { path: '/energy/integrations', name: 'Integrations', component: IntegrationsView },
         { path: '/', name: 'Home', component: HemsInfoView },
-        { path: '/live', name: 'Live Data', component: LiveDataView },
+        { path: '/live', redirect: '/plant/inverters/live' },
+        { path: '/plant/inverters/live', name: 'Inverter Live Data', component: LiveDataView },
         { path: '/plant/inverters', name: 'Inverters', component: InverterOverviewView },
         {
             path: '/plant/solar-charger',
