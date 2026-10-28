@@ -44,9 +44,12 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
    Solarladeregler / Solar Charger from total Solar and offers a human-readable
    inverter summary separate from detailed Live Data. DPL configuration belongs
    to Energiemanagement. Header connection state comes from one app-owned live
-   socket; device health and current/last-known values remain distinct. Help
-   stays attached to labels/headings and supports touch, outside dismissal and
-   keyboard use. German and English are the complete supported locale set.
+   socket; device health and current/last-known values remain distinct. Unverified
+   inverter overview measurements and limits show `—`, including cached zero
+   values. Help stays attached to labels/headings and supports touch, outside
+   dismissal and keyboard use. German and English are the complete supported locale set;
+   obsolete non-DE/EN pack assets are removed and language-pack documentation
+   describes only the supported set and existing EN/DE display overrides.
    Existing APIs, permissions, forms and opt-in behavior remain authoritative;
    firmware changes only remove unsupported presentation locales and provide
    English fallbacks for old display settings. Existing alarm identifiers and
@@ -55,6 +58,10 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
    suites passed locally; the route audit covers EN/DE at 320/768/1440 px,
    including attached help and mobile overflow fixes. [Current status](HEMS_Current_Status.md#product-ui)
    records their scope and remaining live-device visual/physical validation.
+   The final telemetry/pack cleanup passed focused type/build/lint/Node checks
+   and EN/DE browser checks at 320/1440 px, covering unreachable zero frames,
+   stale readings, disabled polling and connection loss. Existing EN/DE
+   event/alarm/display implementation is unchanged by this follow-up.
    PR #37 remains unmerged; no remote CI result is asserted. Tariff bands remain
    presentation-only.
 6. **CMT2300A hardware follow-up:** refreshed PR #31 is merged. Local integration validation: all 36 native test executables and the control-surface guard passed, including PSRAM allocation/JSON failure recovery and CMT receive-flag handling. Production configuration compatibility and firmware channel/provenance tests passed; Hoymiles and changed wrapper/test sources passed cpplint with the repository filters. Source parity, hardening ancestry/scope and `git diff --check` passed. The `generic_esp32s3_usb_quad_psram` and `generic_esp32s3_usb` firmware builds passed with the existing embedded web assets; the frontend hook was skipped using `GITHUB_ACTIONS=true`. GitHub Actions were not queried or awaited.

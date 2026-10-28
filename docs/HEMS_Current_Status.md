@@ -110,9 +110,13 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   newer live frames while still discovering configuration changes. Aborted
   owners cannot overwrite newer snapshots, and authorization changes do not
   cause a logout/reconnect loop.
-  Device reachability is separate from this transport indicator. Unreachable,
-  unverified or older-than-60-second inverter data is labeled last-known; this
-  threshold affects presentation only, not backend control/freshness gates.
+  Device reachability is separate from this transport indicator. The inverter
+  overview shows `—` for current AC output, temperature and the confirmed limit
+  whenever the inverter is unreachable, polling is disabled, data is older than
+  60 seconds or measurements are otherwise unverified. Cached zero or nonzero
+  readings are not presented as current. Recorded event counts remain explicitly
+  historical; technical Live Data may retain explicitly labeled last-known
+  readings. This affects presentation only, not backend control/freshness gates.
 - Help buttons stay directly beside their field label or section heading,
   including legacy DTU/inverter/DPL hints. Inputs and interactive help are outside
   each other's labels. Help supports hover, keyboard focus, click/tap toggle,
@@ -127,10 +131,14 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   strings are removed; the 131 alarm identifiers, protocol parsing, German/English
   alarm messages and 13 German/English display format pairs are preserved.
   These changes affect presentation, not HEMS control behavior.
+  Obsolete Greek, Spanish, Italian and Polish pack files are removed.
+  `lang/README.md` documents the fixed language set and the existing EN/DE
+  device-display overrides; uploaded packs do not add selector languages or
+  replace bundled WebUI/event/alarm translations.
 - Existing branding is unchanged; no replacement product logo was invented.
   No fixture/mock readings are included in the production UI.
 
-Local cleanup validation on **2026-10-28** passed:
+The preceding UX/IA pass on **2026-10-28** passed:
 
 - WebUI TypeScript checking (`vue-tsc --build`), production Vite build, source
   ESLint/Prettier checks and `git diff --check`.
@@ -158,6 +166,15 @@ Local cleanup validation on **2026-10-28** passed:
   selection on the corresponding physical device pages.
 - Source integrity review preserved every EN/DE alarm message and display format
   while removing the French columns; this is not a firmware-build claim.
+
+Final cleanup verification on **2026-10-28** passed focused WebUI type checking,
+production build, changed-source ESLint/Prettier checks, the shared-state/locale
+Node regression and the redesign browser regression in EN/DE at 320/1440 px.
+The browser checks distinguish verified current zero readings from unreachable
+zero frames, and require `—` for unverified AC output, temperature and limits
+after stale data, disabled polling or connection loss. A repository asset guard
+rejects unsupported locale packs. No controller, event/alarm parser or display
+implementation changed in this follow-up; EN/DE behavior is preserved.
 
 Cleanup validation is software-only and browser requests use intercepted API
 fixtures. Physical ESP32/device and live-installation visual validation remain

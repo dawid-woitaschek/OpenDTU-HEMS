@@ -88,6 +88,11 @@ assert.deepEqual(Array.from(language.allLocales, locale => locale.code), ['en', 
 for (const unsupported of ['fr', 'fr-FR', 'es', 'unknown', '']) { language.setLocale(unsupported); assert.equal(saved.get('locale'), 'en'); }
 language.setLocale('de-DE'); assert.equal(saved.get('locale'), 'de');
 assert.deepEqual(readdirSync(new URL('../webapp/src/locales', import.meta.url)).sort(), ['de.json', 'en.json']);
+const packDirectory = new URL('../lang/', import.meta.url);
+for (const file of readdirSync(packDirectory).filter(name => name.endsWith('.lang.json'))) {
+    const pack = JSON.parse(readFileSync(new URL(file, packDirectory), 'utf8'));
+    assert.ok(['de', 'en'].includes(pack.meta?.code), `Unsupported language pack must not be shipped: ${file}`);
+}
 const messages = supplements['./redesignMessages'].redesignMessages;
 assert.deepEqual(Object.keys(messages.en.redesign).sort(), Object.keys(messages.de.redesign).sort());
 console.log('Shared live ownership, partial frames, stale/unreachable data, abort isolation and strict EN/DE locale fallback passed');
