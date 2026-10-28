@@ -190,7 +190,7 @@ void Service::run()
         if ((!_pending && !_historyDue) || (_attempted && millis() - _lastRunMs < 5000)) { return; }
         needProfile = _config.automaticLoad || _historyDue;
     }
-    auto load = std::unique_ptr<Load::Profile>(needProfile ? new (std::nothrow) Load::Profile() : nullptr);
+    auto load = needProfile ? Memory::make<Load::Profile>() : Memory::Ptr<Load::Profile>();
     if (needProfile && !load) { return; }
     {
         std::lock_guard<std::mutex> lock(_mutex);

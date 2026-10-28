@@ -11,7 +11,6 @@ on:
       - '**/*.md'
   pull_request:
     branches:
-      - hems-energy-management
       - hems
       - integration/hems-next
     paths-ignore:
@@ -171,7 +170,7 @@ jobs:
 
   publish_firmware_channel:
     name: Publish firmware update channel
-    if: github.base_ref != 'hems-energy-management' && (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     needs: [build, browser]
     runs-on: ubuntu-24.04
     permissions:
@@ -328,23 +327,20 @@ jobs:
             }
 
             const prChannel = `pr-${context.issue.number}`;
-            const publishChannel = context.payload.pull_request.base.ref !== 'hems-energy-management';
-            let body = publishChannel ? '### Direct OTA binaries\n\n' : '### CI build artifacts\n\n';
-            if (publishChannel) {
-              body += 'Raw OTA images for this pull request, no ZIP extraction required:\n\n';
-              for (const artifact of firmwareArtifacts) {
-                const environment = artifact.name.replace(/^opendtu-hems-/, '');
-                body += `* [${environment}.bin](https://raw.githubusercontent.com/${owner}/${repo}/firmware-channel-${prChannel}/opendtu-hems-${environment}.bin)\n`;
-              }
-
+            let body = '### Direct OTA binaries\n\n';
+            body += 'Raw OTA images for this pull request, no ZIP extraction required:\n\n';
+            for (const artifact of firmwareArtifacts) {
+              const environment = artifact.name.replace(/^opendtu-hems-/, '');
+              body += `* [${environment}.bin](https://raw.githubusercontent.com/${owner}/${repo}/firmware-channel-${prChannel}/opendtu-hems-${environment}.bin)\n`;
             }
-            body += '\n### ZIP artifacts\n\n';
+
+            body += '\n### ZIP artifacts (fallback)\n\n';
             for (const artifact of firmwareArtifacts) {
               body += `* [${artifact.name}.zip](https://nightly.link/${owner}/${repo}/actions/artifacts/${artifact.id}.zip)\n`;
             }
 
             body += '\n### Notice\n';
-            body += publishChannel ? `* The direct OTA images follow temporary update channel \`${prChannel}\`.\n` : '* Integration validation only: no firmware update channel is published.\n';
+            body += `* The direct OTA images follow temporary update channel \`${prChannel}\`.\n`;
             body += '* Use the normal `.bin` for OTA. Factory images remain available only inside the fallback ZIP artifacts.\n';
             body += `* Source commit: \`${context.payload.pull_request.head.sha}\`.\n`;
             body += `* Tested merge / image commit: \`${context.sha}\`.\n`;

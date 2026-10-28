@@ -187,7 +187,9 @@ provenance is in `test/fixtures/providers/README.md`. No test contacts a provide
 
 `test_hems_memory` compiles the production ESP32 placement path against a capability
 allocator seam: PSRAM vs absent-PSRAM selection, exhaustion without INTERNAL spill,
-and bounded JSON reallocation/accounting. `test_energy_service` tracks live Series
+and bounded JSON reallocation/accounting, including the expanded Plan and load
+Profile types. `test_optimizer_service` checks learning-snapshot exhaustion retains
+the published plan/pending request and recovers on retry. `test_energy_service` tracks live Series
 across one/two/six-plane requests and delays, plus destination/aggregation allocation
 failures with atomic last-good retention. `test_energy_transport` injects bad_alloc
 in library constructors, begin/header/connect/body calls, checks RAII and subsequent

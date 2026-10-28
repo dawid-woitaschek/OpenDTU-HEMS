@@ -7,7 +7,14 @@
 #include <cassert>
 #include <ctime>
 #include <iostream>
+#include <new>
 #include <vector>
+static bool failLoadSnapshot = false;
+void* operator new(std::size_t size, std::nothrow_t const&) noexcept
+{
+    if (size == sizeof(Hems::Load::Profile) && failLoadSnapshot) { return nullptr; }
+    try { return ::operator new(size); } catch (std::bad_alloc const&) { return nullptr; }
+}
 constexpr uint32_t Now=1792180800;
 static uint32_t fixtureUtc=Now;
 extern "C" time_t time(time_t* out) noexcept { if(out) *out=fixtureUtc; return fixtureUtc; }
@@ -23,7 +30,10 @@ bool providerGet(char const*,Source,JsonDocument&,NativeInfo&,char const*& error
 }
 int main()
 {
-    using namespace Hems;
+    namespace Energy = Hems::Energy;
+    namespace Optimizer = Hems::Optimizer;
+    namespace Model = Hems::Model;
+    namespace Load = Hems::Load;
     Scheduler scheduler; Energy::EnergyData.init(scheduler); Optimizer::ShadowOptimizer.init();
     scheduler.execute(); workers(); assert(tasks.empty());
     Energy::Settings settings; settings.enabled=true; assert(Energy::EnergyData.configure(Energy::Domain::Tariff,settings));
@@ -52,6 +62,23 @@ int main()
         assert(result["state"] == "ready" && result["schedule"].size() == 16);
         assert(result["plan_revision"].as<uint32_t>() == ++revision);
     }
+    // Learning scratch exhaustion must preserve the published plan and pending
+    // request, then recover on the existing worker without changing authority.
+    config.automaticLoad = true; assert(Optimizer::ShadowOptimizer.configure(config));
+    testNow += 5000; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    revision = result["plan_revision"].as<uint32_t>(); assert(result["state"] == "ready");
+    failLoadSnapshot = true; assert(Optimizer::ShadowOptimizer.requestRecalculate());
+    testNow += 5000; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["state"] == "ready" && result["replan_pending"] == true);
+    assert(result["plan_revision"].as<uint32_t>() == revision);
+    failLoadSnapshot = false; scheduler.execute(); workers();
+    result.clear(); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(), true);
+    assert(result["state"] == "ready" && result["replan_pending"] == false);
+    assert(result["plan_revision"].as<uint32_t>() == revision + 1);
+    config.automaticLoad = false; assert(Optimizer::ShadowOptimizer.configure(config));
+    testNow += 5000; scheduler.execute(); workers();
     storage.socPct=Model::Signal<double>::stale(50); Optimizer::ShadowOptimizer.serialize(result.to<JsonObject>(),true);
     assert(result["state"]=="stale_inputs" && result["schedule"].size()==0);
     assert(Optimizer::ShadowOptimizer.requestRecalculate()); testNow += 5000; scheduler.execute(); workers();
