@@ -1,6 +1,5 @@
 <template>
     <BasePage :title="$t('hemsUi.diagnostics')" :isLoading="dataLoading" :show-reload="true" @reload="getStatus">
-        <HemsNav />
         <HemsPlanningReadinessPanel />
         <HemsOptimizerPanel view="diagnostics" />
         <HemsEnergyPanel view="diagnostics" />
@@ -438,7 +437,6 @@
 <script lang="ts">
 import { controlText } from '@/hemsControl';
 import HemsPlanningReadinessPanel from '@/components/hems/HemsPlanningReadinessPanel.vue';
-import HemsNav from '@/components/hems/HemsNav.vue';
 import SystemDiagnostics from '@/components/hems/SystemDiagnostics.vue';
 import HemsEnergyPanel from '@/components/HemsEnergyPanel.vue';
 import HemsOptimizerPanel from '@/components/HemsOptimizerPanel.vue';
@@ -453,7 +451,6 @@ export default defineComponent({
         HemsPlanningReadinessPanel,
         BasePage,
         CardElement,
-        HemsNav,
         HemsEnergyPanel,
         HemsOptimizerPanel,
         SystemDiagnostics,

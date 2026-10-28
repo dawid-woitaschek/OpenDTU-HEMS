@@ -1,10 +1,22 @@
 <template>
     <a class="visually-hidden-focusable skip-link" href="#main-content">{{ $t('redesign.skip') }}</a>
     <header class="app-header border-bottom bg-body">
-        <RouterLink class="navbar-brand d-flex align-items-center gap-2 fw-semibold" to="/" @click="expanded = false">
-            <BIconHouse class="brand-logo text-primary" aria-hidden="true" />
-            <span><span class="text-primary">Open</span>DTU-HEMS</span>
-        </RouterLink>
+        <div class="d-flex align-items-center gap-2">
+            <RouterLink
+                class="navbar-brand d-flex align-items-center gap-2 fw-semibold"
+                to="/"
+                @click="expanded = false"
+            >
+                <BIconHouse class="brand-logo text-primary" aria-hidden="true" />
+                <span><span class="text-primary">Open</span>DTU-HEMS</span>
+            </RouterLink>
+            <HelpHint :label="$t('redesign.connection' + liveConnection)" plain>
+                <template #trigger
+                    ><span class="live-connection-dot" :data-state="liveConnection" aria-hidden="true"></span
+                ></template>
+                {{ $t('redesign.connection' + liveConnection) }}
+            </HelpHint>
+        </div>
         <ul class="d-flex align-items-center gap-2 list-unstyled mb-0">
             <ThemeSwitcher />
             <li><LocaleSwitcher /></li>
@@ -34,44 +46,70 @@
         :aria-label="$t('redesign.navigation')"
         @keydown.esc="expanded = false"
     >
-        <template v-for="group in mainNavigation" :key="group.label">
-            <details v-if="group.label === 'system'" class="navigation-group" :open="systemOpen">
-                <summary class="navigation-heading">{{ $t('redesign.' + group.label) }}</summary>
-                <RouterLink
-                    v-for="item in group.items"
-                    :key="item.path"
-                    :to="item.path"
-                    class="nav-link"
-                    @click="expanded = false"
-                    >{{ $t('redesign.' + item.label) }}</RouterLink
-                >
-                <RouterLink to="/settings/device" class="nav-link" @click="expanded = false">{{
-                    $t('menu.DeviceManager')
-                }}</RouterLink>
-                <RouterLink to="/info/console" class="nav-link" @click="expanded = false">{{
-                    $t('menu.Console')
-                }}</RouterLink>
-            </details>
-            <section v-else class="navigation-group">
-                <h2 class="navigation-heading">{{ $t('redesign.' + group.label) }}</h2>
-                <RouterLink
-                    v-for="item in group.items"
-                    :key="item.path"
-                    :to="item.path"
-                    class="nav-link"
-                    exact-active-class="active"
-                    @click="expanded = false"
-                    >{{ $t('redesign.' + item.label) }}</RouterLink
-                >
-            </section>
-        </template>
+        <section v-for="group in mainNavigation" :key="group.label" class="navigation-group">
+            <h2 class="navigation-heading">{{ $t('redesign.' + group.label) }}</h2>
+            <ul class="list-unstyled mb-0">
+                <li v-for="item in group.items" :key="item.path" :class="{ 'active-parent': active(item) }">
+                    <RouterLink
+                        :to="item.path"
+                        class="nav-link"
+                        :class="{ 'nav-parent': item.children, active: !item.children && canonical === item.path }"
+                        @click="expanded = false"
+                    >
+                        <component
+                            :is="icons[item.label]"
+                            v-if="icons[item.label]"
+                            class="navigation-icon"
+                            aria-hidden="true"
+                        />
+                        {{ $t('redesign.' + item.label) }}
+                    </RouterLink>
+                    <ul v-if="item.children && active(item)" class="nav-children list-unstyled">
+                        <li v-for="child in item.children" :key="child.path">
+                            <RouterLink
+                                :to="child.path"
+                                class="nav-link"
+                                :class="{ active: canonical === child.path }"
+                                @click="expanded = false"
+                                >{{ $t('redesign.' + child.label) }}</RouterLink
+                            >
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </section>
         <RouterLink to="/about" class="nav-link small" @click="expanded = false">{{ $t('menu.About') }}</RouterLink>
     </nav>
 </template>
 <script setup lang="ts">
 import { computed, getCurrentInstance, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { BIconHouse, BIconList } from 'bootstrap-icons-vue';
+import {
+    BIconHouse,
+    BIconList,
+    BIconSun,
+    BIconBatteryHalf,
+    BIconEvStation,
+    BIconPlug,
+    BIconSpeedometer2,
+    BIconGear,
+    BIconCalendar3,
+    BIconDiagram3,
+    BIconActivity,
+    BIconBarChart,
+    BIconHdd,
+    BIconWifi,
+    BIconClock,
+    BIconShield,
+    BIconJournalText,
+    BIconArrowRepeat,
+    BIconPower,
+    BIconFileText,
+} from 'bootstrap-icons-vue';
+import HelpHint from './HelpHint.vue';
+import { useLiveData } from '@/utils/liveData';
+import type { NavigationItem } from '@/utils/hemsNavigation';
+import type { Component } from 'vue';
 import { isLoggedIn, logout } from '@/utils/authentication';
 import { mainNavigation } from '@/utils/hemsNavigation';
 import LocaleSwitcher from './LocaleSwitcher.vue';
@@ -80,9 +118,32 @@ const expanded = ref(false),
     isLogged = ref(isLoggedIn());
 const route = useRoute(),
     router = useRouter();
-const systemOpen = computed(
-    () => !['/', '/live'].includes(route.path) && !route.path.startsWith('/plant') && !route.path.startsWith('/energy')
-);
+const { connection: liveConnection } = useLiveData();
+const canonical = computed(() => route.matched.at(-1)?.aliasOf?.path || route.path);
+const active = (item: NavigationItem): boolean => canonical.value === item.path || !!item.children?.some(active);
+const icons: Record<string, Component> = {
+    overview: BIconHouse,
+    live: BIconBarChart,
+    inverters: BIconHdd,
+    solarCharger: BIconSun,
+    battery: BIconBatteryHalf,
+    wallbox: BIconEvStation,
+    powerMeter: BIconSpeedometer2,
+    planning: BIconCalendar3,
+    powerControl: BIconActivity,
+    integrations: BIconDiagram3,
+    diagnostics: BIconActivity,
+    network: BIconWifi,
+    mqtt: BIconPlug,
+    time: BIconClock,
+    hardware: BIconHdd,
+    security: BIconShield,
+    logging: BIconJournalText,
+    configuration: BIconFileText,
+    firmware: BIconArrowRepeat,
+    systemStatus: BIconGear,
+    reboot: BIconPower,
+};
 const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
 const updateLogin = () => {
     isLogged.value = isLoggedIn();

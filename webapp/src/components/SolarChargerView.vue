@@ -6,6 +6,9 @@
     </div>
 
     <template v-else>
+        <p v-if="!Object.keys(solarcharger.instances || {}).length" class="text-body-secondary">
+            {{ $t('redesign.solarTelemetryUnavailable') }}
+        </p>
         <div class="row gy-3 mt-0" v-for="(item, serial) in solarcharger.instances" :key="serial">
             <div class="tab-content col-sm-12 col-md-12" id="v-pills-tabContent">
                 <div class="card">

@@ -1,24 +1,10 @@
 <template>
-    <BasePage
-        :title="$t(invertersOnly ? 'redesign.inverters' : 'home.LiveData')"
-        :isLoading="dataLoading"
-        :isWideScreen="true"
-        :showWebSocket="true"
-        :isWebsocketConnected="isWebsocketConnected"
-        @reload="reloadData"
-    >
-        <div v-if="invertersOnly" class="d-flex flex-wrap gap-2 mb-3">
-            <RouterLink to="/plant/inverters/configuration" class="btn btn-outline-primary btn-sm">{{
-                $t('redesign.deviceConfiguration')
-            }}</RouterLink>
-            <RouterLink to="/plant/inverters/power-limit" class="btn btn-outline-secondary btn-sm">{{
-                $t('redesign.powerLimit')
-            }}</RouterLink>
+    <BasePage :title="$t('home.LiveData')" :isLoading="dataLoading" :isWideScreen="true" @reload="reloadData">
+        <div v-if="liveConnection !== 'connected' || liveUnavailable" class="alert alert-secondary" role="status">
+            {{ $t('redesign.lastKnownHelp') }}
         </div>
-        <DplStatusPanel v-if="invertersOnly" :inverters="inverterData" />
         <HintView :hints="liveData.hints" />
         <InverterTotalInfo
-            v-if="!invertersOnly"
             :totalData="liveData.total"
             :hasInverters="hasInverters"
             :solarChargerData="liveData.solarcharger"
@@ -191,6 +177,15 @@
                             </div>
                         </div>
                         <div class="card-body">
+                            <p
+                                v-if="
+                                    inverterState(inverter, liveConnection === 'connected' && !liveUnavailable) !==
+                                    'reachable'
+                                "
+                                class="small text-warning-emphasis"
+                            >
+                                {{ $t('redesign.lastKnownHelp') }}
+                            </p>
                             <div class="row flex-row-reverse flex-wrap-reverse g-3">
                                 <template
                                     v-for="chanType in [
@@ -321,8 +316,10 @@
                                                     </tr>
                                                     <tr>
                                                         <td>
-                                                            {{ $t('home.Rssi') }}
-                                                            <BIconInfoCircle v-tooltip :title="$t('home.RssiHint')" />
+                                                            <span class="label-with-help"
+                                                                >{{ $t('home.Rssi') }}
+                                                                <HelpHint :text="$t('home.RssiHint')"
+                                                            /></span>
                                                         </td>
                                                         <td>
                                                             {{ $t('home.dBm', { dbm: $n(inverter.radio_stats.rssi) }) }}
@@ -359,9 +356,9 @@
                 </div>
             </div>
         </div>
-        <SolarChargerView v-if="!invertersOnly && liveData.solarcharger.enabled" />
-        <BatteryView v-if="!invertersOnly && liveData.battery.enabled" />
-        <GridChargerView v-if="!invertersOnly && liveData.gridcharger.enabled" />
+        <SolarChargerView v-if="liveData.solarcharger.enabled" />
+        <BatteryView v-if="liveData.battery.enabled" />
+        <GridChargerView v-if="liveData.gridcharger.enabled" />
     </BasePage>
 
     <ModalDialog modalId="eventView" :title="$t('home.EventLog')" :loading="eventLogLoading">
@@ -518,6 +515,7 @@
 </template>
 
 <script lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import DataAgeDisplay from '@/components/DataAgeDisplay.vue';
@@ -539,13 +537,12 @@ import type { GridProfileStatus } from '@/types/GridProfileStatus';
 import type { LimitConfig } from '@/types/LimitConfig';
 import type { LimitStatus } from '@/types/LimitStatus';
 import type { Inverter, LiveData } from '@/types/LiveDataStatus';
-import { authHeader, authUrl, handleResponse, isLoggedIn } from '@/utils/authentication';
+import { authHeader, handleResponse, isLoggedIn } from '@/utils/authentication';
 import * as bootstrap from 'bootstrap';
 import {
     BIconArrowCounterclockwise,
     BIconBroadcast,
     BIconCpu,
-    BIconInfoCircle,
     BIconJournalText,
     BIconOutlet,
     BIconPower,
@@ -554,13 +551,13 @@ import {
     BIconToggleOn,
 } from 'bootstrap-icons-vue';
 import { defineComponent } from 'vue';
-import DplStatusPanel from '@/components/hems/DplStatusPanel.vue';
-import WebSocketService from '@/utils/websocketService';
+import { inverterState } from '@/utils/inverterPresentation';
+import { useLiveData } from '@/utils/liveData';
 
 export default defineComponent({
     components: {
+        HelpHint,
         BasePage,
-        DplStatusPanel,
         BootstrapAlert,
         DataAgeDisplay,
         DevInfo,
@@ -573,7 +570,7 @@ export default defineComponent({
         BIconArrowCounterclockwise,
         BIconBroadcast,
         BIconCpu,
-        BIconInfoCircle,
+
         BIconJournalText,
         BIconOutlet,
         BIconPower,
@@ -584,16 +581,22 @@ export default defineComponent({
         GridChargerView,
         BatteryView,
     },
-    props: { invertersOnly: { type: Boolean, default: false } },
+    setup() {
+        const shared = useLiveData();
+        return {
+            sharedLive: shared.data,
+            sharedInverters: shared.inverters,
+            sharedLoading: shared.loading,
+            reloadShared: shared.reload,
+            liveConnection: shared.connection,
+            liveUnavailable: shared.unavailable,
+        };
+    },
     data() {
         return {
             isLogged: isLoggedIn(),
 
-            socket: {} as WebSocketService,
             heartInterval: 0,
-            dataAgeTimers: {} as Record<string, number>,
-            dataLoading: true,
-            liveData: {} as LiveData,
             isFirstFetchAfterConnect: true,
             eventLogView: {} as bootstrap.Modal,
             eventLogList: {} as EventlogItems,
@@ -629,13 +632,10 @@ export default defineComponent({
             alertTypePower: 'info',
             showAlertPower: false,
             successCommandPower: '',
-
-            isWebsocketConnected: false,
         };
     },
     created() {
-        this.getInitialData();
-        this.initSocket();
+        this.reloadShared();
         this.$emitter.on('logged-in', () => {
             this.isLogged = this.isLoggedIn();
         });
@@ -650,9 +650,6 @@ export default defineComponent({
         this.limitSettingView = new bootstrap.Modal('#limitSettingView');
         this.powerSettingView = new bootstrap.Modal('#powerSettingView');
     },
-    unmounted() {
-        this.socket?.close();
-    },
     updated() {
         console.log('Updated');
         // Select first tab
@@ -661,7 +658,9 @@ export default defineComponent({
 
             this.$nextTick(() => {
                 console.log('nextTick');
-                const firstTabEl = document.querySelector('#v-pills-tab:first-child button');
+                const firstTabEl =
+                    document.getElementById('v-pills-' + String(this.$route.query.inverter) + '-tab') ||
+                    document.querySelector('#v-pills-tab:first-child button');
                 if (firstTabEl != null) {
                     this.isFirstFetchAfterConnect = false;
                     console.log('Show');
@@ -672,6 +671,12 @@ export default defineComponent({
         }
     },
     computed: {
+        liveData(): LiveData {
+            return this.sharedLive as LiveData;
+        },
+        dataLoading(): boolean {
+            return this.sharedLoading || !this.sharedLive;
+        },
         currentLimitAbsolute(): string {
             if (this.currentLimitList.max_power > 0) {
                 return this.$n(
@@ -685,9 +690,7 @@ export default defineComponent({
             return this.$n(this.currentLimitList.limit_relative, 'decimalOneDigit');
         },
         inverterData(): Inverter[] {
-            return (this.liveData.inverters || []).slice().sort((a: Inverter, b: Inverter) => {
-                return a.order - b.order;
-            });
+            return this.sharedInverters;
         },
         hasInverters(): boolean {
             return this.liveData?.inverters?.length > 0 || false;
@@ -695,111 +698,9 @@ export default defineComponent({
     },
     methods: {
         isLoggedIn,
-        getInitialData(triggerLoading: boolean = true) {
-            if (triggerLoading) {
-                this.dataLoading = true;
-            }
-            fetch('/api/livedata/status', { headers: authHeader() })
-                .then((response) => handleResponse(response, this.$emitter, this.$router))
-                .then((data) => {
-                    this.liveData = data;
-                    if (triggerLoading) {
-                        this.dataLoading = false;
-                    }
-                });
-        },
+        inverterState,
         reloadData() {
-            this.socket?.close();
-
-            this.getInitialData(false);
-            this.initSocket();
-        },
-        handleMessage(event: MessageEvent) {
-            if (!event.data || event.data === '{}') {
-                this.socket?.close(); // force reconnect
-                this.initSocket();
-                return;
-            }
-
-            const newData = JSON.parse(event.data);
-
-            if (typeof newData.solarcharger !== 'undefined') {
-                Object.assign(this.liveData.solarcharger, newData.solarcharger);
-            }
-            if (typeof newData.gridcharger !== 'undefined') {
-                Object.assign(this.liveData.gridcharger, newData.gridcharger);
-            }
-            if (typeof newData.battery !== 'undefined') {
-                Object.assign(this.liveData.battery, newData.battery);
-            }
-            if (typeof newData.power_meter !== 'undefined') {
-                Object.assign(this.liveData.power_meter, newData.power_meter);
-            }
-
-            if (typeof newData.total === 'undefined') {
-                return;
-            }
-
-            Object.assign(this.liveData.total, newData.total);
-            Object.assign(this.liveData.hints, newData.hints);
-
-            const idx = this.liveData.inverters.findIndex((i) => i.serial === newData.inverters[0].serial);
-
-            if (idx == -1) {
-                Object.assign(this.liveData.inverters, newData.inverters);
-                this.liveData.inverters.forEach((inv) => this.resetDataAging(inv));
-            } else if (this.liveData.inverters[idx]) {
-                Object.assign(this.liveData.inverters[idx], newData.inverters[0]);
-                this.resetDataAging(this.liveData.inverters[idx]);
-            }
-        },
-        initSocket() {
-            console.log('Starting connection to WebSocket Server');
-
-            const { protocol, host } = location;
-            const authString = authUrl();
-            const webSocketUrl = `${protocol === 'https:' ? 'wss' : 'ws'}://${authString}${host}/livedata`;
-
-            this.socket = new WebSocketService(webSocketUrl, {
-                onMessage: this.handleMessage,
-                onOpen: () => {
-                    console.log('WebSocket connected');
-                    this.isWebsocketConnected = true;
-                },
-                onClose: () => {
-                    console.log('WebSocket closed');
-                    this.isWebsocketConnected = false;
-                },
-            });
-
-            // Listen to window events , When the window closes , Take the initiative to disconnect websocket Connect
-            window.onbeforeunload = () => {
-                this.socket?.close();
-            };
-
-            this.socket?.connect();
-        },
-        resetDataAging(inv: Inverter) {
-            if (this.dataAgeTimers[inv.serial] !== undefined) {
-                clearTimeout(this.dataAgeTimers[inv.serial]);
-            }
-
-            const nextMs = 1000 - (inv.data_age_ms % 1000);
-            this.dataAgeTimers[inv.serial] = setTimeout(() => {
-                this.doDataAging(inv.serial);
-            }, nextMs);
-        },
-        doDataAging(serial: string) {
-            const inv = this.liveData?.inverters?.find((inv) => inv.serial === serial);
-            if (inv === undefined) {
-                return;
-            }
-
-            inv.data_age_ms += 1000;
-
-            this.dataAgeTimers[serial] = setTimeout(() => {
-                this.doDataAging(serial);
-            }, 1000);
+            this.reloadShared();
         },
         onShowEventlog(serial: string) {
             this.eventLogLoading = true;

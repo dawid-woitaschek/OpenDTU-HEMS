@@ -1,15 +1,10 @@
 <template>
-    <CardElement :text="copy.title" textVariant="text-bg-primary" add-space>
+    <CardElement :text="copy.title" :help="t('redesign.planHelp')" textVariant="text-bg-primary" add-space>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <span class="badge text-bg-secondary">{{ t('hemsUi.planning') }}</span>
-                <strong>{{ t(plan?.dispatch?.enabled ? 'hemsUi.dispatchEnabled' : 'hemsUi.shadowOnly') }}</strong>
-            </div>
-            <span v-if="plan?.dispatch && !error" class="small text-body-secondary">
-                {{ dispatchLabel(plan.dispatch.state) }}
-            </span>
+            <strong class="small">{{
+                t(plan?.dispatch?.enabled ? 'hemsUi.dispatchEnabled' : 'hemsUi.shadowOnly')
+            }}</strong>
         </div>
-        <HelpHint :text="t('hemsUi.dispatchHint')" :label="t('hemsUi.planning')" />
 
         <p v-if="error" class="alert alert-warning" role="alert">{{ copy.loadFailed }} {{ error }}</p>
         <template v-if="plan && !error">
@@ -59,13 +54,7 @@
                                     <span class="fs-5">{{ powerLabel(currentStep.battery_w) }}</span>
                                 </div>
                                 <div class="small text-body-secondary mt-2">
-                                    {{ timeRange(currentStep.start, currentStep.end) }} ·
-                                    {{ formatPrice(currentStep.used_price_micros_per_kwh, plan.currency, locale) }} ·
-                                    {{ copy.soc }} {{ soc(currentStep.end_soc_pct) }}
-                                </div>
-                                <div v-if="currentStep.reason" class="small mt-2">
-                                    <span class="text-body-secondary">{{ copy.reason }}:</span>
-                                    {{ reasonLabel(currentStep.reason) }}
+                                    {{ timeRange(currentStep.start, currentStep.end) }}
                                 </div>
                             </template>
                             <div v-else class="fw-semibold mt-1">{{ copy.noCurrent }}</div>
@@ -80,11 +69,7 @@
                                     <span class="fs-5">{{ powerLabel(nextChange.battery_w) }}</span>
                                 </div>
                                 <div class="small text-body-secondary mt-2">
-                                    {{ date(nextChange.start) }} · {{ blockPrice(nextChange) }}
-                                </div>
-                                <div v-if="nextChange.reason" class="small mt-2">
-                                    <span class="text-body-secondary">{{ copy.reason }}:</span>
-                                    {{ reasonLabel(nextChange.reason) }}
+                                    {{ date(nextChange.start) }}
                                 </div>
                             </template>
                             <div v-else class="fw-semibold mt-1">{{ copy.noChange }}</div>
@@ -103,7 +88,7 @@
                                         {{ timeRange(windowStart, windowEnd) }} · {{ horizonLabel }}
                                     </div>
                                 </div>
-                                <div class="d-flex flex-wrap gap-3 small" aria-label="Schedule legend">
+                                <div class="d-flex flex-wrap gap-3 small" :aria-label="t('redesign.scheduleLegend')">
                                     <span class="legend-item"
                                         ><span class="legend-swatch action-charge"></span>{{ copy.charge }}</span
                                     >
@@ -269,29 +254,29 @@
                         </section>
 
                         <EnergyManagementSummary :plan="plan" />
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <div class="small text-body-secondary">{{ t('hemsUi.modeledSavings') }}</div>
+                                <div class="fs-5 fw-semibold">{{ money(plan.modeled_savings_nano) }}</div>
+                            </div>
+                            <div class="col-sm-6">
+                                <div class="small text-body-secondary">{{ copy.coverage }}</div>
+                                <div class="fw-semibold">{{ coverageLabel }}</div>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="plan.state === 'partial' || plan.warnings?.length"
+                            class="rounded bg-body-tertiary p-3 mt-3 small"
+                            role="status"
+                        >
+                            <strong>{{ t('hemsUi.planLimits') }}</strong>
+                            <ul v-if="plan.warnings?.length" class="mb-0 mt-1 ps-3">
+                                <li v-for="warning in plan.warnings" :key="warning">{{ reasonLabel(warning) }}</li>
+                            </ul>
+                        </div>
                     </div>
                 </details>
-                <div class="row g-3">
-                    <div class="col-sm-6">
-                        <div class="small text-body-secondary">{{ t('hemsUi.modeledSavings') }}</div>
-                        <div class="fs-5 fw-semibold">{{ money(plan.modeled_savings_nano) }}</div>
-                    </div>
-                    <div class="col-sm-6">
-                        <div class="small text-body-secondary">{{ copy.coverage }}</div>
-                        <div class="fw-semibold">{{ coverageLabel }}</div>
-                    </div>
-                </div>
-
-                <div
-                    v-if="plan.state === 'partial' || plan.warnings?.length"
-                    class="rounded bg-body-tertiary p-3 mt-3 small"
-                    role="status"
-                >
-                    <strong>{{ t('hemsUi.planLimits') }}</strong>
-                    <ul v-if="plan.warnings?.length" class="mb-0 mt-1 ps-3">
-                        <li v-for="warning in plan.warnings" :key="warning">{{ reasonLabel(warning) }}</li>
-                    </ul>
-                </div>
             </template>
 
             <div class="d-flex flex-wrap gap-3 mt-3 small">
@@ -303,7 +288,6 @@
 </template>
 
 <script setup lang="ts">
-import HelpHint from '@/components/HelpHint.vue';
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
@@ -399,12 +383,12 @@ type Copy = {
 
 const texts: Record<string, Copy> = {
     en: {
-        title: 'Storage schedule',
+        title: 'Battery plan',
         loadFailed: 'Storage schedule could not be loaded.',
         noPlan: 'No usable storage schedule is available.',
         noCurrent: 'No active plan interval right now',
         now: 'Now',
-        nextChange: 'Next command change',
+        nextChange: 'Next planned action',
         noChange: 'No further command change in the loaded horizon',
         reason: 'Reason',
         action: 'Action',
@@ -439,12 +423,12 @@ const texts: Record<string, Copy> = {
         hours: 'h',
     },
     de: {
-        title: 'Speicherfahrplan',
+        title: 'Batterieplan',
         loadFailed: 'Der Speicherfahrplan konnte nicht geladen werden.',
         noPlan: 'Es ist derzeit kein nutzbarer Speicherfahrplan verfügbar.',
         noCurrent: 'Aktuell ist kein Fahrplanintervall aktiv',
         now: 'Jetzt',
-        nextChange: 'Nächste Befehlsänderung',
+        nextChange: 'Nächste geplante Aktion',
         noChange: 'Keine weitere Befehlsänderung im geladenen Planungshorizont',
         reason: 'Grund',
         action: 'Aktion',
@@ -476,46 +460,6 @@ const texts: Record<string, Copy> = {
         settings: 'Wirtschaftlichkeits-Einstellungen',
         allowed: 'Erlaubt',
         blocked: 'Gesperrt',
-        hours: 'h',
-    },
-    fr: {
-        title: 'Planification du stockage',
-        loadFailed: 'La planification du stockage n’a pas pu être chargée.',
-        noPlan: 'Aucune planification de stockage exploitable n’est disponible.',
-        noCurrent: 'Aucun intervalle de plan n’est actif actuellement',
-        now: 'Maintenant',
-        nextChange: 'Prochain changement de commande',
-        noChange: 'Aucun autre changement de commande dans l’horizon chargé',
-        reason: 'Raison',
-        action: 'Action',
-        power: 'Puissance',
-        price: 'Prix',
-        period: 'Période',
-        soc: 'SoC',
-        timeline: 'Prochaines actions du stockage',
-        timelineAria: 'Chronologie du stockage avec charge, maintien, décharge et intervalles indisponibles',
-        charge: 'Charge',
-        hold: 'Maintien',
-        discharge: 'Décharge',
-        gap: 'Aucune donnée de plan',
-        operationPlan: 'Fonctionnement planifié du stockage',
-        operationPlanHint:
-            'Généré par l’optimiseur à partir des prix exacts et des contraintes ; il ne s’agit pas de règles utilisateur fixes.',
-        moreBlocks: '{count} blocs générés supplémentaires sont disponibles dans les diagnostics.',
-        socPlan: 'État de charge attendu',
-        reserve: 'Réserve',
-        maximum: 'Maximum',
-        plannedRange: 'plage de SoC planifiée',
-        strategy: 'Stratégie de stockage',
-        editStrategy: 'Modifier la stratégie',
-        gridCharging: 'Charge depuis le réseau',
-        target: 'Objectif',
-        none: 'Aucun',
-        until: 'avant',
-        coverage: 'Horizon de planification chargé',
-        settings: 'Réglages économiques',
-        allowed: 'Autorisé',
-        blocked: 'Bloqué',
         hours: 'h',
     },
 };

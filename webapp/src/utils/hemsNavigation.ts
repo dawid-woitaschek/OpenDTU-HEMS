@@ -1,11 +1,9 @@
-// Canonical destinations shared by the sidebar and energy-management tabs.
-export const hemsNavigation = [
-    { path: '/energy/planning', label: 'settings' },
-    { path: '/energy/integrations', label: 'integrations' },
-    { path: '/energy/diagnostics', label: 'diagnostics' },
-] as const;
-
-export const mainNavigation = [
+export interface NavigationItem {
+    path: string;
+    label: string;
+    children?: NavigationItem[];
+}
+export const mainNavigation: { label: string; items: NavigationItem[] }[] = [
     {
         label: 'start',
         items: [
@@ -16,8 +14,15 @@ export const mainNavigation = [
     {
         label: 'plant',
         items: [
-            { path: '/plant/solar', label: 'solar' },
-            { path: '/plant/inverters', label: 'inverters' },
+            {
+                path: '/plant/inverters',
+                label: 'inverters',
+                children: [
+                    { path: '/plant/inverters', label: 'overview' },
+                    { path: '/plant/inverters/configuration', label: 'configuration' },
+                ],
+            },
+            { path: '/plant/solar-charger', label: 'solarCharger' },
             { path: '/plant/battery', label: 'battery' },
             { path: '/plant/wallbox', label: 'wallbox' },
             { path: '/plant/power-meter', label: 'powerMeter' },
@@ -27,6 +32,7 @@ export const mainNavigation = [
         label: 'energy',
         items: [
             { path: '/energy/planning', label: 'planning' },
+            { path: '/energy/power-control', label: 'powerControl' },
             { path: '/energy/integrations', label: 'integrations' },
             { path: '/energy/diagnostics', label: 'diagnostics' },
         ],
@@ -34,16 +40,51 @@ export const mainNavigation = [
     {
         label: 'system',
         items: [
-            { path: '/settings/network', label: 'network' },
-            { path: '/settings/mqtt', label: 'mqtt' },
-            { path: '/settings/ntp', label: 'time' },
-            { path: '/settings/dtu', label: 'hardware' },
+            {
+                path: '/settings/network',
+                label: 'network',
+                children: [
+                    { path: '/settings/network', label: 'configuration' },
+                    { path: '/info/network', label: 'status' },
+                ],
+            },
+            {
+                path: '/settings/mqtt',
+                label: 'mqtt',
+                children: [
+                    { path: '/settings/mqtt', label: 'configuration' },
+                    { path: '/info/mqtt', label: 'status' },
+                ],
+            },
+            {
+                path: '/settings/ntp',
+                label: 'time',
+                children: [
+                    { path: '/settings/ntp', label: 'configuration' },
+                    { path: '/info/ntp', label: 'status' },
+                ],
+            },
+            {
+                path: '/settings/dtu',
+                label: 'hardware',
+                children: [
+                    { path: '/settings/dtu', label: 'configuration' },
+                    { path: '/settings/device', label: 'deviceManager' },
+                ],
+            },
             { path: '/settings/security', label: 'security' },
-            { path: '/settings/logging', label: 'logging' },
+            {
+                path: '/settings/logging',
+                label: 'logging',
+                children: [
+                    { path: '/settings/logging', label: 'configuration' },
+                    { path: '/info/console', label: 'console' },
+                ],
+            },
             { path: '/settings/config', label: 'configuration' },
             { path: '/firmware/upgrade', label: 'firmware' },
             { path: '/info/system', label: 'systemStatus' },
             { path: '/maintenance/reboot', label: 'reboot' },
         ],
     },
-] as const;
+];

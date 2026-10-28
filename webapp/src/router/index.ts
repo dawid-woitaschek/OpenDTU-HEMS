@@ -9,6 +9,7 @@ import DeviceAdminView from '@/views/DeviceAdminView.vue';
 import DtuAdminView from '@/views/DtuAdminView.vue';
 import ErrorView from '@/views/ErrorView.vue';
 import FirmwareUpgradeView from '@/views/FirmwareUpgradeView.vue';
+import InverterOverviewView from '@/views/InverterOverviewView.vue';
 import LiveDataView from '@/views/LiveDataView.vue';
 import PlantDeviceView from '@/views/PlantDeviceView.vue';
 import IntegrationsView from '@/views/IntegrationsView.vue';
@@ -58,8 +59,14 @@ const router = createRouter({
         { path: '/energy/integrations', name: 'Integrations', component: IntegrationsView },
         { path: '/', name: 'Home', component: HemsInfoView },
         { path: '/live', name: 'Live Data', component: LiveDataView },
-        { path: '/plant/inverters', name: 'Inverters', component: LiveDataView, props: { invertersOnly: true } },
-        { path: '/plant/solar', name: 'Solar', component: PlantDeviceView, props: { device: 'solar' } },
+        { path: '/plant/inverters', name: 'Inverters', component: InverterOverviewView },
+        {
+            path: '/plant/solar-charger',
+            name: 'Solar Charger',
+            component: PlantDeviceView,
+            props: { device: 'solarCharger' },
+        },
+        { path: '/plant/solar', redirect: '/plant/solar-charger' },
         { path: '/plant/battery', name: 'Battery', component: PlantDeviceView, props: { device: 'battery' } },
         { path: '/plant/wallbox', name: 'Wallbox', component: HemsDevicesView, props: { device: 'wallbox' } },
         {
@@ -118,11 +125,12 @@ const router = createRouter({
             name: 'NTP Settings',
             component: NtpAdminView,
         },
-        { path: '/settings/solarcharger', redirect: '/plant/solar' },
+        { path: '/settings/solarcharger', redirect: '/plant/solar-charger' },
         { path: '/settings/powermeter', redirect: '/plant/power-meter' },
+        { path: '/settings/powerlimiter', redirect: '/energy/power-control' },
+        { path: '/plant/inverters/power-limit', redirect: '/energy/power-control' },
         {
-            path: '/plant/inverters/power-limit',
-            alias: '/settings/powerlimiter',
+            path: '/energy/power-control',
             name: 'Power limiter Settings',
             component: PowerLimiterAdminView,
         },

@@ -145,10 +145,12 @@
                         {{ $t('inverteradmin.InverterSerial') }}
                     </label>
                     <InputSerial v-model="selectedInverterData.serial" id="inverter-serial" />
-                    <label for="inverter-name" class="col-form-label"
-                        >{{ $t('inverteradmin.InverterName') }}
-                        <BIconInfoCircle v-tooltip :title="$t('inverteradmin.InverterNameHint')" />
-                    </label>
+                    <div class="col-form-label">
+                        <span class="label-with-help"
+                            ><label for="inverter-name">{{ $t('inverteradmin.InverterName') }}</label
+                            ><HelpHint :text="$t('inverteradmin.InverterNameHint')"
+                        /></span>
+                    </div>
                     <input
                         v-model="selectedInverterData.name"
                         type="text"
@@ -201,10 +203,14 @@
                 <div v-for="(ch, index) in selectedInverterData.channel" :key="`${index}`">
                     <div class="row g-2">
                         <div class="col-md">
-                            <label :for="`inverter-name_${index}`" class="col-form-label">
-                                {{ $t('inverteradmin.StringName', { num: index + 1 }) }}
-                                <BIconInfoCircle v-tooltip :title="$t('inverteradmin.StringNameHint')" />
-                            </label>
+                            <div class="col-form-label">
+                                <span class="label-with-help"
+                                    ><label :for="`inverter-name_${index}`">{{
+                                        $t('inverteradmin.StringName', { num: index + 1 })
+                                    }}</label
+                                    ><HelpHint :text="$t('inverteradmin.StringNameHint')"
+                                /></span>
+                            </div>
                             <div class="d-flex mb-2">
                                 <div class="input-group">
                                     <input
@@ -220,10 +226,14 @@
                     </div>
                     <div class="row g-2">
                         <div class="col">
-                            <label :for="`inverter-max_${index}`" class="col-form-label">
-                                {{ $t('inverteradmin.StringMaxPower', { num: index + 1 }) }}
-                                <BIconInfoCircle v-tooltip :title="$t('inverteradmin.StringMaxPowerHint')" />
-                            </label>
+                            <div class="col-form-label">
+                                <span class="label-with-help"
+                                    ><label :for="`inverter-max_${index}`">{{
+                                        $t('inverteradmin.StringMaxPower', { num: index + 1 })
+                                    }}</label
+                                    ><HelpHint :text="$t('inverteradmin.StringMaxPowerHint')"
+                                /></span>
+                            </div>
                             <div class="d-flex mb-2">
                                 <div class="input-group">
                                     <input
@@ -241,10 +251,14 @@
                             </div>
                         </div>
                         <div class="col">
-                            <label :for="`inverter-ytoffset_${index}`" class="col-form-label">
-                                {{ $t('inverteradmin.StringYtOffset', { num: index + 1 }) }}
-                                <BIconInfoCircle v-tooltip :title="$t('inverteradmin.StringYtOffsetHint')" />
-                            </label>
+                            <div class="col-form-label">
+                                <span class="label-with-help"
+                                    ><label :for="`inverter-ytoffset_${index}`">{{
+                                        $t('inverteradmin.StringYtOffset', { num: index + 1 })
+                                    }}</label
+                                    ><HelpHint :text="$t('inverteradmin.StringYtOffsetHint')"
+                                /></span>
+                            </div>
                             <div class="d-flex mb-2">
                                 <div class="input-group">
                                     <input
@@ -343,6 +357,7 @@
 </template>
 
 <script lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -353,26 +368,20 @@ import type { AlertResponse } from '@/types/AlertResponse';
 import type { Inverter } from '@/types/InverterConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import * as bootstrap from 'bootstrap';
-import {
-    BIconArrowDown,
-    BIconArrowUp,
-    BIconGripHorizontal,
-    BIconInfoCircle,
-    BIconPencil,
-    BIconTrash,
-} from 'bootstrap-icons-vue';
+import { BIconArrowDown, BIconArrowUp, BIconGripHorizontal, BIconPencil, BIconTrash } from 'bootstrap-icons-vue';
 import Sortable from 'sortablejs';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
     components: {
+        HelpHint,
         BasePage,
         BootstrapAlert,
         CardElement,
         InputElement,
         InputSerial,
         ModalDialog,
-        BIconInfoCircle,
+
         BIconPencil,
         BIconTrash,
         BIconArrowDown,

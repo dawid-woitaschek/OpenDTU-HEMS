@@ -1,202 +1,437 @@
 <template>
-    <CardElement
-        v-for="kind in domains"
-        :key="kind"
-        :id="props.view === 'overview' ? 'overview-' + kind : undefined"
-        :text="t('hemsUi.' + kind)"
-        :textVariant="props.view === 'overview' ? 'energy-heading' : 'text-bg-primary'"
-        class="hems-energy"
-        :class="{ 'col-12 col-xxl-6': props.view === 'overview' }"
-        add-space
-    >
-        <p v-if="errors[kind]" class="alert alert-warning" role="alert">{{ errors[kind] }}</p>
-        <p v-if="notices[kind]" class="alert alert-success" role="status">{{ notices[kind] }}</p>
-        <template v-if="feeds[kind]">
-            <p v-if="!feeds[kind]!.enabled" class="text-body-secondary">{{ t('hemsUi.disabled') }}</p>
-            <template v-else>
-                <div v-if="health(kind)" class="alert alert-warning py-2" role="status">
-                    {{ health(kind) }}
-                    <span v-if="feeds[kind]!.intervals.length && feeds[kind]!.last_error">{{
-                        t('hemsUi.retainedData')
-                    }}</span>
-                </div>
-                <ul
-                    v-if="kind === 'forecast' && feeds[kind]!.plane_status?.some((p) => p.last_error)"
-                    class="alert alert-warning list-unstyled"
-                    role="alert"
-                >
-                    <template v-for="(plane, index) in feeds[kind]!.plane_status" :key="plane.index ?? index">
-                        <li v-if="plane.last_error">
-                            <strong
-                                >{{
-                                    plane.name ||
-                                    feeds[kind]!.config.planes[index]?.name ||
-                                    t('hemsUi.planeNumber', { number: index + 1 })
-                                }}:</strong
-                            >
-                            {{ t('hemsUi.' + providerMessage(plane.last_error)) }}
-                            <span v-if="plane.http_status && plane.http_status > 0">
-                                (HTTP {{ plane.http_status }})</span
-                            >
-                            <code class="d-block small"
-                                >{{ plane.last_error
-                                }}<template v-if="plane.request?.tls_error">
-                                    · TLS {{ plane.request.tls_error }} {{ plane.request.tls_error_text }}</template
-                                ></code
-                            >
-                        </li>
-                    </template>
-                </ul>
-                <template v-if="props.view === 'overview'">
-                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3" role="status">
-                        <span
-                            class="feed-state"
-                            :class="{
-                                'feed-warning': !['freshData', 'partialData', 'coveredData'].includes(
-                                    feedReadiness(feeds[kind]!, unavailable[kind], kind)
-                                ),
-                            }"
-                            >{{ t('hemsUi.' + feedReadiness(feeds[kind]!, unavailable[kind], kind)) }}</span
-                        >
-                        <span v-if="feeds[kind]!.planning_usable !== undefined" class="small text-body-secondary">{{
-                            t(
-                                feeds[kind]!.planning_usable && !unavailable[kind]
-                                    ? 'hemsUi.planningUsable'
-                                    : 'hemsUi.planningUnavailable'
-                            )
+    <div v-for="kind in domains" :key="kind" :class="props.view === 'overview' ? 'col-12 col-xxl-6' : undefined">
+        <CardElement
+            :id="props.view === 'overview' ? 'overview-' + kind : undefined"
+            :text="t('hemsUi.' + kind)"
+            :help="t(kind === 'tariff' ? 'redesign.priceHelp' : 'hemsUi.forecastHint')"
+            :textVariant="props.view === 'overview' ? 'energy-heading' : 'text-bg-primary'"
+            class="hems-energy"
+            :add-space="props.view !== 'overview'"
+        >
+            <p v-if="errors[kind]" class="alert alert-warning" role="alert">{{ errors[kind] }}</p>
+            <p v-if="notices[kind]" class="alert alert-success" role="status">{{ notices[kind] }}</p>
+            <template v-if="feeds[kind]">
+                <p v-if="!feeds[kind]!.enabled" class="text-body-secondary">{{ t('hemsUi.disabled') }}</p>
+                <template v-else>
+                    <div v-if="health(kind)" class="alert alert-warning py-2" role="status">
+                        {{ health(kind) }}
+                        <span v-if="feeds[kind]!.intervals.length && feeds[kind]!.last_error">{{
+                            t('hemsUi.retainedData')
                         }}</span>
                     </div>
-                    <div class="energy-summary mb-3">
-                        <div class="energy-metric energy-metric-main">
-                            <div class="small text-body-secondary">
-                                {{ t(kind === 'tariff' ? 'hemsUi.effectiveNow' : 'hemsUi.remainingToday') }}
+                    <ul
+                        v-if="kind === 'forecast' && feeds[kind]!.plane_status?.some((p) => p.last_error)"
+                        class="alert alert-warning list-unstyled"
+                        role="alert"
+                    >
+                        <template v-for="(plane, index) in feeds[kind]!.plane_status" :key="plane.index ?? index">
+                            <li v-if="plane.last_error">
+                                <strong
+                                    >{{
+                                        plane.name ||
+                                        feeds[kind]!.config.planes[index]?.name ||
+                                        t('hemsUi.planeNumber', { number: index + 1 })
+                                    }}:</strong
+                                >
+                                {{ t('hemsUi.' + providerMessage(plane.last_error)) }}
+                                <span v-if="plane.http_status && plane.http_status > 0">
+                                    (HTTP {{ plane.http_status }})</span
+                                >
+                                <code class="d-block small"
+                                    >{{ plane.last_error
+                                    }}<template v-if="plane.request?.tls_error">
+                                        · TLS {{ plane.request.tls_error }} {{ plane.request.tls_error_text }}</template
+                                    ></code
+                                >
+                            </li>
+                        </template>
+                    </ul>
+                    <template v-if="props.view === 'overview'">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-3" role="status">
+                            <span
+                                class="feed-state"
+                                :class="{
+                                    'feed-warning': !['freshData', 'partialData', 'coveredData'].includes(
+                                        feedReadiness(feeds[kind]!, unavailable[kind], kind)
+                                    ),
+                                }"
+                                >{{ t('hemsUi.' + feedReadiness(feeds[kind]!, unavailable[kind], kind)) }}</span
+                            >
+                            <span v-if="feeds[kind]!.planning_usable !== undefined" class="small text-body-secondary">{{
+                                t(
+                                    feeds[kind]!.planning_usable && !unavailable[kind]
+                                        ? 'hemsUi.planningUsable'
+                                        : 'hemsUi.planningUnavailable'
+                                )
+                            }}</span>
+                        </div>
+                        <div class="energy-summary mb-3" :class="{ 'energy-summary-compact': props.compact }">
+                            <div class="energy-metric energy-metric-main">
+                                <div class="small text-body-secondary">
+                                    {{ t(kind === 'tariff' ? 'hemsUi.effectiveNow' : 'hemsUi.remainingToday') }}
+                                </div>
+                                <div class="fs-2 fw-semibold lh-sm my-1">
+                                    {{
+                                        kind === 'tariff'
+                                            ? currentPrice('import_price_micros_per_kwh')
+                                            : energySummary(0, true)
+                                    }}
+                                </div>
+                                <div class="small text-body-secondary" v-if="kind === 'tariff' && !props.compact">
+                                    {{ t('hemsUi.sourcePrice') }}: {{ currentPrice('price_micros_per_kwh') }}
+                                </div>
+                                <span
+                                    v-if="kind === 'tariff' && currentCategory()"
+                                    class="price-badge mt-1"
+                                    :class="`period-${currentCategory()}`"
+                                    >{{ t('hemsUi.' + currentCategory()) }}</span
+                                >
                             </div>
-                            <div class="fs-2 fw-semibold lh-sm my-1">
-                                {{
+                            <template v-if="!props.compact"
+                                ><div v-for="day in [0, 1]" :key="day" class="energy-metric">
+                                    <div class="small text-body-secondary">
+                                        {{ t(day ? 'hemsUi.tomorrow' : 'hemsUi.today') }} ·
+                                        {{ t(kind === 'tariff' ? 'hemsUi.average' : 'hemsUi.forecastTotal') }}
+                                    </div>
+                                    <div class="fs-4 fw-semibold my-1">
+                                        {{ kind === 'tariff' ? dailyPrice(day) : energySummary(day) }}
+                                    </div>
+                                    <div v-if="!summaryComplete(kind, day)" class="small text-body-secondary">
+                                        {{ t(kind === 'tariff' ? 'hemsUi.coveredOnly' : 'hemsUi.incompleteForecast') }}
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <component :is="props.compact ? 'details' : 'div'" class="energy-drilldown">
+                            <summary v-if="props.compact">{{ t('redesign.energyDetails') }}</summary>
+                            <dl v-if="props.compact" class="row small mt-3">
+                                <template v-for="day in [0, 1]" :key="day">
+                                    <dt class="col-6 fw-normal">
+                                        {{ t(day ? 'hemsUi.tomorrow' : 'hemsUi.today') }} ·
+                                        {{ t(kind === 'tariff' ? 'hemsUi.average' : 'hemsUi.forecastTotal') }}
+                                    </dt>
+                                    <dd class="col-6">
+                                        {{ kind === 'tariff' ? dailyPrice(day) : energySummary(day)
+                                        }}<span
+                                            v-if="!summaryComplete(kind, day)"
+                                            class="d-block text-body-secondary"
+                                            >{{
+                                                t(
+                                                    kind === 'tariff'
+                                                        ? 'hemsUi.coveredOnly'
+                                                        : 'hemsUi.incompleteForecast'
+                                                )
+                                            }}</span
+                                        >
+                                    </dd>
+                                </template>
+                            </dl>
+                            <div v-if="kind === 'tariff'" class="next-periods mb-3">
+                                <button
+                                    v-for="category in ['cheap', 'expensive'] as const"
+                                    :key="category"
+                                    type="button"
+                                    class="next-period"
+                                    :class="`period-${category}`"
+                                    :disabled="!periodInspectable(category)"
+                                    @click="inspectedPeriod = { utc: period(category)!.start }"
+                                >
+                                    <span class="price-badge">{{ t('hemsUi.next' + category) }}</span>
+                                    <span class="d-block mt-2 fw-medium"
+                                        >{{ periodText(category)
+                                        }}<span v-if="periodInspectable(category)" aria-hidden="true"> →</span></span
+                                    >
+                                </button>
+                            </div>
+                            <EnergyChart
+                                v-if="feeds[kind]!.intervals.length"
+                                :intervals="chartData(kind)"
+                                :now="now"
+                                :include-zero="kind === 'forecast'"
+                                :focus-at="kind === 'tariff' ? inspectedPeriod : undefined"
+                                :label="
+                                    t(
+                                        kind === 'tariff'
+                                            ? tariffBasis(feeds.tariff) === 'effective'
+                                                ? 'hemsUi.effectivePrice'
+                                                : 'hemsUi.sourcePrice'
+                                            : 'hemsUi.aggregateForecast'
+                                    )
+                                "
+                                :unit="
                                     kind === 'tariff'
-                                        ? currentPrice('import_price_micros_per_kwh')
-                                        : energySummary(0, true)
-                                }}
+                                        ? feeds.tariff?.currency === 'EUR'
+                                            ? 'ct/kWh'
+                                            : `${feeds.tariff?.currency}/kWh`
+                                        : 'W'
+                                "
+                                :display="(value) => chartValue(kind, value)"
+                            />
+                            <div v-else class="energy-empty p-4 rounded text-center">
+                                <strong class="d-block mb-1">{{ t('hemsUi.noData') }}</strong>
+                                <span class="small text-body-secondary">{{ t('hemsUi.emptyEnergyHint') }}</span>
                             </div>
-                            <div class="small text-body-secondary" v-if="kind === 'tariff'">
-                                {{ t('hemsUi.sourcePrice') }}: {{ currentPrice('price_micros_per_kwh') }}
-                            </div>
-                            <span
-                                v-if="kind === 'tariff' && currentCategory()"
-                                class="price-badge mt-1"
-                                :class="`period-${currentCategory()}`"
-                                >{{ t('hemsUi.' + currentCategory()) }}</span
+                            <details
+                                v-if="kind === 'forecast' && feeds[kind]!.config.planes.length"
+                                class="energy-details mt-3"
                             >
+                                <summary>
+                                    {{ t('hemsUi.pvPlanes') }} ·
+                                    {{ feeds[kind]!.config.planes.filter((p) => p.enabled).length }}/{{
+                                        feeds[kind]!.config.planes.length
+                                    }}
+                                    {{ t('hemsUi.enabled') }}
+                                </summary>
+                                <div class="plane-summaries mt-3">
+                                    <span
+                                        v-for="(plane, index) in feeds[kind]!.config.planes"
+                                        :key="index"
+                                        class="plane-summary small"
+                                        ><strong>{{ plane.name }}</strong
+                                        ><span class="text-body-secondary"
+                                            >{{ (plane.peak_w / 1000).toLocaleString(locale) }} kWp ·
+                                            {{ plane.enabled ? t('hemsUi.enabled') : t('hemsUi.disabled') }}</span
+                                        ></span
+                                    >
+                                </div>
+                                <RouterLink to="/energy/planning" class="small d-inline-block mt-2">{{
+                                    t('hemsUi.editPlanes')
+                                }}</RouterLink>
+                            </details>
+                            <p
+                                v-if="kind === 'tariff' && tariffBasis(feeds.tariff) === 'source'"
+                                class="small text-body-secondary mt-2"
+                            >
+                                {{ t('hemsUi.sourceOnly') }}
+                            </p>
+                            <div class="feed-update mt-3 pt-3">
+                                <div class="small text-body-secondary">
+                                    <div>{{ t('hemsUi.receivedAt') }}: {{ date(feeds[kind]!.fetched_at) }}</div>
+                                    <div
+                                        v-if="feeds[kind]!.manual_refresh?.retry_after_seconds"
+                                        class="mt-1"
+                                        role="status"
+                                    >
+                                        {{
+                                            t('hemsUi.retryIn', {
+                                                seconds: feeds[kind]!.manual_refresh!.retry_after_seconds,
+                                            })
+                                        }}
+                                        {{ t('hemsUi.autoRetry') }}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary btn-sm"
+                                    :disabled="
+                                        busy[kind] ||
+                                        feeds[kind]!.provider === 'normalized_push' ||
+                                        feeds[kind]!.manual_refresh?.allowed === false
+                                    "
+                                    @click="refresh(kind)"
+                                >
+                                    {{ t('hemsUi.refresh') }}
+                                </button>
+                            </div>
+                            <details class="energy-details mt-3">
+                                <summary>{{ t('hemsUi.energyDetails') }}</summary>
+                                <dl class="small mt-3 mb-2">
+                                    <dt>{{ t('hemsUi.sourceUpdated') }}</dt>
+                                    <dd>
+                                        {{
+                                            feeds[kind]!.generated_at && feeds[kind]!.source_age_seconds !== null
+                                                ? date(feeds[kind]!.generated_at)
+                                                : t('hemsUi.sourceTimeUnknown')
+                                        }}
+                                    </dd>
+                                    <dt>{{ t('hemsUi.sourceFreshness') }}</dt>
+                                    <dd>{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
+                                    <dt>{{ t('hemsUi.transportFreshness') }}</dt>
+                                    <dd>{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
+                                    <dt>{{ t('hemsUi.coverageUntil') }}</dt>
+                                    <dd>{{ date(feeds[kind]!.horizon_end) }}</dd>
+                                    <dt>{{ t('hemsUi.nextUpdate') }}</dt>
+                                    <dd>{{ date(feeds[kind]!.next_refresh) }}</dd>
+                                    <template v-if="kind === 'tariff' && feeds[kind]!.config.pricing.enabled">
+                                        <dt>{{ t('hemsUi.monthly_micros') }}</dt>
+                                        <dd>{{ monthlyFee() }}</dd>
+                                    </template>
+                                </dl>
+                                <p v-if="kind === 'tariff'" class="small text-body-secondary">
+                                    {{ t('hemsUi.classificationHint') }}
+                                </p>
+                                <RouterLink to="/energy/diagnostics" class="small">{{
+                                    t('hemsUi.providerDiagnosticsLink')
+                                }}</RouterLink>
+                            </details>
+                        </component>
+                    </template>
+                </template>
+                <p class="small text-body-secondary mt-3">
+                    {{ providerLabel(feeds[kind]!.provider)
+                    }}<span v-if="feeds[kind]!.attribution"> · {{ feeds[kind]!.attribution }}</span>
+                </p>
+                <form v-if="props.view === 'settings' && drafts[kind]" @submit.prevent="save(kind)" class="mt-4">
+                    <label class="form-check-label mb-3"
+                        ><input
+                            :id="`${kind}-enabled`"
+                            v-model="drafts[kind]!.enabled"
+                            type="checkbox"
+                            class="form-check-input me-2"
+                        />{{ t('hemsUi.enabled') }}</label
+                    >
+                    <label :for="`${kind}-provider`" class="form-label d-block">{{ t('hemsUi.provider') }}</label>
+                    <select
+                        :id="`${kind}-provider`"
+                        v-model="drafts[kind]!.provider"
+                        class="form-select mb-3"
+                        @change="selectProvider(kind)"
+                    >
+                        <option :value="kind === 'tariff' ? 'energy_charts' : 'forecast_solar'">
+                            {{ kind === 'tariff' ? 'Energy-Charts · DE-LU' : 'Forecast.Solar' }}
+                        </option>
+                        <option v-if="drafts[kind]!.provider.startsWith('normalized_')" :value="drafts[kind]!.provider">
+                            {{ providerLabel(drafts[kind]!.provider) }}
+                        </option>
+                    </select>
+                    <template v-if="kind === 'tariff'">
+                        <div class="form-check mb-3">
+                            <input
+                                id="tariff-pricing-enabled"
+                                v-model="drafts[kind]!.pricing.enabled"
+                                class="form-check-input me-2"
+                                type="checkbox"
+                            /><FieldLabel
+                                for-id="tariff-pricing-enabled"
+                                :text="t('hemsUi.useComponents')"
+                                :help="t('hemsUi.priceFormula')"
+                                label-class="form-check-label"
+                            />
                         </div>
-                        <div v-for="day in [0, 1]" :key="day" class="energy-metric">
-                            <div class="small text-body-secondary">
-                                {{ t(day ? 'hemsUi.tomorrow' : 'hemsUi.today') }} ·
-                                {{ t(kind === 'tariff' ? 'hemsUi.average' : 'hemsUi.forecastTotal') }}
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-6">
+                                <label for="tariff-vat" class="form-label">{{ t('hemsUi.vat') }} (%)</label>
+                                <input
+                                    id="tariff-vat"
+                                    :value="toDisplay(drafts[kind]!.pricing.vat_basis_points, 100)"
+                                    type="number"
+                                    class="form-control"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    required
+                                    @input="
+                                        drafts[kind]!.pricing.vat_basis_points = toCanonical(
+                                            ($event.target as HTMLInputElement).value,
+                                            100
+                                        )
+                                    "
+                                />
                             </div>
-                            <div class="fs-4 fw-semibold my-1">
-                                {{ kind === 'tariff' ? dailyPrice(day) : energySummary(day) }}
-                            </div>
-                            <div v-if="!summaryComplete(kind, day)" class="small text-body-secondary">
-                                {{ t(kind === 'tariff' ? 'hemsUi.coveredOnly' : 'hemsUi.incompleteForecast') }}
+                            <div v-for="field in priceFields" :key="field.key" class="col-sm-6">
+                                <label :for="`tariff-${field.key}`" class="form-label"
+                                    >{{ t('hemsUi.' + field.key) }} ({{ field.unit }})</label
+                                >
+                                <input
+                                    :id="`tariff-${field.key}`"
+                                    :value="toDisplay(drafts[kind]!.pricing[field.key], field.scale)"
+                                    type="number"
+                                    class="form-control"
+                                    :min="field.min"
+                                    :max="field.max"
+                                    :step="field.step"
+                                    required
+                                    @input="
+                                        drafts[kind]!.pricing[field.key] = toCanonical(
+                                            ($event.target as HTMLInputElement).value,
+                                            field.scale
+                                        )
+                                    "
+                                />
                             </div>
                         </div>
-                    </div>
-                    <div v-if="kind === 'tariff'" class="next-periods mb-3">
-                        <button
-                            v-for="category in ['cheap', 'expensive'] as const"
-                            :key="category"
-                            type="button"
-                            class="next-period"
-                            :class="`period-${category}`"
-                            :disabled="!periodInspectable(category)"
-                            @click="inspectedPeriod = { utc: period(category)!.start }"
+                    </template>
+                    <PvPlaneEditor
+                        v-if="drafts[kind]!.provider === 'forecast_solar'"
+                        v-model:planes="drafts[kind]!.planes"
+                        :saved="feeds[kind]!.config.planes"
+                        :statuses="feeds[kind]!.plane_status"
+                    />
+                    <details class="border rounded p-3 mb-3">
+                        <summary>{{ t('hemsUi.advancedSettings') }}</summary>
+                        <label :for="`${kind}-advanced-source`" class="form-label mt-3">{{
+                            t('hemsUi.integration')
+                        }}</label>
+                        <select
+                            :id="`${kind}-advanced-source`"
+                            v-model="drafts[kind]!.provider"
+                            class="form-select mb-3"
+                            @change="selectProvider(kind)"
                         >
-                            <span class="price-badge">{{ t('hemsUi.next' + category) }}</span>
-                            <span class="d-block mt-2 fw-medium"
-                                >{{ periodText(category)
-                                }}<span v-if="periodInspectable(category)" aria-hidden="true"> →</span></span
-                            >
-                        </button>
-                    </div>
-                    <EnergyChart
-                        v-if="feeds[kind]!.intervals.length"
-                        :intervals="chartData(kind)"
-                        :now="now"
-                        :include-zero="kind === 'forecast'"
-                        :focus-at="kind === 'tariff' ? inspectedPeriod : undefined"
-                        :label="
-                            t(
-                                kind === 'tariff'
-                                    ? tariffBasis(feeds.tariff) === 'effective'
-                                        ? 'hemsUi.effectivePrice'
-                                        : 'hemsUi.sourcePrice'
-                                    : 'hemsUi.aggregateForecast'
-                            )
-                        "
-                        :unit="
-                            kind === 'tariff'
-                                ? feeds.tariff?.currency === 'EUR'
-                                    ? 'ct/kWh'
-                                    : `${feeds.tariff?.currency}/kWh`
-                                : 'W'
-                        "
-                        :display="(value) => chartValue(kind, value)"
-                    />
-                    <div v-else class="energy-empty p-4 rounded text-center">
-                        <strong class="d-block mb-1">{{ t('hemsUi.noData') }}</strong>
-                        <span class="small text-body-secondary">{{ t('hemsUi.emptyEnergyHint') }}</span>
-                    </div>
-                    <details
-                        v-if="kind === 'forecast' && feeds[kind]!.config.planes.length"
-                        class="energy-details mt-3"
-                    >
-                        <summary>
-                            {{ t('hemsUi.pvPlanes') }} ·
-                            {{ feeds[kind]!.config.planes.filter((p) => p.enabled).length }}/{{
-                                feeds[kind]!.config.planes.length
-                            }}
-                            {{ t('hemsUi.enabled') }}
-                        </summary>
-                        <div class="plane-summaries mt-3">
-                            <span
-                                v-for="(plane, index) in feeds[kind]!.config.planes"
-                                :key="index"
-                                class="plane-summary small"
-                                ><strong>{{ plane.name }}</strong
-                                ><span class="text-body-secondary"
-                                    >{{ (plane.peak_w / 1000).toLocaleString(locale) }} kWp ·
-                                    {{ plane.enabled ? t('hemsUi.enabled') : t('hemsUi.disabled') }}</span
-                                ></span
-                            >
-                        </div>
-                        <RouterLink to="/energy/planning" class="small d-inline-block mt-2">{{
-                            t('hemsUi.editPlanes')
-                        }}</RouterLink>
-                    </details>
-                    <p
-                        v-if="kind === 'tariff' && tariffBasis(feeds.tariff) === 'source'"
-                        class="small text-body-secondary mt-2"
-                    >
-                        {{ t('hemsUi.sourceOnly') }}
-                    </p>
-                    <HelpHint
-                        v-if="kind === 'forecast'"
-                        :text="t('hemsUi.forecastHint')"
-                        :label="t('hemsUi.forecast')"
-                    />
-                    <div class="feed-update mt-3 pt-3">
-                        <div class="small text-body-secondary">
-                            <div>{{ t('hemsUi.receivedAt') }}: {{ date(feeds[kind]!.fetched_at) }}</div>
-                            <div v-if="feeds[kind]!.manual_refresh?.retry_after_seconds" class="mt-1" role="status">
-                                {{ t('hemsUi.retryIn', { seconds: feeds[kind]!.manual_refresh!.retry_after_seconds }) }}
-                                {{ t('hemsUi.autoRetry') }}
+                            <option :value="kind === 'tariff' ? 'energy_charts' : 'forecast_solar'">
+                                {{ kind === 'tariff' ? 'Energy-Charts · DE-LU' : 'Forecast.Solar' }}
+                            </option>
+                            <option value="normalized_push">{{ t('hemsUi.normalizedPush') }}</option>
+                            <option value="normalized_http">{{ t('hemsUi.normalizedHttp') }}</option>
+                        </select>
+                        <template v-if="drafts[kind]!.provider === 'normalized_http'">
+                            <label :for="`${kind}-url`" class="form-label">{{ t('hemsUi.bridgeUrl') }}</label>
+                            <input
+                                :id="`${kind}-url`"
+                                v-model="drafts[kind]!.url"
+                                type="url"
+                                class="form-control mb-3"
+                                maxlength="192"
+                                placeholder="http://bridge.local/energy.json"
+                                required
+                            />
+                        </template>
+                        <div class="row g-3">
+                            <div v-for="field in settingFields" :key="field.key" class="col-md-4">
+                                <label :for="`${kind}-${field.key}`" class="form-label"
+                                    >{{ t('hemsUi.' + field.key) }} (s)</label
+                                >
+                                <input
+                                    :id="`${kind}-${field.key}`"
+                                    v-model.number="drafts[kind]![field.key]"
+                                    type="number"
+                                    class="form-control"
+                                    :min="field.min"
+                                    :max="field.max"
+                                    step="1"
+                                    required
+                                />
                             </div>
                         </div>
+                        <template v-if="drafts[kind]!.provider === 'normalized_push'">
+                            <label :for="`${kind}-upload`" class="form-label mt-3">{{ t('hemsUi.uploadJson') }}</label>
+                            <input
+                                :id="`${kind}-upload`"
+                                class="form-control"
+                                type="file"
+                                accept="application/json,.json"
+                                :disabled="
+                                    busy[kind] || !feeds[kind]!.enabled || feeds[kind]!.provider !== 'normalized_push'
+                                "
+                                @change="upload(kind, $event)"
+                            />
+                            <a
+                                class="d-block mt-2"
+                                href="https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/integration/hems-next/docs/HEMS_Energy_Data.md"
+                                target="_blank"
+                                rel="noopener"
+                                >{{ t('hemsUi.bridgeDocs') }}</a
+                            >
+                        </template>
+                    </details>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-primary" :disabled="busy[kind]">{{ t('hemsUi.save') }}</button>
                         <button
                             type="button"
-                            class="btn btn-outline-secondary btn-sm"
+                            class="btn btn-outline-secondary"
                             :disabled="
                                 busy[kind] ||
+                                !feeds[kind]!.enabled ||
                                 feeds[kind]!.provider === 'normalized_push' ||
                                 feeds[kind]!.manual_refresh?.allowed === false
                             "
@@ -205,253 +440,55 @@
                             {{ t('hemsUi.refresh') }}
                         </button>
                     </div>
-                    <details class="energy-details mt-3">
-                        <summary>{{ t('hemsUi.energyDetails') }}</summary>
-                        <dl class="small mt-3 mb-2">
-                            <dt>{{ t('hemsUi.sourceUpdated') }}</dt>
-                            <dd>
-                                {{
-                                    feeds[kind]!.generated_at && feeds[kind]!.source_age_seconds !== null
-                                        ? date(feeds[kind]!.generated_at)
-                                        : t('hemsUi.sourceTimeUnknown')
-                                }}
-                            </dd>
-                            <dt>{{ t('hemsUi.sourceFreshness') }}</dt>
-                            <dd>{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
-                            <dt>{{ t('hemsUi.transportFreshness') }}</dt>
-                            <dd>{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
-                            <dt>{{ t('hemsUi.coverageUntil') }}</dt>
-                            <dd>{{ date(feeds[kind]!.horizon_end) }}</dd>
-                            <dt>{{ t('hemsUi.nextUpdate') }}</dt>
-                            <dd>{{ date(feeds[kind]!.next_refresh) }}</dd>
-                            <template v-if="kind === 'tariff' && feeds[kind]!.config.pricing.enabled">
-                                <dt>{{ t('hemsUi.monthly_micros') }}</dt>
-                                <dd>{{ monthlyFee() }}</dd>
-                            </template>
-                        </dl>
-                        <p v-if="kind === 'tariff'" class="small text-body-secondary">
-                            {{ t('hemsUi.classificationHint') }}
-                        </p>
-                        <RouterLink to="/energy/diagnostics" class="small">{{
-                            t('hemsUi.providerDiagnosticsLink')
-                        }}</RouterLink>
+                    <p v-if="feeds[kind]!.manual_refresh?.allowed === false" class="small text-body-secondary mt-2">
+                        {{ stateText(feeds[kind]!.manual_refresh!.reason || 'unavailable') }}
+                        <span v-if="feeds[kind]!.manual_refresh!.retry_after_seconds">{{
+                            t('hemsUi.retryIn', { seconds: feeds[kind]!.manual_refresh!.retry_after_seconds })
+                        }}</span>
+                    </p>
+                </form>
+                <template v-if="props.view === 'diagnostics'">
+                    <dl class="row small">
+                        <dt class="col-sm-4">{{ t('hemsUi.stateAndError') }}</dt>
+                        <dd class="col-sm-8 text-break">
+                            {{ feeds[kind]!.state }} / {{ feeds[kind]!.last_error || '—' }}
+                        </dd>
+                        <dt class="col-sm-4">{{ t('hemsUi.generationAndFetch') }}</dt>
+                        <dd class="col-sm-8">
+                            {{ date(feeds[kind]!.generated_at) }} / {{ date(feeds[kind]!.fetched_at) }}
+                        </dd>
+                        <dt class="col-sm-4">{{ t('hemsUi.sourceAndTransportAge') }}</dt>
+                        <dd class="col-sm-8">
+                            {{ feeds[kind]!.source_age_seconds ?? '—' }} / {{ feeds[kind]!.transport_age_seconds }}
+                        </dd>
+                        <dt class="col-sm-4">{{ t('hemsUi.sourceFreshness') }}</dt>
+                        <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
+                        <dt class="col-sm-4">{{ t('hemsUi.transportFreshness') }}</dt>
+                        <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
+                        <dt class="col-sm-4">{{ t('hemsUi.nextRefresh') }}</dt>
+                        <dd class="col-sm-8">{{ date(feeds[kind]!.next_refresh) }}</dd>
+                    </dl>
+                    <details>
+                        <summary>{{ t('hemsUi.providerDiagnostics') }}</summary>
+                        <pre class="diagnostic-json mt-3">{{ JSON.stringify(feeds[kind], null, 2) }}</pre>
                     </details>
                 </template>
             </template>
-            <p class="small text-body-secondary mt-3">
-                {{ providerLabel(feeds[kind]!.provider)
-                }}<span v-if="feeds[kind]!.attribution"> · {{ feeds[kind]!.attribution }}</span>
-            </p>
-            <form v-if="props.view === 'settings' && drafts[kind]" @submit.prevent="save(kind)" class="mt-4">
-                <label class="form-check-label mb-3"
-                    ><input
-                        :id="`${kind}-enabled`"
-                        v-model="drafts[kind]!.enabled"
-                        type="checkbox"
-                        class="form-check-input me-2"
-                    />{{ t('hemsUi.enabled') }}</label
-                >
-                <label :for="`${kind}-provider`" class="form-label d-block">{{ t('hemsUi.provider') }}</label>
-                <select
-                    :id="`${kind}-provider`"
-                    v-model="drafts[kind]!.provider"
-                    class="form-select mb-3"
-                    @change="selectProvider(kind)"
-                >
-                    <option :value="kind === 'tariff' ? 'energy_charts' : 'forecast_solar'">
-                        {{ kind === 'tariff' ? 'Energy-Charts · DE-LU' : 'Forecast.Solar' }}
-                    </option>
-                    <option v-if="drafts[kind]!.provider.startsWith('normalized_')" :value="drafts[kind]!.provider">
-                        {{ providerLabel(drafts[kind]!.provider) }}
-                    </option>
-                </select>
-                <template v-if="kind === 'tariff'">
-                    <label class="form-check-label mb-2"
-                        ><input
-                            id="tariff-pricing-enabled"
-                            v-model="drafts[kind]!.pricing.enabled"
-                            class="form-check-input me-2"
-                            type="checkbox"
-                        />{{ t('hemsUi.useComponents') }}</label
-                    >
-                    <p class="small text-body-secondary">{{ t('hemsUi.priceFormula') }}</p>
-                    <div class="row g-3 mb-3">
-                        <div class="col-sm-6">
-                            <label for="tariff-vat" class="form-label">{{ t('hemsUi.vat') }} (%)</label>
-                            <input
-                                id="tariff-vat"
-                                :value="toDisplay(drafts[kind]!.pricing.vat_basis_points, 100)"
-                                type="number"
-                                class="form-control"
-                                min="0"
-                                max="100"
-                                step="0.01"
-                                required
-                                @input="
-                                    drafts[kind]!.pricing.vat_basis_points = toCanonical(
-                                        ($event.target as HTMLInputElement).value,
-                                        100
-                                    )
-                                "
-                            />
-                        </div>
-                        <div v-for="field in priceFields" :key="field.key" class="col-sm-6">
-                            <label :for="`tariff-${field.key}`" class="form-label"
-                                >{{ t('hemsUi.' + field.key) }} ({{ field.unit }})</label
-                            >
-                            <input
-                                :id="`tariff-${field.key}`"
-                                :value="toDisplay(drafts[kind]!.pricing[field.key], field.scale)"
-                                type="number"
-                                class="form-control"
-                                :min="field.min"
-                                :max="field.max"
-                                :step="field.step"
-                                required
-                                @input="
-                                    drafts[kind]!.pricing[field.key] = toCanonical(
-                                        ($event.target as HTMLInputElement).value,
-                                        field.scale
-                                    )
-                                "
-                            />
-                        </div>
-                    </div>
-                </template>
-                <PvPlaneEditor
-                    v-if="drafts[kind]!.provider === 'forecast_solar'"
-                    v-model:planes="drafts[kind]!.planes"
-                    :saved="feeds[kind]!.config.planes"
-                    :statuses="feeds[kind]!.plane_status"
-                />
-                <details class="border rounded p-3 mb-3">
-                    <summary>{{ t('hemsUi.advancedSettings') }}</summary>
-                    <label :for="`${kind}-advanced-source`" class="form-label mt-3">{{
-                        t('hemsUi.integration')
-                    }}</label>
-                    <select
-                        :id="`${kind}-advanced-source`"
-                        v-model="drafts[kind]!.provider"
-                        class="form-select mb-3"
-                        @change="selectProvider(kind)"
-                    >
-                        <option :value="kind === 'tariff' ? 'energy_charts' : 'forecast_solar'">
-                            {{ kind === 'tariff' ? 'Energy-Charts · DE-LU' : 'Forecast.Solar' }}
-                        </option>
-                        <option value="normalized_push">{{ t('hemsUi.normalizedPush') }}</option>
-                        <option value="normalized_http">{{ t('hemsUi.normalizedHttp') }}</option>
-                    </select>
-                    <template v-if="drafts[kind]!.provider === 'normalized_http'">
-                        <label :for="`${kind}-url`" class="form-label">{{ t('hemsUi.bridgeUrl') }}</label>
-                        <input
-                            :id="`${kind}-url`"
-                            v-model="drafts[kind]!.url"
-                            type="url"
-                            class="form-control mb-3"
-                            maxlength="192"
-                            placeholder="http://bridge.local/energy.json"
-                            required
-                        />
-                    </template>
-                    <div class="row g-3">
-                        <div v-for="field in settingFields" :key="field.key" class="col-md-4">
-                            <label :for="`${kind}-${field.key}`" class="form-label"
-                                >{{ t('hemsUi.' + field.key) }} (s)</label
-                            >
-                            <input
-                                :id="`${kind}-${field.key}`"
-                                v-model.number="drafts[kind]![field.key]"
-                                type="number"
-                                class="form-control"
-                                :min="field.min"
-                                :max="field.max"
-                                step="1"
-                                required
-                            />
-                        </div>
-                    </div>
-                    <template v-if="drafts[kind]!.provider === 'normalized_push'">
-                        <label :for="`${kind}-upload`" class="form-label mt-3">{{ t('hemsUi.uploadJson') }}</label>
-                        <input
-                            :id="`${kind}-upload`"
-                            class="form-control"
-                            type="file"
-                            accept="application/json,.json"
-                            :disabled="
-                                busy[kind] || !feeds[kind]!.enabled || feeds[kind]!.provider !== 'normalized_push'
-                            "
-                            @change="upload(kind, $event)"
-                        />
-                        <a
-                            class="d-block mt-2"
-                            href="https://github.com/dawid-woitaschek/OpenDTU-HEMS/blob/integration/hems-next/docs/HEMS_Energy_Data.md"
-                            target="_blank"
-                            rel="noopener"
-                            >{{ t('hemsUi.bridgeDocs') }}</a
-                        >
-                    </template>
-                </details>
-                <div class="d-flex flex-wrap gap-2">
-                    <button class="btn btn-primary" :disabled="busy[kind]">{{ t('hemsUi.save') }}</button>
-                    <button
-                        type="button"
-                        class="btn btn-outline-secondary"
-                        :disabled="
-                            busy[kind] ||
-                            !feeds[kind]!.enabled ||
-                            feeds[kind]!.provider === 'normalized_push' ||
-                            feeds[kind]!.manual_refresh?.allowed === false
-                        "
-                        @click="refresh(kind)"
-                    >
-                        {{ t('hemsUi.refresh') }}
-                    </button>
-                </div>
-                <p v-if="feeds[kind]!.manual_refresh?.allowed === false" class="small text-body-secondary mt-2">
-                    {{ stateText(feeds[kind]!.manual_refresh!.reason || 'unavailable') }}
-                    <span v-if="feeds[kind]!.manual_refresh!.retry_after_seconds">{{
-                        t('hemsUi.retryIn', { seconds: feeds[kind]!.manual_refresh!.retry_after_seconds })
-                    }}</span>
-                </p>
-            </form>
-            <template v-if="props.view === 'diagnostics'">
-                <dl class="row small">
-                    <dt class="col-sm-4">{{ t('hemsUi.stateAndError') }}</dt>
-                    <dd class="col-sm-8 text-break">{{ feeds[kind]!.state }} / {{ feeds[kind]!.last_error || '—' }}</dd>
-                    <dt class="col-sm-4">{{ t('hemsUi.generationAndFetch') }}</dt>
-                    <dd class="col-sm-8">
-                        {{ date(feeds[kind]!.generated_at) }} / {{ date(feeds[kind]!.fetched_at) }}
-                    </dd>
-                    <dt class="col-sm-4">{{ t('hemsUi.sourceAndTransportAge') }}</dt>
-                    <dd class="col-sm-8">
-                        {{ feeds[kind]!.source_age_seconds ?? '—' }} / {{ feeds[kind]!.transport_age_seconds }}
-                    </dd>
-                    <dt class="col-sm-4">{{ t('hemsUi.sourceFreshness') }}</dt>
-                    <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'source')) }}</dd>
-                    <dt class="col-sm-4">{{ t('hemsUi.transportFreshness') }}</dt>
-                    <dd class="col-sm-8">{{ t('hemsUi.' + feedFreshness(feeds[kind]!, 'transport')) }}</dd>
-                    <dt class="col-sm-4">{{ t('hemsUi.nextRefresh') }}</dt>
-                    <dd class="col-sm-8">{{ date(feeds[kind]!.next_refresh) }}</dd>
-                </dl>
-                <details>
-                    <summary>{{ t('hemsUi.providerDiagnostics') }}</summary>
-                    <pre class="diagnostic-json mt-3">{{ JSON.stringify(feeds[kind], null, 2) }}</pre>
-                </details>
-            </template>
-        </template>
-        <p v-else-if="!errors[kind]" class="text-body-secondary" role="status">{{ t('hemsUi.loadingEnergy') }}</p>
-        <RouterLink
-            v-if="props.view === 'overview' && feeds[kind]?.enabled === false"
-            to="/energy/planning"
-            class="small"
-            >{{ t('hemsUi.configureEnergy') }}</RouterLink
-        >
-    </CardElement>
+            <p v-else-if="!errors[kind]" class="text-body-secondary" role="status">{{ t('hemsUi.loadingEnergy') }}</p>
+            <RouterLink
+                v-if="props.view === 'overview' && feeds[kind]?.enabled === false"
+                to="/energy/planning"
+                class="small"
+                >{{ t('hemsUi.configureEnergy') }}</RouterLink
+            >
+        </CardElement>
+    </div>
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, onMounted, onUnmounted, reactive, ref, watchEffect } from 'vue';
+import { computed, getCurrentInstance, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import FieldLabel from '@/components/FieldLabel.vue';
 import CardElement from '@/components/CardElement.vue';
 import { authHeader, handleResponse } from '@/utils/authentication';
 import { priceFields, toDisplay, toCanonical } from '@/utils/tariffUnits';
@@ -478,9 +515,8 @@ import {
     providerMessage,
     type TariffClass,
 } from '@/utils/hemsPresentation';
-import HelpHint from '@/components/HelpHint.vue';
-const props = defineProps<{ view?: EnergyView }>();
-const emit = defineEmits<{ health: [issue: boolean]; summary: [values: { price: string; forecast: string }] }>();
+const props = defineProps<{ view?: EnergyView; compact?: boolean }>();
+const emit = defineEmits<{ health: [issue: boolean] }>();
 const { t, locale } = useI18n();
 const now = ref(Date.now() / 1000);
 const inspectedPeriod = ref<{ utc: number }>();
@@ -711,13 +747,6 @@ async function upload(kind: Kind, event: Event) {
     }
     input.value = '';
 }
-watchEffect(() => {
-    if (props.view === 'overview')
-        emit('summary', {
-            price: currentPrice('import_price_micros_per_kwh'),
-            forecast: energySummary(0, true),
-        });
-});
 onMounted(() => {
     domains.forEach((kind) => load(kind));
     timer = setInterval(

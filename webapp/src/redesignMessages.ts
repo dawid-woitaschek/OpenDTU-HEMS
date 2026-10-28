@@ -58,6 +58,47 @@ export const redesignMessages = {
             monitor: 'Monitor',
             active: 'Active',
             advancedOptimizer: 'Advanced optimizer & economic settings',
+            solarCharger: 'Solar Charger',
+            powerControl: 'Power Control / DPL',
+            status: 'Status',
+            deviceManager: 'Hardware & display',
+            console: 'Console',
+            connectionconnecting: 'Live connection to OpenDTU: connecting or unknown.',
+            connectionconnected: 'Live connection to OpenDTU active.',
+            connectiondisconnected: 'Live connection to OpenDTU lost. Cached values may be outdated.',
+            helpFor: 'Help: {label}',
+            reachable: 'Reachable · current data',
+            unreachable: 'Unreachable',
+            lastKnown: 'Last-known data',
+            disabled: 'Polling disabled',
+            lastKnownHelp:
+                'These are last-known or unverified values. Measurements older than 60 seconds, unreachable devices and a lost live connection are not current.',
+            acOutput: 'AC output',
+            confirmedLimit: 'Confirmed limit',
+            recordedEvents: 'Recorded events',
+            eventHistoryHelp:
+                'This count includes historical events. Inspect faults and warnings in the event log under detailed Live Data.',
+            noInverters: 'No inverters configured.',
+            detailedLive: 'Detailed Live Data',
+            energyDetails: 'Chart & details',
+            protectionHelp:
+                'EV protection can prevent battery discharge while the vehicle charges. Control permissions and operating mode still apply.',
+            optimizerHelp:
+                'Choose when the battery may charge or discharge. Automatic control requires Active mode and the corresponding device permission.',
+            planHelp:
+                'A battery plan is a proposal until automatic execution is enabled and the control conditions are met.',
+            reserveHelp: 'HEMS does not plan economic discharge below this SoC.',
+            maxSocHelp: 'HEMS normally does not plan charging above this SoC.',
+            gridChargeHelp: 'Allows the optimizer to charge the battery from the grid when economically beneficial.',
+            dischargeHelp: 'Allows stored energy to avoid expensive grid import when economically beneficial.',
+            shadowHelp: 'Calculates a battery plan. Enabling planning alone does not grant device control.',
+            socConfirmHelp: 'Confirm that the reserve and maximum target SoC match the usable range of your battery.',
+            targetHelp:
+                'Requests a minimum SoC by a one-time deadline. The optimizer still respects device limits and charging permissions.',
+            dispatchHelp:
+                'Applies the plan automatically only in Active mode with battery control permission. Manual battery control pauses execution until you resume it.',
+            scheduleLegend: 'Battery plan legend',
+            solarTelemetryUnavailable: 'No solar charger telemetry available. Configure the connection below.',
         },
         hemsUi: {
             overviewTitle: 'Overview',
@@ -149,6 +190,52 @@ export const redesignMessages = {
             monitor: 'Beobachten',
             active: 'Aktiv',
             advancedOptimizer: 'Erweiterte Optimierungs- & Wirtschaftlichkeitseinstellungen',
+            solarCharger: 'Solarladeregler',
+            powerControl: 'Leistungsregelung / DPL',
+            status: 'Status',
+            deviceManager: 'Hardware & Display',
+            console: 'Konsole',
+            connectionconnecting: 'Live-Verbindung zur OpenDTU: Verbindungsaufbau oder unbekannt.',
+            connectionconnected: 'Live-Verbindung zur OpenDTU aktiv.',
+            connectiondisconnected:
+                'Live-Verbindung zur OpenDTU unterbrochen. Gespeicherte Werte können veraltet sein.',
+            helpFor: 'Hilfe: {label}',
+            reachable: 'Erreichbar · aktuelle Daten',
+            unreachable: 'Nicht erreichbar',
+            lastKnown: 'Zuletzt bekannte Daten',
+            disabled: 'Abfrage deaktiviert',
+            lastKnownHelp:
+                'Dies sind zuletzt bekannte oder unbestätigte Werte. Messwerte älter als 60 Sekunden, nicht erreichbare Geräte und eine unterbrochene Live-Verbindung gelten nicht als aktuell.',
+            acOutput: 'AC-Leistung',
+            confirmedLimit: 'Bestätigtes Limit',
+            recordedEvents: 'Aufgezeichnete Ereignisse',
+            eventHistoryHelp:
+                'Die Anzahl enthält auch frühere Ereignisse. Fehler und Warnungen können im Ereignisprotokoll unter den detaillierten Live-Daten geprüft werden.',
+            noInverters: 'Keine Wechselrichter eingerichtet.',
+            detailedLive: 'Detaillierte Live-Daten',
+            energyDetails: 'Diagramm & Details',
+            protectionHelp:
+                'Der EV-Schutz kann die Batterieentladung während des Fahrzeugladens verhindern. Geräteberechtigungen und Betriebsart gelten weiterhin.',
+            optimizerHelp:
+                'Legt fest, wann die Batterie laden oder entladen darf. Automatische Steuerung erfordert die Betriebsart Aktiv und die passende Geräteberechtigung.',
+            planHelp:
+                'Der Batterieplan ist ein Vorschlag, bis die automatische Umsetzung aktiviert ist und die Steuerungsbedingungen erfüllt sind.',
+            reserveHelp: 'HEMS plant unterhalb dieses SoC keine wirtschaftliche Entladung.',
+            maxSocHelp: 'HEMS plant normalerweise keine Ladung oberhalb dieses SoC.',
+            gridChargeHelp: 'Erlaubt dem Optimierer, die Batterie bei wirtschaftlichem Vorteil aus dem Netz zu laden.',
+            dischargeHelp:
+                'Erlaubt, gespeicherte Energie bei wirtschaftlichem Vorteil zur Vermeidung teuren Netzbezugs zu nutzen.',
+            shadowHelp:
+                'Berechnet einen Batterieplan. Das Aktivieren der Planung allein erteilt keine Geräteberechtigung.',
+            socConfirmHelp:
+                'Bestätigen Sie, dass Batteriereserve und maximaler Ziel-SoC zum nutzbaren Bereich Ihrer Batterie passen.',
+            targetHelp:
+                'Fordert einen Mindest-SoC bis zu einem einmaligen Termin an. Gerätegrenzen und Ladeberechtigungen gelten weiterhin.',
+            dispatchHelp:
+                'Setzt den Plan nur in der Betriebsart Aktiv mit Batterie-Steuerungsberechtigung automatisch um. Manuelle Batteriesteuerung pausiert die Umsetzung bis zur ausdrücklichen Fortsetzung.',
+            scheduleLegend: 'Legende zum Batterieplan',
+            solarTelemetryUnavailable:
+                'Keine Solarladeregler-Telemetrie verfügbar. Die Verbindung kann unten eingerichtet werden.',
         },
         hemsUi: {
             overviewTitle: 'Übersicht',

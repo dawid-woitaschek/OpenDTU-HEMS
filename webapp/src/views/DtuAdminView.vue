@@ -31,10 +31,12 @@
                 />
 
                 <div class="row mb-3" v-if="dtuConfigList.nrf_enabled">
-                    <label for="inputNrfPaLevel" class="col-sm-2 col-form-label">
-                        {{ $t('dtuadmin.NrfPaLevel') }}
-                        <BIconInfoCircle v-tooltip :title="$t('dtuadmin.NrfPaLevelHint')" />
-                    </label>
+                    <div class="col-sm-2 col-form-label">
+                        <span class="label-with-help"
+                            ><label for="inputNrfPaLevel">{{ $t('dtuadmin.NrfPaLevel') }}</label
+                            ><HelpHint :text="$t('dtuadmin.NrfPaLevelHint')"
+                        /></span>
+                    </div>
                     <div class="col-sm-10">
                         <select id="inputNrfPaLevel" class="form-select" v-model="dtuConfigList.nrf_palevel">
                             <option v-for="palevel in nrfpalevelList" :key="palevel.key" :value="palevel.key">
@@ -45,10 +47,12 @@
                 </div>
 
                 <div class="row mb-3" v-if="dtuConfigList.cmt_enabled">
-                    <label for="inputCmtPaLevel" class="col-sm-2 col-form-label">
-                        {{ $t('dtuadmin.CmtPaLevel') }}
-                        <BIconInfoCircle v-tooltip :title="$t('dtuadmin.CmtPaLevelHint')" />
-                    </label>
+                    <div class="col-sm-2 col-form-label">
+                        <span class="label-with-help"
+                            ><label for="inputCmtPaLevel">{{ $t('dtuadmin.CmtPaLevel') }}</label
+                            ><HelpHint :text="$t('dtuadmin.CmtPaLevelHint')"
+                        /></span>
+                    </div>
                     <div class="col-sm-10">
                         <div class="input-group">
                             <input
@@ -67,10 +71,12 @@
                 </div>
 
                 <div class="row mb-3" v-if="dtuConfigList.cmt_enabled">
-                    <label for="inputCmtCountry" class="col-sm-2 col-form-label">
-                        {{ $t('dtuadmin.CmtCountry') }}
-                        <BIconInfoCircle v-tooltip :title="$t('dtuadmin.CmtCountryHint')" />
-                    </label>
+                    <div class="col-sm-2 col-form-label">
+                        <span class="label-with-help"
+                            ><label for="inputCmtCountry">{{ $t('dtuadmin.CmtCountry') }}</label
+                            ><HelpHint :text="$t('dtuadmin.CmtCountryHint')"
+                        /></span>
+                    </div>
                     <div class="col-sm-10">
                         <select id="inputCmtCountry" class="form-select" v-model="dtuConfigList.cmt_country">
                             <option v-for="(country, index) in dtuConfigList.country_def" :key="index" :value="index">
@@ -86,10 +92,12 @@
                 </div>
 
                 <div class="row mb-3" v-if="dtuConfigList.cmt_enabled">
-                    <label for="cmtFrequency" class="col-sm-2 col-form-label">
-                        {{ $t('dtuadmin.CmtFrequency') }}
-                        <BIconInfoCircle v-tooltip :title="$t('dtuadmin.CmtFrequencyHint')" />
-                    </label>
+                    <div class="col-sm-2 col-form-label">
+                        <span class="label-with-help"
+                            ><label for="cmtFrequency">{{ $t('dtuadmin.CmtFrequency') }}</label
+                            ><HelpHint :text="$t('dtuadmin.CmtFrequencyHint')"
+                        /></span>
+                    </div>
                     <div class="col-sm-10">
                         <div class="input-group">
                             <input
@@ -120,6 +128,7 @@
 </template>
 
 <script lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
@@ -128,17 +137,16 @@ import InputElement from '@/components/InputElement.vue';
 import type { AlertResponse } from '@/types/AlertResponse';
 import type { DtuConfig } from '@/types/DtuConfig';
 import { authHeader, handleResponse } from '@/utils/authentication';
-import { BIconInfoCircle } from 'bootstrap-icons-vue';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
     components: {
+        HelpHint,
         BasePage,
         BootstrapAlert,
         CardElement,
         FormFooter,
         InputElement,
-        BIconInfoCircle,
     },
     data() {
         return {

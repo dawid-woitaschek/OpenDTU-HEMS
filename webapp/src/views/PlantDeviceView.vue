@@ -1,8 +1,8 @@
 <template>
     <BasePage :title="$t('redesign.' + device)">
-        <section v-if="device !== 'battery'" class="card mb-4">
+        <section v-if="device === 'powerMeter'" class="card mb-4">
             <div class="card-body">
-                <h2 class="h6">{{ $t(device === 'solar' ? 'hems.PvPower' : 'hems.GridPower') }}</h2>
+                <h2 class="h6">{{ $t('hems.GridPower') }}</h2>
                 <strong class="fs-3 overview-value">{{ livePower }}</strong>
             </div>
         </section>
@@ -18,7 +18,7 @@
                 <GridChargerView /><GridChargerAdminView embedded />
             </details>
         </template>
-        <template v-else-if="device === 'solar'">
+        <template v-else-if="device === 'solarCharger'">
             <SolarChargerView />
             <details class="border rounded p-3 mt-4">
                 <summary>{{ $t('redesign.deviceConfiguration') }}</summary>
@@ -46,11 +46,11 @@ import BatteryAdminView from './BatteryAdminView.vue';
 import SolarChargerAdminView from './SolarChargerAdminView.vue';
 import GridChargerAdminView from './GridChargerAdminView.vue';
 import HemsDevicesView from './HemsDevicesView.vue';
-const props = defineProps<{ device: 'solar' | 'battery' | 'powerMeter' }>();
+const props = defineProps<{ device: 'solarCharger' | 'battery' | 'powerMeter' }>();
 const { locale } = useI18n();
-const { data, unavailable } = usePolledResource<HemsStatus>('/api/hems/status');
+const { data, unavailable } = usePolledResource<HemsStatus>('/api/hems/status', () => props.device === 'powerMeter');
 const livePower = computed(() => {
-    const signal = props.device === 'solar' ? data.value?.normalized.pv.power_w : data.value?.normalized.grid.power_w;
+    const signal = data.value?.normalized.grid.power_w;
     const value = signalValue(signal, unavailable.value);
     return value === null ? '—' : `${value.toLocaleString(locale.value, { maximumFractionDigits: 1 })} W`;
 });

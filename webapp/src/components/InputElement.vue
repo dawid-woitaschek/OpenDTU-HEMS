@@ -1,12 +1,8 @@
 <template>
     <div class="row mb-3">
-        <label
-            :for="inputId"
-            :class="[wide ? 'col-sm-4' : 'col-sm-2', isCheckbox ? 'form-check-label' : 'col-form-label']"
-        >
-            {{ label }}
-            <HelpHint v-if="tooltip" :text="tooltip" :label="label" />
-        </label>
+        <div :class="[wide ? 'col-sm-4' : 'col-sm-2', isCheckbox ? 'form-check-label' : 'col-form-label']">
+            <FieldLabel :for-id="inputId" :text="label" :help="tooltip" />
+        </div>
         <div :class="[wide ? 'col-sm-8' : 'col-sm-10']">
             <div v-if="!isTextarea" :class="{ 'form-check form-switch': isCheckbox, 'input-group': postfix || prefix }">
                 <span v-if="prefix" class="input-group-text" :id="descriptionId">
@@ -48,12 +44,12 @@
 </template>
 
 <script lang="ts">
-import HelpHint from './HelpHint.vue';
+import FieldLabel from './FieldLabel.vue';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
     components: {
-        HelpHint,
+        FieldLabel,
     },
     props: {
         modelValue: [String, Number, Boolean, Date],

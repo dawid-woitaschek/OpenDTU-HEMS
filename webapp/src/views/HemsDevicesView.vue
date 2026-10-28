@@ -14,7 +14,7 @@
         </BootstrapAlert>
         <template v-if="!dataLoading && !loadFailed && hemsConfig.version === 1">
             <form v-if="device === 'wallbox'" @submit.prevent="saveWarp">
-                <CardElement :text="$t('hems.Warp')" textVariant="text-bg-primary">
+                <CardElement :text="$t('hems.Warp')" :help="$t('hems.WarpSetupHint')" textVariant="text-bg-primary">
                     <InputElement
                         :label="$t('hems.WarpEnabled')"
                         v-model="hemsConfig.warp.enabled"
@@ -71,9 +71,13 @@
                             </div>
                         </div>
                         <div class="row mb-3">
-                            <label for="hems-evse-control-mode" class="col-sm-4 col-form-label">{{
-                                $t('hems.ControlMode')
-                            }}</label>
+                            <div class="col-sm-4 col-form-label">
+                                <FieldLabel
+                                    for-id="hems-evse-control-mode"
+                                    :text="$t('hems.ControlMode')"
+                                    :help="$t('hems.ControlModeHint')"
+                                />
+                            </div>
                             <div class="col-sm-8">
                                 <select
                                     id="hems-evse-control-mode"
@@ -83,17 +87,20 @@
                                     <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
                                     <option value="hems">{{ $t('hems.ControlHems') }}</option>
                                 </select>
-                                <HelpHint :text="$t('hems.ControlModeHint')" />
                             </div>
                         </div>
-                        <HelpHint :text="$t('hems.WarpSetupHint')" />
                     </template>
                     <FormFooter @reload="getConfig" />
                 </CardElement>
             </form>
 
             <form v-if="device === 'battery'" @submit.prevent="saveStorage">
-                <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
+                <CardElement
+                    :text="$t('storage.Title')"
+                    :help="$t('storage.SetupHint')"
+                    textVariant="text-bg-primary"
+                    add-space
+                >
                     <InputElement
                         :label="$t('storage.Enabled')"
                         v-model="hemsConfig.storage.enabled"
@@ -171,9 +178,13 @@
                             wide
                         />
                         <div class="row mb-3">
-                            <label for="hems-storage-control-mode" class="col-sm-4 col-form-label">{{
-                                $t('hems.ControlMode')
-                            }}</label>
+                            <div class="col-sm-4 col-form-label">
+                                <FieldLabel
+                                    for-id="hems-storage-control-mode"
+                                    :text="$t('hems.ControlMode')"
+                                    :help="$t('hems.ControlModeHint')"
+                                />
+                            </div>
                             <div class="col-sm-8">
                                 <select
                                     id="hems-storage-control-mode"
@@ -183,10 +194,8 @@
                                     <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
                                     <option value="hems">{{ $t('hems.ControlHems') }}</option>
                                 </select>
-                                <HelpHint :text="$t('hems.ControlModeHint')" />
                             </div>
                         </div>
-                        <HelpHint :text="$t('storage.SetupHint')" />
                     </template>
                     <FormFooter @reload="getConfig" />
                 </CardElement>
@@ -204,7 +213,7 @@
 
 <script lang="ts">
 import DeviceStatusPanel from '@/components/hems/DeviceStatusPanel.vue';
-import HelpHint from '@/components/HelpHint.vue';
+import FieldLabel from '@/components/FieldLabel.vue';
 import HemsControlPanel from '@/components/HemsControlPanel.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
@@ -231,7 +240,7 @@ type EvseBinding = {
 export default defineComponent({
     components: {
         DeviceStatusPanel,
-        HelpHint,
+        FieldLabel,
         HemsControlPanel,
         BasePage,
         BootstrapAlert,

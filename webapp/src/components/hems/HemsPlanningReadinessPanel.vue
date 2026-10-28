@@ -1,6 +1,5 @@
 <template>
-    <CardElement :text="copy.title" textVariant="text-bg-primary" add-space>
-        <p class="small text-body-secondary mb-3">{{ copy.hint }}</p>
+    <CardElement :text="copy.title" :help="copy.hint" textVariant="text-bg-primary" add-space>
         <p v-if="error" class="alert alert-warning mb-0" role="alert">{{ copy.loadFailed }} {{ error }}</p>
         <template v-else-if="status">
             <div class="row g-2 readiness-grid">
@@ -193,39 +192,6 @@ const texts: Record<string, Copy> = {
         waitingSoc: 'Ein frischer Speicher-SoC fehlt noch.',
         optimizerOff: 'Die Shadow-Optimierung ist deaktiviert.',
         waitingGeneric: 'Der Optimierer wartet noch auf eine aktuelle Voraussetzung.',
-    },
-    fr: {
-        title: 'Disponibilité de la planification',
-        hint: 'Contrôle compact des entrées requises pour un plan de stockage utile. La stratégie reste simple ; les valeurs techniques du modèle de batterie restent dans les réglages avancés ci-dessous.',
-        loadFailed: 'La disponibilité de la planification n’a pas pu être chargée.',
-        model: 'Modèle de batterie',
-        tariff: 'Tarif',
-        soc: 'SoC du stockage',
-        dispatch: 'Dispatch économique',
-        ready: 'Prêt',
-        incomplete: 'Incomplet',
-        notUsable: 'Non utilisable pour la planification',
-        fresh: 'Actuel',
-        waiting: 'En attente de télémétrie',
-        dispatchOff: 'Désactivé · Shadow uniquement',
-        dispatchPaused: 'Activé · pause manuelle',
-        dispatchOn: 'Activé',
-        modelMissing: 'Le modèle de batterie est incomplet',
-        modelMissingHint:
-            'Complétez ces valeurs techniques dans les réglages avancés de l’optimiseur avant d’évaluer son plan :',
-        confirmBounds: 'Confirmer les limites de SoC configurées',
-        capacity: 'Capacité utile de la batterie',
-        efficiencies: 'Rendement de charge et de décharge',
-        powerLimits: 'Puissance maximale de charge et de décharge',
-        socBounds: 'La réserve doit être inférieure au SoC maximal souhaité',
-        planningReady: 'Les entrées de planification sont prêtes',
-        planningReadyHint:
-            'L’optimiseur peut calculer avec le tarif actuel et un SoC de stockage récent. Les écritures économiques dépendent toujours de l’activation séparée du dispatch et des contrôles d’exécution.',
-        waitingTitle: 'En attente d’une entrée d’exécution',
-        waitingTariff: 'Le tarif n’est actuellement pas utilisable pour la planification.',
-        waitingSoc: 'Un SoC de stockage récent manque encore.',
-        optimizerOff: 'L’optimisation Shadow est désactivée.',
-        waitingGeneric: 'L’optimiseur attend encore une condition actuelle.',
     },
 };
 
