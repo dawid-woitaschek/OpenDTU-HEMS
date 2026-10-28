@@ -56,6 +56,8 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
    German/English messages are preserved. The header uses the supplied official
    OpenDTU-HEMS SVG beside the existing wordmark, replacing the house icon;
    the live-connection indicator remains to the right.
+   The SVG is bundled into embedded JavaScript rather than relying on an
+   unserved `/assets/` URL; header regression checks enforce this constraint.
    Focused frontend/type/build/Node checks and all four intercepted-API browser
    suites passed locally; the route audit covers EN/DE at 320/768/1440 px,
    including attached help and mobile overflow fixes. [Current status](HEMS_Current_Status.md#product-ui)

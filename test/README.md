@@ -225,3 +225,11 @@ Browser suites accept `HEMS_BASE_URL` (default `http://127.0.0.1:5173`) so the
 same flows can target a served production build. `PLAYWRIGHT_MODULE` and
 `CHROMIUM_PATH` select an isolated browser installation. All device/provider
 requests in these suites are intercepted; they do not validate physical hardware.
+
+For firmware asset delivery checks, build the WebUI and run
+`python3 test/fixtures/embedded_webapp_server.py`, then set
+`HEMS_BASE_URL=http://127.0.0.1:5174` for the browser suite. This server mirrors
+the firmware's fixed embedded-file routes, gzip responses and HTML fallback.
+Serving every file in `webapp_dist` hides missing firmware asset routes.
+The header regression requires a bundled SVG data URL, so a standalone logo
+request cannot silently pass even when running against Vite.

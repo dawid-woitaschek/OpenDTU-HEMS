@@ -27,6 +27,7 @@ async function assertMeasurementsUnavailable(card) {
 async function assertHeaderBranding(page) {
     const brand = page.locator('header a.navbar-brand');
     const logo = brand.locator('img.brand-logo');
+    assert.match(await logo.getAttribute('src'), /^data:image\/svg\+xml[;,]/, 'Logo travels inside embedded app.js; firmware has no arbitrary asset route');
     await logo.evaluate(img => img.decode());
     assert.equal(await brand.getAttribute('href'), '/');
     assert.equal(await brand.innerText(), 'OpenDTU-HEMS');

@@ -139,6 +139,13 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   replaces the header house icon beside the existing clickable wordmark. The
   SVG is decorative beside the product text; its colors/proportions and the
   live-connection indicator to the right are preserved in both themes.
+  The logo is bundled as a data URL inside the firmware's embedded `app.js`;
+  a standalone Vite `/assets/` file is not served by the firmware. The regression
+  checks this delivery constraint, with a firmware-route HTTP fixture available
+  for production-build browser tests.
+  The delivery fix passed type/build/lint checks and light/dark header browser
+  checks at 320/1440 px against that fixture, including the firmware's gzip and
+  HTML fallback behavior. This remains software validation, not on-device proof.
   No fixture/mock readings are included in the production UI.
 
 The preceding UX/IA pass on **2026-10-28** passed:

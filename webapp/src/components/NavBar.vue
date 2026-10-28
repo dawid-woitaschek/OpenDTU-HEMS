@@ -83,7 +83,8 @@
 </template>
 <script setup lang="ts">
 import { computed, getCurrentInstance, onUnmounted, ref } from 'vue';
-import headerLogo from '@/assets/OpenDTU_HEMS_logo_transparent.svg';
+// Firmware embeds app.js but does not serve Vite's arbitrary /assets files.
+import headerLogo from '@/assets/OpenDTU_HEMS_logo_transparent.svg?inline';
 import { useRoute, useRouter } from 'vue-router';
 import {
     BIconHouse,
