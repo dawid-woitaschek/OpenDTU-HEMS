@@ -1,6 +1,9 @@
 <template>
-    <div :class="{ 'container-xxl': !isWideScreen, 'container-fluid': isWideScreen }" role="main">
-        <div class="page-header">
+    <div
+        :class="{ 'container-xxl': !embedded && !isWideScreen, 'container-fluid': !embedded && isWideScreen }"
+        :role="embedded ? undefined : 'main'"
+    >
+        <div v-if="!embedded" class="page-header">
             <div class="row mb-3">
                 <div :class="'align-content-center ' + (showReload ? 'col-10' : 'col-12')">
                     <h1 class="mb-0">
@@ -50,6 +53,7 @@ export default defineComponent({
         BIconArrowClockwise,
     },
     props: {
+        embedded: Boolean,
         title: { type: String, required: true },
         isLoading: { type: Boolean, required: false, default: false },
         isWideScreen: { type: Boolean, required: false, default: false },
@@ -58,7 +62,7 @@ export default defineComponent({
         showReload: { type: Boolean, required: false, default: false },
     },
     mounted() {
-        console.log('init');
+        if (this.embedded) return;
         PullToRefresh.init({
             mainElement: 'body', // above which element?
             instructionsPullToRefresh: this.$t('base.Pull'),
@@ -70,8 +74,7 @@ export default defineComponent({
         });
     },
     unmounted() {
-        console.log('destroy');
-        PullToRefresh.destroyAll();
+        if (!this.embedded) PullToRefresh.destroyAll();
     },
 });
 </script>

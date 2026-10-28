@@ -5,7 +5,7 @@
             :class="[wide ? 'col-sm-4' : 'col-sm-2', isCheckbox ? 'form-check-label' : 'col-form-label']"
         >
             {{ label }}
-            <BIconInfoCircle v-if="tooltip !== undefined" v-tooltip :title="tooltip" />
+            <HelpHint v-if="tooltip" :text="tooltip" :label="label" />
         </label>
         <div :class="[wide ? 'col-sm-8' : 'col-sm-10']">
             <div v-if="!isTextarea" :class="{ 'form-check form-switch': isCheckbox, 'input-group': postfix || prefix }">
@@ -48,12 +48,12 @@
 </template>
 
 <script lang="ts">
-import { BIconInfoCircle } from 'bootstrap-icons-vue';
+import HelpHint from './HelpHint.vue';
 import { defineComponent } from 'vue';
 
 export default defineComponent({
     components: {
-        BIconInfoCircle,
+        HelpHint,
     },
     props: {
         modelValue: [String, Number, Boolean, Date],

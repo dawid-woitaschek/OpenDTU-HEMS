@@ -5,6 +5,7 @@ import { hemsSupplementMessages } from './hemsMessages';
 import { hemsTariffMessages } from './hemsTariffMessages';
 import { firmwareSupplementMessages } from './firmwareMessages';
 import { profileMessages } from './profileMessages';
+import { redesignMessages } from './redesignMessages';
 
 export const allLocales = [
     { code: 'en', name: 'English' },
@@ -88,7 +89,13 @@ export const i18n = createI18n({
     numberFormats: numberFormats,
 });
 
-for (const supplement of [hemsSupplementMessages, hemsTariffMessages, firmwareSupplementMessages, profileMessages]) {
+for (const supplement of [
+    hemsSupplementMessages,
+    hemsTariffMessages,
+    firmwareSupplementMessages,
+    profileMessages,
+    redesignMessages,
+]) {
     Object.entries(supplement).forEach(([locale, messages]) => i18n.global.mergeLocaleMessage(locale, messages));
 }
 
