@@ -10,6 +10,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const screenshotDir = process.env.HEMS_SCREENSHOTS || 'work/screenshots';
 await mkdir(screenshotDir, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+async function openEnergyCharts(page) {
+    if (!['/', '/hems'].includes(new URL(page.url()).pathname)) return;
+    await page.locator('.energy-drilldown > summary').first().waitFor({ state: 'attached' });
+    await page.locator('.energy-drilldown > summary').evaluateAll(elements => elements.forEach(el => { el.parentElement.open = true; }));
+    await page.locator('#overview-plan details').evaluateAll(elements => elements.forEach(el => { el.open = true; }));
+}
 const errors = [], requests = [];
 try {
     for (const width of [320, 360, 768, 1440]) {
@@ -80,6 +86,7 @@ try {
             await page.goto(baseUrl + path, { timeout: 60000 });
             await page.locator('nav[aria-label="Main navigation"]').waitFor({ state: 'attached' });
             if (path === '/hems') {
+                await page.locator('.energy-drilldown > summary').first().click();
                 await page.locator('.energy-chart').first().waitFor();
                 assert.match(await page.locator('body').innerText(), /Proposal only · no device writes/);
             }
@@ -103,6 +110,7 @@ try {
             assert.equal(policySave.payload.policies.target_soc_pct, 70);
             assert.equal(policySave.payload.policies.target_deadline, Date.parse('2026-10-26T05:00:00Z') / 1000);
             await page.reload();
+            await openEnergyCharts(page);
             await page.locator('#optimizer-target-soc').waitFor();
             assert.equal(await page.locator('#optimizer-target-soc').inputValue(), '70');
             assert.equal(await page.locator('#optimizer-target-deadline').inputValue(), '2026-10-26T06:00');
@@ -127,6 +135,7 @@ try {
         }
         await page.goto(baseUrl + '/hems');
         const tariff = page.locator('.hems-energy.card').first();
+        await tariff.locator('.energy-drilldown > summary').click();
         const energyChart = tariff.locator('.energy-chart');
         const ranges = energyChart.getByRole('group', { name: 'Chart range' });
         await ranges.getByRole('button', { name: 'Today', exact: true }).waitFor();
@@ -191,23 +200,27 @@ try {
         assert.ok((await energyChart.getByRole('button', { name: 'Next interval', exact: true }).boundingBox()).height >= 44);
         scenario = 'rateLimit';
         await page.reload();
+        await openEnergyCharts(page);
         await page.getByText('Provider rate limit reached.', { exact: false }).waitFor();
         assert.match(await page.locator('body').innerText(), /Existing data is retained/);
         assert.match(await page.locator('body').innerText(), /Retry in 600 seconds/);
         scenario = 'planeFailure';
         await page.reload();
+        await openEnergyCharts(page);
         const failedPlane = page.locator('.hems-energy.card').nth(1).locator('li').filter({ hasText: 'East:' });
         await failedPlane.waitFor();
         assert.match(await failedPlane.innerText(), /provider_connect_failed/);
         assert.equal(await page.locator('.hems-energy.card').nth(1).locator('li').filter({ hasText: 'West:' }).count(), 0);
         scenario = 'stale';
         await page.reload();
+        await openEnergyCharts(page);
         await page.getByText('Data is outdated', { exact: false }).first().waitFor();
         // A retained curve remains inspectable, but current/summary numbers are unavailable.
         const solar = page.locator('.card').filter({ hasText: 'Remaining today' });
         assert.equal(await solar.locator('.fs-2').innerText(), '—');
         scenario = 'gap';
         await page.reload();
+        await openEnergyCharts(page);
         await page.locator('.energy-chart').first().waitFor();
         const gaps = await page.locator('.primary-line').first().getAttribute('d');
         assert.ok((gaps.match(/M/g) || []).length >= 2);
@@ -215,23 +228,27 @@ try {
         assert.match(await page.locator('.hems-energy.card').first().innerText(), /Not available for planning/);
         scenario = 'empty';
         await page.reload();
+        await openEnergyCharts(page);
         await page.getByText('No data yet', { exact: true }).first().waitFor();
         const forecast = page.locator('.hems-energy.card').nth(1);
         assert.equal(await forecast.locator('.energy-chart').count(), 0);
         assert.equal(await forecast.locator('.fs-2').innerText(), '—');
         scenario = 'partial';
         await page.reload();
+        await openEnergyCharts(page);
         await page.getByText('Partial horizon', { exact: true }).waitFor();
         assert.match(await forecast.innerText(), /Available for planning/);
         assert.equal(await forecast.locator('.fs-2').innerText(), '—');
         await page.getByText('PV forecast does not cover the full horizon.', { exact: true }).waitFor();
         scenario = 'todayOnly';
         await page.reload();
+        await openEnergyCharts(page);
         await page.locator('.energy-chart').first().getByRole('button', { name: 'Tomorrow', exact: true }).click();
         await page.getByText('No data available for this day yet.', { exact: false }).waitFor();
         assert.equal(await page.locator('.energy-chart').first().getByRole('button', { name: 'Next interval', exact: true }).isDisabled(), true);
         scenario = 'blocked';
         await page.reload();
+        await openEnergyCharts(page);
         await page.getByText('Waiting for fresh battery SoC.', { exact: true }).waitFor();
         const blockedSettings = page.getByRole('link', { name: 'Economic settings', exact: true });
         assert.equal(await blockedSettings.count(), 1);
@@ -239,6 +256,7 @@ try {
         // A lost feed request must mark retained values as unverified and suppress summaries.
         scenario = 'normal';
         await page.reload();
+        await openEnergyCharts(page);
         await forecast.locator('.energy-chart').waitFor();
         scenario = 'feedOffline';
         await page.clock.runFor(15000);
