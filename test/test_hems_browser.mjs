@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { mkdir } from 'node:fs/promises';
 import { createHemsFixture, fixtureNow } from './fixtures/hems.mjs';
 const require = createRequire(import.meta.url);
+const baseUrl = process.env.HEMS_BASE_URL || 'http://127.0.0.1:5173';
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const screenshotDir = process.env.HEMS_SCREENSHOTS || 'work/screenshots';
 await mkdir(screenshotDir, { recursive: true });
@@ -76,8 +77,8 @@ try {
             return route.fulfill({ json: body });
         });
         for (const path of ['/hems', '/hems/settings', '/hems/devices', '/hems/diagnostics']) {
-            await page.goto('http://127.0.0.1:5173' + path, { timeout: 60000 });
-            await page.locator('nav[aria-label="HEMS navigation"]').waitFor();
+            await page.goto(baseUrl + path, { timeout: 60000 });
+            await page.locator('nav[aria-label="Main navigation"]').waitFor({ state: 'attached' });
             if (path === '/hems') {
                 await page.locator('.energy-chart').first().waitFor();
                 assert.match(await page.locator('body').innerText(), /Proposal only · no device writes/);
@@ -87,7 +88,7 @@ try {
             await page.screenshot({ path: `${screenshotDir}/${width}-${path.split('/').pop() || 'overview'}.png`, fullPage: true });
         }
         if (width === 360) {
-            await page.goto('http://127.0.0.1:5173/hems/settings');
+            await page.goto(baseUrl + '/hems/settings');
             const optimizerForm = page.locator('form').filter({ has: page.locator('#optimizer-enabled') });
             await page.locator('#optimizer-grid-charging').selectOption('false');
             await page.locator('#optimizer-economic-discharge').selectOption('false');
@@ -124,7 +125,7 @@ try {
             assert.equal(requests.filter(r => r.path === '/api/hems/config' && r.method === 'POST').at(-1).payload.mode, 'Monitor');
             assert.equal(fixture.config.storage.control_mode, 'hems');
         }
-        await page.goto('http://127.0.0.1:5173/hems');
+        await page.goto(baseUrl + '/hems');
         const tariff = page.locator('.hems-energy.card').first();
         const energyChart = tariff.locator('.energy-chart');
         const ranges = energyChart.getByRole('group', { name: 'Chart range' });
@@ -234,7 +235,7 @@ try {
         await page.getByText('Waiting for fresh battery SoC.', { exact: true }).waitFor();
         const blockedSettings = page.getByRole('link', { name: 'Economic settings', exact: true });
         assert.equal(await blockedSettings.count(), 1);
-        assert.equal(await blockedSettings.getAttribute('href'), '/hems/settings');
+        assert.equal(await blockedSettings.getAttribute('href'), '/energy/planning');
         // A lost feed request must mark retained values as unverified and suppress summaries.
         scenario = 'normal';
         await page.reload();

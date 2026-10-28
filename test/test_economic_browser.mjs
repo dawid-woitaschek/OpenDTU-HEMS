@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createHemsFixture } from './fixtures/hems.mjs';
 const require = createRequire(import.meta.url);
+const baseUrl = process.env.HEMS_BASE_URL || 'http://127.0.0.1:5173';
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
 const errors = [];
@@ -34,14 +35,15 @@ try {
             const body = path.endsWith('/i18n/languages') ? [] : path === '/api/hems/status' ? fixture.status
                 : path === '/api/hems/config' ? fixture.config : path === '/api/hems/profiles' ? fixture.profiles
                 : path === '/api/hems/profiles/evse-binding' ? fixture.binding : path.startsWith('/api/hems/optimizer') ? fixture.optimizer
-                : path.startsWith('/api/hems/energy/tariff') ? fixture.tariff : path.startsWith('/api/hems/energy/forecast') ? fixture.forecast : {};
+                : path.startsWith('/api/hems/energy/tariff') ? fixture.tariff : path.startsWith('/api/hems/energy/forecast') ? fixture.forecast : path.endsWith('/config') ? { enabled: false } : {};
             return route.fulfill({ json: body });
         });
-        await page.goto('http://127.0.0.1:5173/hems/settings');
+        await page.goto(baseUrl + '/hems/settings');
         await page.locator('#optimizer-dispatch-enabled').waitFor();
         assert.equal(await page.locator('#optimizer-dispatch-enabled').isChecked(), false);
         assert.match(await page.locator('body').innerText(), /Shadow only · dispatch disabled/);
         assert.equal(await page.locator('#energy-management-enabled').isChecked(), false);
+        await page.locator('details').filter({ has: page.locator('#energy-management-enabled') }).first().locator('summary').first().click();
         await page.getByRole('button', { name: 'Apply household reference goals', exact: true }).click();
         assert.equal(await page.locator('#energy-management-enabled').isChecked(), false, 'Preset does not activate control');
         assert.equal(await page.locator('#energy-load-source').inputValue(), 'true');
@@ -74,18 +76,15 @@ try {
         fixture.optimizer.dispatch.storage_permission = true; fixture.optimizer.dispatch.state = 'blocked_protection';
         await page.reload(); await page.getByText('Blocked by EV Protection', { exact: true }).first().waitFor();
         fixture.optimizer.dispatch.state = 'charging';
-        await page.goto('http://127.0.0.1:5173/hems/devices');
-        const manualDetails = page.locator('details').filter({ has: page.getByText('Manual controls', { exact: true }) }).first();
-        if (await manualDetails.count()) await manualDetails.locator('summary').first().click();
-        // The devices view defers mounting the manual panel until its disclosure opens.
+        await page.goto(baseUrl + '/plant/battery');
+        const manualSummary = page.locator('details > summary').filter({ hasText: /^Manual controls$/ });
+        await manualSummary.waitFor();
+        await manualSummary.click();
         const input = page.locator('#storage-set_charge_power_w');
-        if (!(await input.count())) {
-            await page.getByText('Manual controls', { exact: true }).first().click();
-        }
         await input.waitFor(); await input.fill('500');
         await input.locator('..').getByRole('button', { name: 'Apply', exact: true }).click();
         await page.getByText('Economic automation paused by manual control', { exact: false }).first().waitFor();
-        await page.goto('http://127.0.0.1:5173/hems');
+        await page.goto(baseUrl + '/hems');
         await page.getByRole('button', { name: 'Resume economic automation', exact: true }).waitFor();
         await page.reload(); await page.getByRole('button', { name: 'Resume economic automation', exact: true }).click();
         await page.getByText('Waiting for Active HEMS mode', { exact: true }).first().waitFor();
