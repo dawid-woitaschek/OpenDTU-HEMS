@@ -68,15 +68,71 @@ The accepted PR #35 run does not validate these later changes.
 
 ## Product UI
 
-Four peer views use the existing OpenDTU visual language: Overview (`/hems`), Settings (`/hems/settings`), Devices (`/hems/devices`) and Advanced Diagnostics (`/hems/diagnostics`). Legacy aliases remain supported.
+The first unified WebUI redesign is implemented on **`redesign-v1`**, based on
+`hems` commit `6b45ebcd`. It is branch work, not a claim of merge or release.
 
-Overview shows fresh energy values, effective tariff prices, interactive tariff/PV charts and provider readiness. The generated storage plan is a first-class daily-use surface: current planned action, next action change, merged charge/hold/discharge blocks, expected SoC progression, modeled benefit and compact strategy summary.
+- `/` is the single Overview: grid import/export, solar, battery SoC and power,
+  wallbox/vehicle state, current tariff, PV forecast and the current/next battery
+  action. The detailed schedule, strategy and assumptions are expandable.
+  `/hems` and `/info/hems` redirect to this overview; `/live` preserves classic
+  live data without a second main overview.
+- Plant owns Solar, Inverters, Battery, Wallbox and Power Meter. The existing
+  inverter live/channel/radio/device/grid-profile/alarm/manual-action view is
+  reused under `/plant/inverters`, alongside inverter and DPL configuration.
+  Battery and wallbox endpoints, profile binding, status and scoped manual
+  controls live with the corresponding physical device. Existing BMS, solar
+  charger, AC charger and meter forms are reused, including advanced connection
+  settings. Legacy settings bookmarks redirect or remain aliases.
+- `/energy/planning` consolidates mode, control permissions, tariff/forecast,
+  reserve/maximum target SoC, grid charging, economic discharge, target/deadline,
+  shadow planning and explicit automatic execution. Existing enums, booleans,
+  numeric inputs, time conversion, request bodies and backend gates are retained.
+  Coordination/load-estimation and economic/model settings remain expandable.
+- `/energy/integrations` owns imported/repository Modbus profiles and links to the
+  authoritative physical/feed configuration surfaces, without duplicate endpoint
+  forms. `/hems/devices` and `/hems/profiles` redirect here.
+- `/energy/diagnostics` starts with readiness, optimizer state, blockers,
+  economics and schedule. Technical signal/device tables and raw JSON follow in
+  collapsed sections. The browser-only privacy-redacted support snapshot remains
+  available; system history is still requested on demand.
+- Navigation uses Anlage / Energiemanagement / System in German, with complete
+  English/German labels for the redesign. Help buttons support hover, focus,
+  touch/click and Escape, and are constrained to the viewport. Existing legacy
+  Bootstrap tooltip icons now support keyboard focus and disposal on navigation.
+- The Solar help panel reads confirmed per-inverter limits from the existing
+  `/api/livedata/status`, including availability/data age. It also reuses
+  `/api/solarchargerlivedata/status` for DPL's last computed aggregate target;
+  this is explicitly distinguished from confirmed inverter limits and measured
+  production. No duplicate control state or new backend endpoint was introduced.
 
-Settings owns normal storage-strategy configuration: reserve, maximum desired SoC, grid-charging permission, economic-discharge permission and optional one-time target/deadline. Normal settings also expose energy-flow goals, household-load estimation and an explicit reference preset. Advanced settings contain wear/margin, terminal assumptions and monetary hysteresis. English/German/French summaries separate planned/commanded actions, import/export, wear, inventory and forecast coverage. Economic dispatch remains a separate explicit default-off opt-in.
+The header currently uses a house icon as a temporary fallback. The logo shown
+in chat was not supplied as a downloadable workspace file; exact asset
+replacement remains pending that original file/URL. Mockup imagery is design
+reference only, and no mock readings are included in the production UI.
 
-Devices owns endpoints, bound profiles and expandable manual semantic controls. Repository-backed profile distribution is implemented: the browser retrieves a selected immutable profile, verifies size/SHA-256 and uses authenticated backend import/replacement; backend validation and in-use checks remain authoritative.
+Local `redesign-v1` validation on 2026-10-28 passed:
 
-Advanced Diagnostics exposes provider/control/system details, paginated optimizer rows and the on-demand browser-only support snapshot `opendtu-hems-diagnostics/v1`. It sequentially combines existing firmware, system, HEMS, tariff, forecast and optimizer APIs. The on-demand system request uses `heap_history=1`, including the existing bounded INTERNAL/PSRAM heap journal and allocation-failure records; ordinary polling is unchanged. Credentials are always redacted; network/location details remain opt-in. The snapshot is never persisted on LittleFS.
+- WebUI TypeScript checking (`vue-tsc --build`), production Vite build, focused
+  ESLint/Prettier checks and `git diff --check`.
+- Focused Node tests for admin persistence/error handling, HEMS presentation and
+  support snapshots, energy-management settings and exact tariff-unit conversion.
+- `test/test_redesign_browser.mjs` against the built WebUI with intercepted APIs:
+  English/German routes at 320/768/1440 px, one page landmark, no horizontal
+  overflow or runtime errors, physical-device separation, viewport-safe keyboard
+  DPL/inverter-limit help, mobile navigation, legacy redirects, unchanged planning
+  payloads/deadline conversion, no implicit execution opt-in and offline states.
+- Existing HEMS and economic browser suites against the built WebUI at
+  320/360/768/1440 px: dark mode/contrast, keyboard/touch/DST charts, stale/partial/
+  missing data, saves, Monitor isolation, manual pause and explicit resume.
+
+Browser checks use API fixtures and establish UI/request behavior, not actual
+provider freshness, register writes or physical charge/discharge behavior. The
+browser suites accept `HEMS_BASE_URL` to target either Vite or a served build.
+
+Redesign validation is software-only; physical ESP32/device and visual validation
+on a live installation remain pending. The local full CI and firmware matrix
+were not run, and GitHub Actions were not queried, awaited or monitored.
+
 
 ## Native providers and external data
 
