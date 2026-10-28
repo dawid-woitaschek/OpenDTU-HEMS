@@ -1,290 +1,103 @@
 <template>
-    <nav class="navbar navbar-expand-md fixed-top bg-body-tertiary" data-bs-theme="dark">
-        <div class="container-fluid">
-            <router-link @click="onClick" class="navbar-brand" to="/" style="display: flex; height: 30px; padding: 0">
-                <BIconTree v-if="isXmas" width="30" height="30" class="d-inline-block align-text-top text-success" />
-
-                <BIconEgg v-else-if="isEaster" width="30" height="30" class="d-inline-block align-text-top text-info" />
-
-                <BIconSun v-else width="30" height="30" class="d-inline-block align-text-top text-warning" />
-
-                <span style="margin-left: 0.5rem"> OpenDTU-HEMS </span>
-                <span class="text-info mx-2"
-                    ><BIconBatteryCharging width="20" height="20" class="d-inline-block align-text-center"
-                /></span>
-            </router-link>
-            <button
-                class="navbar-toggler"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#navbarNavAltMarkup"
-                aria-controls="navbarNavAltMarkup"
-                aria-expanded="false"
-                aria-label="Toggle navigation"
-            >
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" ref="navbarCollapse" id="navbarNavAltMarkup">
-                <ul class="navbar-nav navbar-nav-scroll d-flex me-auto flex-sm-fill">
-                    <li class="nav-item">
-                        <router-link @click="onClick" class="nav-link" to="/">{{ $t('menu.LiveView') }}</router-link>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a
-                            class="nav-link dropdown-toggle"
-                            href="#"
-                            id="navbarHemsDropdown"
-                            role="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            HEMS
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarHemsDropdown">
-                            <li v-for="item in hemsNavigation" :key="item.path">
-                                <router-link @click="onClick" class="dropdown-item" :to="item.path">{{
-                                    $t('hemsUi.' + item.label)
-                                }}</router-link>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a
-                            class="nav-link dropdown-toggle"
-                            href="#"
-                            id="navbarScrollingDropdown"
-                            role="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            {{ $t('menu.Settings') }}
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarScrollingDropdown">
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/network">{{
-                                    $t('menu.NetworkSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/ntp">{{
-                                    $t('menu.NTPSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/mqtt">{{
-                                    $t('menu.MQTTSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/inverter"
-                                    >{{ $t('menu.InverterSettings') }}
-                                </router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/security"
-                                    >{{ $t('menu.SecuritySettings') }}
-                                </router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/logging"
-                                    >{{ $t('menu.LoggingSettings') }}
-                                </router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/dtu">{{
-                                    $t('menu.DTUSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/solarcharger">{{
-                                    $t('menu.SolarChargerSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/powermeter">{{
-                                    $t('menu.PowerMeterSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/powerlimiter"
-                                    >Dynamic Power Limiter</router-link
-                                >
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/battery">{{
-                                    $t('menu.BatterySettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/chargerac">{{
-                                    $t('menu.AcChargerSettings')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/device">{{
-                                    $t('menu.DeviceManager')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <hr class="dropdown-divider" />
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/settings/config">{{
-                                    $t('menu.ConfigManagement')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/firmware/upgrade">{{
-                                    $t('menu.FirmwareUpgrade')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/maintenance/reboot">{{
-                                    $t('menu.DeviceReboot')
-                                }}</router-link>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a
-                            class="nav-link dropdown-toggle"
-                            href="#"
-                            id="navbarScrollingDropdown"
-                            role="button"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                        >
-                            {{ $t('menu.Info') }}
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="navbarScrollingDropdown">
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/info/system">{{
-                                    $t('menu.System')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/info/network">{{
-                                    $t('menu.Network')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/info/ntp">{{
-                                    $t('menu.NTP')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/info/mqtt">{{
-                                    $t('menu.MQTT')
-                                }}</router-link>
-                            </li>
-                            <li>
-                                <router-link @click="onClick" class="dropdown-item" to="/info/console">{{
-                                    $t('menu.Console')
-                                }}</router-link>
-                            </li>
-                        </ul>
-                    </li>
-                    <li class="nav-item">
-                        <router-link @click="onClick" class="nav-link" to="/about">{{ $t('menu.About') }}</router-link>
-                    </li>
-                    <li class="flex-sm-fill"></li>
-                    <ThemeSwitcher class="me-2" />
-                    <form class="d-flex" role="search">
-                        <LocaleSwitcher class="me-2" />
-                        <button v-if="isLogged" class="btn btn-outline-danger" @click="signout">
-                            {{ $t('menu.Logout') }}
-                        </button>
-                        <button v-if="!isLogged" class="btn btn-outline-success" @click="signin">
-                            {{ $t('menu.Login') }}
-                        </button>
-                    </form>
-                </ul>
-            </div>
-        </div>
+    <a class="visually-hidden-focusable skip-link" href="#main-content">{{ $t('redesign.skip') }}</a>
+    <header class="app-header border-bottom bg-body">
+        <RouterLink class="navbar-brand d-flex align-items-center gap-2 fw-semibold" to="/" @click="expanded = false">
+            <BIconHouse class="brand-logo text-primary" aria-hidden="true" />
+            <span><span class="text-primary">Open</span>DTU-HEMS</span>
+        </RouterLink>
+        <ul class="d-flex align-items-center gap-2 list-unstyled mb-0">
+            <ThemeSwitcher />
+            <li><LocaleSwitcher /></li>
+            <li>
+                <button class="btn btn-outline-secondary btn-sm" type="button" @click="authenticate">
+                    {{ $t(isLogged ? 'menu.Logout' : 'menu.Login') }}
+                </button>
+            </li>
+            <li>
+                <button
+                    class="btn btn-outline-primary d-lg-none"
+                    type="button"
+                    :aria-expanded="expanded"
+                    aria-controls="main-navigation"
+                    :aria-label="$t('redesign.navigation')"
+                    @click="expanded = !expanded"
+                >
+                    <BIconList />
+                </button>
+            </li>
+        </ul>
+    </header>
+    <nav
+        id="main-navigation"
+        class="app-sidebar bg-body-tertiary border-end"
+        :class="{ 'is-open': expanded }"
+        :aria-label="$t('redesign.navigation')"
+        @keydown.esc="expanded = false"
+    >
+        <template v-for="group in mainNavigation" :key="group.label">
+            <details v-if="group.label === 'system'" class="navigation-group" :open="systemOpen">
+                <summary class="navigation-heading">{{ $t('redesign.' + group.label) }}</summary>
+                <RouterLink
+                    v-for="item in group.items"
+                    :key="item.path"
+                    :to="item.path"
+                    class="nav-link"
+                    @click="expanded = false"
+                    >{{ $t('redesign.' + item.label) }}</RouterLink
+                >
+                <RouterLink to="/settings/device" class="nav-link" @click="expanded = false">{{
+                    $t('menu.DeviceManager')
+                }}</RouterLink>
+                <RouterLink to="/info/console" class="nav-link" @click="expanded = false">{{
+                    $t('menu.Console')
+                }}</RouterLink>
+            </details>
+            <section v-else class="navigation-group">
+                <h2 class="navigation-heading">{{ $t('redesign.' + group.label) }}</h2>
+                <RouterLink
+                    v-for="item in group.items"
+                    :key="item.path"
+                    :to="item.path"
+                    class="nav-link"
+                    exact-active-class="active"
+                    @click="expanded = false"
+                    >{{ $t('redesign.' + item.label) }}</RouterLink
+                >
+            </section>
+        </template>
+        <RouterLink to="/about" class="nav-link small" @click="expanded = false">{{ $t('menu.About') }}</RouterLink>
     </nav>
 </template>
-
-<script lang="ts">
+<script setup lang="ts">
+import { computed, getCurrentInstance, onUnmounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { BIconHouse, BIconList } from 'bootstrap-icons-vue';
 import { isLoggedIn, logout } from '@/utils/authentication';
-import { BIconEgg, BIconSun, BIconTree, BIconBatteryCharging } from 'bootstrap-icons-vue';
-import { defineComponent } from 'vue';
-import { hemsNavigation } from '@/utils/hemsNavigation';
+import { mainNavigation } from '@/utils/hemsNavigation';
 import LocaleSwitcher from './LocaleSwitcher.vue';
 import ThemeSwitcher from './ThemeSwitcher.vue';
-
-export default defineComponent({
-    components: {
-        BIconEgg,
-        BIconSun,
-        BIconTree,
-        BIconBatteryCharging,
-        LocaleSwitcher,
-        ThemeSwitcher,
-    },
-    data() {
-        return {
-            hemsNavigation,
-            isLogged: isLoggedIn(),
-            now: {} as Date,
-        };
-    },
-    created() {
-        this.$emitter.on('logged-in', () => {
-            this.isLogged = this.isLoggedIn();
-        });
-        this.$emitter.on('logged-out', () => {
-            this.isLogged = this.isLoggedIn();
-        });
-
-        this.now = new Date();
-        setInterval(() => {
-            this.now = new Date();
-        }, 10000);
-    },
-    computed: {
-        isXmas() {
-            return this.now.getMonth() + 1 == 12 && this.now.getDate() >= 24 && this.now.getDate() <= 26;
-        },
-        isEaster() {
-            const easter = this.getEasterSunday(this.now.getFullYear());
-            const easterStart = new Date(easter);
-            const easterEnd = new Date(easter);
-            easterStart.setDate(easterStart.getDate() - 2);
-            easterEnd.setDate(easterEnd.getDate() + 1);
-            return this.now >= easterStart && this.now < easterEnd;
-        },
-    },
-    methods: {
-        isLoggedIn,
-        logout,
-        signin(e: Event) {
-            e.preventDefault();
-            this.$router.push('/login');
-        },
-        signout(e: Event) {
-            e.preventDefault();
-            this.logout();
-            this.$emitter.emit('logged-out');
-            this.$router.push('/');
-        },
-        onClick() {
-            if (this.$refs.navbarCollapse) {
-                (this.$refs.navbarCollapse as HTMLElement).classList.remove('show');
-            }
-        },
-        getEasterSunday(year: number): Date {
-            const f = Math.floor;
-            const G = year % 19;
-            const C = f(year / 100);
-            const H = (C - f(C / 4) - f((8 * C + 13) / 25) + 19 * G + 15) % 30;
-            const I = H - f(H / 28) * (1 - f(29 / (H + 1)) * f((21 - G) / 11));
-            const J = (year + f(year / 4) + I + 2 - C + f(C / 4)) % 7;
-            const L = I - J;
-            const month = 3 + f((L + 40) / 44);
-            const day = L + 28 - 31 * f(month / 4);
-
-            return new Date(year, month - 1, day);
-        },
-    },
+const expanded = ref(false),
+    isLogged = ref(isLoggedIn());
+const route = useRoute(),
+    router = useRouter();
+const systemOpen = computed(
+    () => !['/', '/live'].includes(route.path) && !route.path.startsWith('/plant') && !route.path.startsWith('/energy')
+);
+const emitter = getCurrentInstance()!.appContext.config.globalProperties.$emitter;
+const updateLogin = () => {
+    isLogged.value = isLoggedIn();
+};
+emitter.on('logged-in', updateLogin);
+emitter.on('logged-out', updateLogin);
+onUnmounted(() => {
+    emitter.off('logged-in', updateLogin);
+    emitter.off('logged-out', updateLogin);
 });
+function authenticate() {
+    if (isLogged.value) {
+        logout();
+        emitter.emit('logged-out');
+        router.push('/');
+    } else router.push('/login');
+}
 </script>

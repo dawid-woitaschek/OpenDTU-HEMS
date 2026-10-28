@@ -7,18 +7,20 @@
         <template v-if="config">
             <CardElement :text="t('hemsUi.general')" textVariant="text-bg-primary">
                 <form @submit.prevent="saveMode">
-                    <label for="hems-mode" class="form-label">{{ t('hemsUi.hemsMode') }}</label>
+                    <label for="hems-mode" class="form-label"
+                        >{{ t('hemsUi.hemsMode') }} <HelpHint :text="t('hemsUi.modeHint')"
+                    /></label>
                     <select id="hems-mode" v-model="config.mode" class="form-select mb-2">
                         <option v-for="mode in ['Disabled', 'Monitor', 'Active']" :key="mode" :value="mode">
                             {{ $t('hems.' + mode) }}
                         </option>
                     </select>
-                    <p class="small text-body-secondary">{{ t('hemsUi.modeHint') }}</p>
+
                     <button class="btn btn-primary" :disabled="busy">{{ t('hemsUi.save') }}</button>
                 </form>
             </CardElement>
             <CardElement :text="t('hemsUi.deviceControl')" textVariant="text-bg-primary" add-space>
-                <p class="small text-body-secondary">{{ t('hemsUi.permissionHint') }}</p>
+                <HelpHint :text="t('hemsUi.permissionHint')" :label="t('redesign.devicePermissions')" />
                 <div class="row g-3 mb-3">
                     <form class="col-md-6" @submit.prevent="saveStorage">
                         <label for="storage-control" class="form-label">{{ t('hemsUi.storagePermission') }}</label
@@ -35,7 +37,10 @@
                         ><button class="btn btn-primary" :disabled="busy">{{ t('hemsUi.save') }}</button>
                     </form>
                 </div>
-                <RouterLink to="/hems/devices">{{ t('hemsUi.configureDevices') }}</RouterLink>
+                <div class="d-flex gap-3">
+                    <RouterLink to="/plant/battery">{{ t('redesign.battery') }}</RouterLink
+                    ><RouterLink to="/plant/wallbox">{{ t('redesign.wallbox') }}</RouterLink>
+                </div>
             </CardElement>
             <HemsEnergyPanel view="settings" />
             <HemsPlanningReadinessPanel />
@@ -46,6 +51,7 @@
 <script setup lang="ts">
 import { getCurrentInstance, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import HelpHint from '@/components/HelpHint.vue';
 import BasePage from '@/components/BasePage.vue';
 import CardElement from '@/components/CardElement.vue';
 import HemsNav from '@/components/hems/HemsNav.vue';

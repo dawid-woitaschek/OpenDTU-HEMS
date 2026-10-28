@@ -2,9 +2,11 @@
     <CardElement
         v-for="kind in domains"
         :key="kind"
+        :id="props.view === 'overview' ? 'overview-' + kind : undefined"
         :text="t('hemsUi.' + kind)"
         :textVariant="props.view === 'overview' ? 'energy-heading' : 'text-bg-primary'"
         class="hems-energy"
+        :class="{ 'col-12 col-xxl-6': props.view === 'overview' }"
         add-space
     >
         <p v-if="errors[kind]" class="alert alert-warning" role="alert">{{ errors[kind] }}</p>
@@ -167,7 +169,7 @@
                                 ></span
                             >
                         </div>
-                        <RouterLink to="/hems/settings" class="small d-inline-block mt-2">{{
+                        <RouterLink to="/energy/planning" class="small d-inline-block mt-2">{{
                             t('hemsUi.editPlanes')
                         }}</RouterLink>
                     </details>
@@ -177,9 +179,11 @@
                     >
                         {{ t('hemsUi.sourceOnly') }}
                     </p>
-                    <p v-if="kind === 'forecast'" class="small text-body-secondary mt-2">
-                        {{ t('hemsUi.forecastHint') }}
-                    </p>
+                    <HelpHint
+                        v-if="kind === 'forecast'"
+                        :text="t('hemsUi.forecastHint')"
+                        :label="t('hemsUi.forecast')"
+                    />
                     <div class="feed-update mt-3 pt-3">
                         <div class="small text-body-secondary">
                             <div>{{ t('hemsUi.receivedAt') }}: {{ date(feeds[kind]!.fetched_at) }}</div>
@@ -228,7 +232,7 @@
                         <p v-if="kind === 'tariff'" class="small text-body-secondary">
                             {{ t('hemsUi.classificationHint') }}
                         </p>
-                        <RouterLink to="/hems/diagnostics" class="small">{{
+                        <RouterLink to="/energy/diagnostics" class="small">{{
                             t('hemsUi.providerDiagnosticsLink')
                         }}</RouterLink>
                     </details>
@@ -438,7 +442,7 @@
         <p v-else-if="!errors[kind]" class="text-body-secondary" role="status">{{ t('hemsUi.loadingEnergy') }}</p>
         <RouterLink
             v-if="props.view === 'overview' && feeds[kind]?.enabled === false"
-            to="/hems/settings"
+            to="/energy/planning"
             class="small"
             >{{ t('hemsUi.configureEnergy') }}</RouterLink
         >
@@ -474,6 +478,7 @@ import {
     providerMessage,
     type TariffClass,
 } from '@/utils/hemsPresentation';
+import HelpHint from '@/components/HelpHint.vue';
 const props = defineProps<{ view?: EnergyView }>();
 const emit = defineEmits<{ health: [issue: boolean] }>();
 const { t, locale } = useI18n();

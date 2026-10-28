@@ -1,5 +1,5 @@
 <template>
-    <BasePage :title="$t('powermeteradmin.PowerMeterSettings')" :isLoading="dataLoading">
+    <BasePage :title="$t('powermeteradmin.PowerMeterSettings')" :isLoading="dataLoading" :embedded="embedded">
         <BootstrapAlert
             v-model="showAlert"
             dismissible
@@ -325,6 +325,7 @@ export default defineComponent({
         HttpRequestSettings,
         InputElement,
     },
+    props: { embedded: Boolean },
     data() {
         return {
             dataLoading: true,

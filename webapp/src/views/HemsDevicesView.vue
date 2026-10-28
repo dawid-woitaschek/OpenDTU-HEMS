@@ -1,6 +1,9 @@
 <template>
-    <BasePage :title="$t('hemsUi.devices')" :isLoading="dataLoading">
-        <HemsNav />
+    <BasePage :title="$t('redesign.' + device)" :isLoading="dataLoading" :embedded="embedded">
+        <DeviceStatusPanel :device="device" />
+        <RouterLink to="/energy/integrations" class="d-inline-block mb-3">{{
+            $t('redesign.profileManagement')
+        }}</RouterLink>
         <BootstrapAlert
             v-model="alert.show"
             dismissible
@@ -10,7 +13,7 @@
             {{ alert.message }}
         </BootstrapAlert>
         <template v-if="!dataLoading && !loadFailed && hemsConfig.version === 1">
-            <form @submit.prevent="saveWarp">
+            <form v-if="device === 'wallbox'" @submit.prevent="saveWarp">
                 <CardElement :text="$t('hems.Warp')" textVariant="text-bg-primary">
                     <InputElement
                         :label="$t('hems.WarpEnabled')"
@@ -80,16 +83,16 @@
                                     <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
                                     <option value="hems">{{ $t('hems.ControlHems') }}</option>
                                 </select>
-                                <div class="form-text">{{ $t('hems.ControlModeHint') }}</div>
+                                <HelpHint :text="$t('hems.ControlModeHint')" />
                             </div>
                         </div>
-                        <div class="alert alert-secondary" role="alert">{{ $t('hems.WarpSetupHint') }}</div>
+                        <HelpHint :text="$t('hems.WarpSetupHint')" />
                     </template>
                     <FormFooter @reload="getConfig" />
                 </CardElement>
             </form>
 
-            <form @submit.prevent="saveStorage">
+            <form v-if="device === 'battery'" @submit.prevent="saveStorage">
                 <CardElement :text="$t('storage.Title')" textVariant="text-bg-primary" add-space>
                     <InputElement
                         :label="$t('storage.Enabled')"
@@ -180,10 +183,10 @@
                                     <option value="monitor">{{ $t('hems.ControlMonitorOnly') }}</option>
                                     <option value="hems">{{ $t('hems.ControlHems') }}</option>
                                 </select>
-                                <div class="form-text">{{ $t('hems.ControlModeHint') }}</div>
+                                <HelpHint :text="$t('hems.ControlModeHint')" />
                             </div>
                         </div>
-                        <div class="alert alert-secondary" role="alert">{{ $t('storage.SetupHint') }}</div>
+                        <HelpHint :text="$t('storage.SetupHint')" />
                     </template>
                     <FormFooter @reload="getConfig" />
                 </CardElement>
@@ -194,20 +197,19 @@
         </div>
         <details v-if="!dataLoading && !loadFailed" class="border rounded p-3 mt-4">
             <summary>{{ $t('hemsUi.manualControls') }}</summary>
-            <HemsControlPanel />
+            <HemsControlPanel :device="device === 'battery' ? 'storage' : 'evse'" />
         </details>
-        <HemsProfilePanel v-if="!dataLoading && !loadFailed" class="mt-4" @profiles-changed="refreshProfiles" />
     </BasePage>
 </template>
 
 <script lang="ts">
-import HemsNav from '@/components/hems/HemsNav.vue';
+import DeviceStatusPanel from '@/components/hems/DeviceStatusPanel.vue';
+import HelpHint from '@/components/HelpHint.vue';
 import HemsControlPanel from '@/components/HemsControlPanel.vue';
 import BasePage from '@/components/BasePage.vue';
 import BootstrapAlert from '@/components/BootstrapAlert.vue';
 import CardElement from '@/components/CardElement.vue';
 import FormFooter from '@/components/FormFooter.vue';
-import HemsProfilePanel from '@/components/HemsProfilePanel.vue';
 import InputElement from '@/components/InputElement.vue';
 import type { AlertResponse } from '@/types/AlertResponse';
 import type { HemsConfig, HemsDeviceControlMode } from '@/types/HemsConfig';
@@ -228,15 +230,16 @@ type EvseBinding = {
 
 export default defineComponent({
     components: {
-        HemsNav,
+        DeviceStatusPanel,
+        HelpHint,
         HemsControlPanel,
         BasePage,
         BootstrapAlert,
         CardElement,
         FormFooter,
-        HemsProfilePanel,
         InputElement,
     },
+    props: { device: { type: String, default: 'wallbox' }, embedded: Boolean },
     data() {
         return {
             dataLoading: true,

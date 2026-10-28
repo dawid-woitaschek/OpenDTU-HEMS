@@ -4,7 +4,7 @@
             <span class="badge text-bg-secondary">{{ t('hemsUi.planning') }}</span>
             <strong>{{ t(plan?.dispatch?.enabled ? 'hemsUi.dispatchEnabled' : 'hemsUi.shadowOnly') }}</strong>
         </div>
-        <p class="small text-body-secondary">{{ t('hemsUi.dispatchHint') }}</p>
+        <HelpHint :text="t('hemsUi.dispatchHint')" />
         <div v-if="plan?.dispatch && !error" class="border rounded p-3 mb-3" role="status">
             <div class="fw-semibold">{{ dispatchLabel(plan.dispatch.state) }}</div>
             <div class="small text-body-secondary mt-1">
@@ -34,17 +34,18 @@
             <div class="border rounded p-3 mb-3 small" v-if="!error && props.view !== 'settings'">
                 <strong>{{ t('hemsUi.storagePolicies') }}</strong>
                 <div>
-                    {{ t('hemsUi.batteryReserve') }}: {{ plan.config.min_soc_pct }}% · {{ t('hemsUi.maxDesiredSoc') }}:
-                    {{ plan.config.max_soc_pct }}%
+                    {{ t('hemsUi.batteryReserve') }} <HelpHint :text="t('hemsUi.policyHint')" />:
+                    {{ plan.config.min_soc_pct }}% · {{ t('hemsUi.maxDesiredSoc') }}
+                    <HelpHint :text="t('hemsUi.policyHint')" />: {{ plan.config.max_soc_pct }}%
                 </div>
                 <div>
-                    {{ t('hemsUi.gridCharging') }}:
+                    {{ t('hemsUi.gridCharging') }} <HelpHint :text="t('hemsUi.policyHint')" />:
                     {{
                         t(plan.config.policies?.grid_charging_allowed === false ? 'hemsUi.forbidden' : 'hemsUi.allowed')
                     }}
                 </div>
                 <div>
-                    {{ t('hemsUi.economicDischarge') }}:
+                    {{ t('hemsUi.economicDischarge') }} <HelpHint :text="t('hemsUi.policyHint')" />:
                     {{ t(plan.config.policies?.discharge_allowed === false ? 'hemsUi.forbidden' : 'hemsUi.allowed') }}
                 </div>
                 <div v-if="plan.config.policies?.target_enabled">
@@ -72,7 +73,7 @@
             </ul>
             <RouterLink
                 v-if="plan.blockers.length && props.view === 'overview'"
-                to="/hems/settings"
+                to="/energy/planning"
                 class="small d-inline-block mb-3"
                 >{{ t('hemsUi.reviewPrerequisites') }}</RouterLink
             >
@@ -133,9 +134,12 @@
                         {{ t('hemsUi.optimizedCost') }}: {{ money(plan.optimized_cost_nano) }}
                     </p>
                 </details>
-                <RouterLink v-if="props.view === 'overview'" to="/hems/diagnostics" class="small d-inline-block mt-3">{{
-                    t('hemsUi.fullSchedule')
-                }}</RouterLink>
+                <RouterLink
+                    v-if="props.view === 'overview'"
+                    to="/energy/diagnostics"
+                    class="small d-inline-block mt-3"
+                    >{{ t('hemsUi.fullSchedule') }}</RouterLink
+                >
             </template>
             <form v-if="draft && props.view === 'settings'" class="mt-4" @submit.prevent="save">
                 <label class="form-check-label d-block mb-3"
@@ -143,19 +147,18 @@
                         id="optimizer-enabled"
                         v-model="draft.enabled"
                         type="checkbox"
-                        class="form-check-input me-2"
-                    />{{ t('hemsUi.enableShadow') }}</label
-                >
+                        class="form-check-input me-2" />{{ t('hemsUi.enableShadow') }}
+                    <HelpHint :text="t('hemsUi.dispatchHint')"
+                /></label>
                 <label class="form-check-label d-block mb-3"
                     ><input
                         id="optimizer-soc-confirm"
                         v-model="draft.soc_bounds_configured"
                         type="checkbox"
-                        class="form-check-input me-2"
-                    />{{ t('hemsUi.confirmSoc') }}</label
-                >
+                        class="form-check-input me-2" />{{ t('hemsUi.confirmSoc') }}
+                    <HelpHint :text="t('hemsUi.policyHint')"
+                /></label>
 
-                <EnergyManagementSettings v-model="draft.energy_management" @reference="applyReference" />
                 <label for="optimizer-expected_base_load_w" class="form-label">{{ t('hemsUi.baseLoad') }} (W)</label>
                 <input
                     id="optimizer-expected_base_load_w"
@@ -168,13 +171,14 @@
                     required
                 />
                 <fieldset class="border rounded p-3 mb-3" v-if="draft.policies">
-                    <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.storagePolicies') }}</legend>
-                    <p class="form-text mt-0">{{ t('hemsUi.policyHint') }}</p>
+                    <legend class="float-none w-auto fs-6 px-1">
+                        {{ t('hemsUi.storagePolicies') }} <HelpHint :text="t('hemsUi.policyHint')" />
+                    </legend>
                     <div class="row g-3">
                         <div class="col-sm-6">
                             <label for="optimizer-min_soc_pct" class="form-label"
-                                >{{ t('hemsUi.batteryReserve') }} (%)</label
-                            >
+                                >{{ t('hemsUi.batteryReserve') }} (%) <HelpHint :text="t('hemsUi.policyHint')"
+                            /></label>
                             <input
                                 id="optimizer-min_soc_pct"
                                 v-model.number="draft.min_soc_pct"
@@ -188,8 +192,8 @@
                         </div>
                         <div class="col-sm-6">
                             <label for="optimizer-max_soc_pct" class="form-label"
-                                >{{ t('hemsUi.maxDesiredSoc') }} (%)</label
-                            >
+                                >{{ t('hemsUi.maxDesiredSoc') }} (%) <HelpHint :text="t('hemsUi.policyHint')"
+                            /></label>
                             <input
                                 id="optimizer-max_soc_pct"
                                 v-model.number="draft.max_soc_pct"
@@ -233,9 +237,9 @@
                             id="optimizer-target-enabled"
                             v-model="draft.policies.target_enabled"
                             type="checkbox"
-                            class="form-check-input me-2"
-                        />{{ t('hemsUi.targetCharge') }}</label
-                    >
+                            class="form-check-input me-2" />{{ t('hemsUi.targetCharge') }}
+                        <HelpHint :text="t('hemsUi.targetHint')"
+                    /></label>
                     <div v-if="draft.policies.target_enabled" class="row g-3">
                         <div class="col-sm-4">
                             <label for="optimizer-target-soc" class="form-label"
@@ -266,7 +270,7 @@
                             />
                         </div>
                     </div>
-                    <p class="form-text mb-0">{{ t('hemsUi.targetHint') }}</p>
+                    <HelpHint :text="t('hemsUi.targetHint')" />
                 </fieldset>
 
                 <div class="border rounded p-3 mb-3">
@@ -277,14 +281,26 @@
                             type="checkbox"
                             class="form-check-input me-2"
                         />
-                        <strong>{{ t('hemsUi.enableDispatch') }}</strong>
+                        <strong
+                            >{{ t('hemsUi.enableDispatch') }} <HelpHint :text="t('hemsUi.dispatchOptInHint')"
+                        /></strong>
                     </label>
-                    <p class="form-text mb-0">{{ t('hemsUi.dispatchOptInHint') }}</p>
+                    <HelpHint :text="t('hemsUi.dispatchOptInHint')" />
                 </div>
 
                 <details class="border rounded p-3 mb-3">
-                    <summary>{{ t('hemsUi.advancedSettings') }}</summary>
-                    <p class="form-text mt-3">{{ t('hemsUi.optimizerConfigHint') }}</p>
+                    <summary>{{ t('hemsUi.energyManagement') }}</summary>
+                    <EnergyManagementSettings
+                        class="mt-3"
+                        v-model="draft.energy_management"
+                        @reference="applyReference"
+                    />
+                </details>
+                <details class="border rounded p-3 mb-3">
+                    <summary>
+                        {{ t('redesign.advancedOptimizer') }} <HelpHint :text="t('hemsUi.optimizerConfigHint')" />
+                    </summary>
+                    <HelpHint :text="t('hemsUi.optimizerConfigHint')" />
                     <div class="row g-3 mt-1">
                         <div v-for="field in advancedFields" :key="field.key" class="col-sm-6">
                             <label :for="`optimizer-${field.key}`" class="form-label"
@@ -427,6 +443,7 @@
     </CardElement>
 </template>
 <script setup lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import EnergyManagementSummary from '@/components/hems/EnergyManagementSummary.vue';
 import EnergyManagementSettings from '@/components/hems/EnergyManagementSettings.vue';
 import { defaultEnergyManagement, type EnergyManagement } from '@/utils/hemsEnergyManagement';

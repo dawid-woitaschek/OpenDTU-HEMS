@@ -5,14 +5,14 @@
     </p>
     <p v-if="status?.economic_dispatch?.paused_manual" class="alert alert-info" role="status">
         {{ t('hemsUi.dispatchStates.paused_manual') }}
-        <RouterLink to="/hems">{{ t('hemsUi.resumeEconomic') }}</RouterLink>
+        <RouterLink to="/">{{ t('hemsUi.resumeEconomic') }}</RouterLink>
     </p>
     <p v-if="notice" role="status">{{ notice }}</p>
     <template v-if="status">
         <CardElement
             v-for="name in targets"
             :key="name"
-            :text="name === 'storage' ? 'Storage' : 'EVSE / WARP'"
+            :text="t(name === 'storage' ? 'redesign.battery' : 'redesign.wallbox')"
             textVariant="text-bg-primary"
             add-space
         >
@@ -197,7 +197,7 @@
     </template>
 </template>
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import CardElement from '@/components/CardElement.vue';
 import type { HemsStatus, HemsOperation } from '@/types/HemsStatus';
 import { authHeader } from '@/utils/authentication';
@@ -205,7 +205,8 @@ import { controlText } from '@/hemsControl';
 import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 type Target = 'storage' | 'evse';
-const targets: Target[] = ['storage', 'evse'];
+const props = defineProps<{ device?: Target }>();
+const targets = computed<Target[]>(() => (props.device ? [props.device] : ['storage', 'evse']));
 const status = ref<HemsStatus>(),
     values = ref<Record<string, number>>({}),
     error = ref(''),

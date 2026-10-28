@@ -163,7 +163,7 @@ export default defineComponent({
                     this.dplData = root['dpl'];
                     this.solarcharger = root['solarcharger'];
                     this.dataLoading = false;
-                    this.resetDataAging(Object.keys(root['solarcharger']['instances']));
+                    this.resetDataAging(Object.keys(root['solarcharger']['instances'] || {}));
                 });
         },
         handleMessage(event: MessageEvent) {
@@ -176,7 +176,7 @@ export default defineComponent({
                 Object.assign(this.solarcharger.instances, root['solarcharger']['instances']);
             }
 
-            this.resetDataAging(Object.keys(root['solarcharger']['instances']));
+            this.resetDataAging(Object.keys(root['solarcharger']['instances'] || {}));
             this.dataLoading = false;
         },
         initSocket() {

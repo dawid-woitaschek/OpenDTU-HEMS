@@ -3,17 +3,15 @@ import HemsDevicesView from '@/views/HemsDevicesView.vue';
 import HemsDiagnosticsView from '@/views/HemsDiagnosticsView.vue';
 import HemsInfoView from '@/views/HemsInfoView.vue';
 import AboutView from '@/views/AboutView.vue';
-import BatteryAdminView from '@/views/BatteryAdminView.vue';
-import GridChargerAdminView from '@/views/GridChargerAdminView.vue';
 import ConfigAdminView from '@/views/ConfigAdminView.vue';
 import ConsoleInfoView from '@/views/ConsoleInfoView.vue';
 import DeviceAdminView from '@/views/DeviceAdminView.vue';
 import DtuAdminView from '@/views/DtuAdminView.vue';
 import ErrorView from '@/views/ErrorView.vue';
 import FirmwareUpgradeView from '@/views/FirmwareUpgradeView.vue';
-import HomeView from '@/views/HomeView.vue';
-import SolarChargerAdminView from '@/views/SolarChargerAdminView.vue';
-import PowerMeterAdminView from '@/views/PowerMeterAdminView.vue';
+import LiveDataView from '@/views/LiveDataView.vue';
+import PlantDeviceView from '@/views/PlantDeviceView.vue';
+import IntegrationsView from '@/views/IntegrationsView.vue';
 import PowerLimiterAdminView from '@/views/PowerLimiterAdminView.vue';
 import InverterAdminView from '@/views/InverterAdminView.vue';
 import LoginView from '@/views/LoginView.vue';
@@ -41,29 +39,34 @@ const router = createRouter({
         });
     },
     routes: [
-        { path: '/hems/diagnostics', name: 'HEMS Diagnostics', component: HemsDiagnosticsView },
         {
-            path: '/hems/settings',
-            alias: '/settings/hems',
+            path: '/energy/diagnostics',
+            alias: '/hems/diagnostics',
+            name: 'HEMS Diagnostics',
+            component: HemsDiagnosticsView,
+        },
+        {
+            path: '/energy/planning',
+            alias: ['/settings/hems', '/hems/settings'],
             name: 'HEMS Settings',
             component: HemsAdminView,
         },
+        { path: '/hems', redirect: '/' },
+        { path: '/info/hems', redirect: '/' },
+        { path: '/hems/devices', redirect: '/energy/integrations' },
+        { path: '/hems/profiles', redirect: '/energy/integrations' },
+        { path: '/energy/integrations', name: 'Integrations', component: IntegrationsView },
+        { path: '/', name: 'Home', component: HemsInfoView },
+        { path: '/live', name: 'Live Data', component: LiveDataView },
+        { path: '/plant/inverters', name: 'Inverters', component: LiveDataView, props: { invertersOnly: true } },
+        { path: '/plant/solar', name: 'Solar', component: PlantDeviceView, props: { device: 'solar' } },
+        { path: '/plant/battery', name: 'Battery', component: PlantDeviceView, props: { device: 'battery' } },
+        { path: '/plant/wallbox', name: 'Wallbox', component: HemsDevicesView, props: { device: 'wallbox' } },
         {
-            path: '/hems',
-            alias: '/info/hems',
-            name: 'HEMS Info',
-            component: HemsInfoView,
-        },
-        {
-            path: '/hems/devices',
-            alias: '/hems/profiles',
-            name: 'HEMS Devices',
-            component: HemsDevicesView,
-        },
-        {
-            path: '/',
-            name: 'Home',
-            component: HomeView,
+            path: '/plant/power-meter',
+            name: 'Power Meter',
+            component: PlantDeviceView,
+            props: { device: 'powerMeter' },
         },
         {
             path: '/login',
@@ -115,38 +118,24 @@ const router = createRouter({
             name: 'NTP Settings',
             component: NtpAdminView,
         },
+        { path: '/settings/solarcharger', redirect: '/plant/solar' },
+        { path: '/settings/powermeter', redirect: '/plant/power-meter' },
         {
-            path: '/settings/solarcharger',
-            name: 'Solar Charger Settings',
-            component: SolarChargerAdminView,
-        },
-        {
-            path: '/settings/powermeter',
-            name: 'Power meter Settings',
-            component: PowerMeterAdminView,
-        },
-        {
-            path: '/settings/powerlimiter',
+            path: '/plant/inverters/power-limit',
+            alias: '/settings/powerlimiter',
             name: 'Power limiter Settings',
             component: PowerLimiterAdminView,
         },
-        {
-            path: '/settings/battery',
-            name: 'Battery Settings',
-            component: BatteryAdminView,
-        },
-        {
-            path: '/settings/chargerac',
-            name: 'Charger Settings',
-            component: GridChargerAdminView,
-        },
+        { path: '/settings/battery', redirect: '/plant/battery' },
+        { path: '/settings/chargerac', redirect: '/plant/battery' },
         {
             path: '/settings/mqtt',
             name: 'MqTT Settings',
             component: MqttAdminView,
         },
         {
-            path: '/settings/inverter',
+            path: '/plant/inverters/configuration',
+            alias: '/settings/inverter',
             name: 'Inverter Settings',
             component: InverterAdminView,
         },

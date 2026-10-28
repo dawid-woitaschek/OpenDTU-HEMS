@@ -1,24 +1,7 @@
 <template>
     <NavBar />
-    <router-view />
+    <div id="main-content" class="app-content" tabindex="-1"><router-view /></div>
 </template>
-
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
 import NavBar from './components/NavBar.vue';
-
-export default defineComponent({
-    name: 'App',
-    components: {
-        NavBar,
-    },
-});
 </script>
-
-<style>
-/* Show it is fixed to the top */
-body {
-    padding-bottom: 1rem;
-    padding-top: 4.5rem;
-}
-</style>

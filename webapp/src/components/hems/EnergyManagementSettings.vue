@@ -1,7 +1,7 @@
 <template>
     <fieldset class="border rounded p-3 mb-3">
         <legend class="float-none w-auto fs-6 px-1">{{ t('hemsUi.energyManagement') }}</legend>
-        <p class="form-text mt-0">{{ t('hemsUi.managementHint') }}</p>
+        <HelpHint :text="t('hemsUi.managementHint')" />
         <button type="button" class="btn btn-outline-secondary mb-3" @click="applyReference">
             {{ t('hemsUi.referencePreset') }}
         </button>
@@ -19,7 +19,7 @@
             <option :value="1">{{ t('hemsUi.localFirst') }}</option>
             <option :value="2">{{ t('hemsUi.exportFirst') }}</option>
         </select>
-        <p class="form-text">{{ t('hemsUi.preferenceHint') }}</p>
+        <HelpHint :text="t('hemsUi.preferenceHint')" />
         <div v-for="field in permissions" :key="field" class="form-check mb-2">
             <input :id="`energy-${field}`" v-model="model[field]" type="checkbox" class="form-check-input" />
             <label :for="`energy-${field}`" class="form-check-label">{{ t('hemsUi.' + field) }}</label>
@@ -40,13 +40,13 @@
             <option :value="false">{{ t('hemsUi.fixedLoad') }}</option>
             <option :value="true">{{ t('hemsUi.automaticLoad') }}</option>
         </select>
-        <p class="form-text">{{ t('hemsUi.learningHint') }}</p>
+        <HelpHint :text="t('hemsUi.learningHint')" />
         <p v-if="model.enabled && model.wear_source === 0" class="alert alert-warning">
             {{ t('hemsUi.wearAcknowledgementHint') }}
         </p>
         <details class="mt-3">
             <summary>{{ t('hemsUi.advancedSettings') }}</summary>
-            <p class="form-text">{{ t('hemsUi.economicsHint') }}</p>
+            <HelpHint :text="t('hemsUi.economicsHint')" />
             <label for="energy-wear-source" class="form-label">{{ t('hemsUi.wearSource') }}</label>
             <select
                 id="energy-wear-source"
@@ -89,11 +89,12 @@
                     t('hemsUi.explicitTerminalPrice')
                 }}</label
             >
-            <p class="form-text">{{ t('hemsUi.terminalHint') }}</p>
+            <HelpHint :text="t('hemsUi.terminalHint')" />
         </details>
     </fieldset>
 </template>
 <script setup lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import { useI18n } from 'vue-i18n';
 import { referencePreset, type EnergyManagement } from '@/utils/hemsEnergyManagement';
 const model = defineModel<EnergyManagement>({ required: true });

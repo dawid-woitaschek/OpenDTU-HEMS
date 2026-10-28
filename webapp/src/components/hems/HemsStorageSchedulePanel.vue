@@ -9,7 +9,7 @@
                 {{ dispatchLabel(plan.dispatch.state) }}
             </span>
         </div>
-        <p class="small text-body-secondary mb-3">{{ t('hemsUi.dispatchHint') }}</p>
+        <HelpHint :text="t('hemsUi.dispatchHint')" :label="t('hemsUi.planning')" />
 
         <p v-if="error" class="alert alert-warning" role="alert">{{ copy.loadFailed }} {{ error }}</p>
         <template v-if="plan && !error">
@@ -92,163 +92,185 @@
                     </div>
                 </div>
 
-                <section class="rounded border p-3 mb-3" aria-labelledby="hems-schedule-timeline">
-                    <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
-                        <div>
-                            <h2 id="hems-schedule-timeline" class="h6 mb-1">{{ copy.timeline }}</h2>
-                            <div class="small text-body-secondary">
-                                {{ timeRange(windowStart, windowEnd) }} · {{ horizonLabel }}
+                <details class="border rounded p-3 mb-3">
+                    <summary>{{ t('redesign.planDetails') }}</summary>
+                    <div class="mt-3">
+                        <section class="rounded border p-3 mb-3" aria-labelledby="hems-schedule-timeline">
+                            <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
+                                <div>
+                                    <h2 id="hems-schedule-timeline" class="h6 mb-1">{{ copy.timeline }}</h2>
+                                    <div class="small text-body-secondary">
+                                        {{ timeRange(windowStart, windowEnd) }} · {{ horizonLabel }}
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-3 small" aria-label="Schedule legend">
+                                    <span class="legend-item"
+                                        ><span class="legend-swatch action-charge"></span>{{ copy.charge }}</span
+                                    >
+                                    <span class="legend-item"
+                                        ><span class="legend-swatch action-hold"></span>{{ copy.hold }}</span
+                                    >
+                                    <span class="legend-item"
+                                        ><span class="legend-swatch action-discharge"></span>{{ copy.discharge }}</span
+                                    >
+                                    <span class="legend-item"
+                                        ><span class="legend-swatch action-gap"></span>{{ copy.gap }}</span
+                                    >
+                                </div>
                             </div>
-                        </div>
-                        <div class="d-flex flex-wrap gap-3 small" aria-label="Schedule legend">
-                            <span class="legend-item"
-                                ><span class="legend-swatch action-charge"></span>{{ copy.charge }}</span
-                            >
-                            <span class="legend-item"
-                                ><span class="legend-swatch action-hold"></span>{{ copy.hold }}</span
-                            >
-                            <span class="legend-item"
-                                ><span class="legend-swatch action-discharge"></span>{{ copy.discharge }}</span
-                            >
-                            <span class="legend-item"
-                                ><span class="legend-swatch action-gap"></span>{{ copy.gap }}</span
-                            >
-                        </div>
-                    </div>
-                    <div class="timeline-wrap">
-                        <div class="schedule-timeline" role="img" :aria-label="copy.timelineAria">
+                            <div class="timeline-wrap">
+                                <div class="schedule-timeline" role="img" :aria-label="copy.timelineAria">
+                                    <div
+                                        v-for="part in parts"
+                                        :key="`${part.start}-${part.action}-${part.battery_w}`"
+                                        class="schedule-segment"
+                                        :class="part.gap ? 'action-gap' : actionClass(part.action)"
+                                        :style="{ flexGrow: String(part.end - part.start) }"
+                                        :title="partTitle(part)"
+                                    >
+                                        <span class="visually-hidden">{{ partTitle(part) }}</span>
+                                    </div>
+                                </div>
+                                <span
+                                    v-if="nowPosition != null"
+                                    class="now-marker"
+                                    :style="{ left: `${nowPosition}%` }"
+                                    aria-hidden="true"
+                                ></span>
+                            </div>
+                            <div class="d-flex justify-content-between small text-body-secondary mt-1">
+                                <span>{{ shortDateTime(windowStart) }}</span>
+                                <span>{{ shortDateTime(windowMiddle) }}</span>
+                                <span>{{ shortDateTime(windowEnd) }}</span>
+                            </div>
+                        </section>
+
+                        <section class="rounded border p-3 mb-3" aria-labelledby="hems-operation-plan">
+                            <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
+                                <div>
+                                    <h2 id="hems-operation-plan" class="h6 mb-1">{{ copy.operationPlan }}</h2>
+                                    <div class="small text-body-secondary">{{ copy.operationPlanHint }}</div>
+                                </div>
+                                <RouterLink to="/energy/diagnostics" class="small">{{
+                                    t('hemsUi.fullSchedule')
+                                }}</RouterLink>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0 operation-table">
+                                    <thead>
+                                        <tr class="small text-body-secondary">
+                                            <th scope="col">{{ copy.period }}</th>
+                                            <th scope="col">{{ copy.action }}</th>
+                                            <th scope="col">{{ copy.power }}</th>
+                                            <th scope="col">{{ copy.soc }}</th>
+                                            <th scope="col">{{ copy.price }}</th>
+                                            <th scope="col">{{ copy.reason }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr
+                                            v-for="block in operationRows"
+                                            :key="`${block.start}-${block.action}-${block.battery_w}`"
+                                        >
+                                            <td class="text-nowrap">{{ timeRange(block.start, block.end) }}</td>
+                                            <td>
+                                                <span class="operation-dot" :class="actionClass(block.action)"></span>
+                                                {{ actionLabel(block.action) }}
+                                            </td>
+                                            <td class="text-nowrap">{{ powerLabel(block.battery_w) }}</td>
+                                            <td class="text-nowrap">{{ soc(block.end_soc_pct) }}</td>
+                                            <td class="text-nowrap">{{ blockPrice(block) }}</td>
+                                            <td class="small text-body-secondary">
+                                                {{ reasonLabel(block.reason || '') }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                             <div
-                                v-for="part in parts"
-                                :key="`${part.start}-${part.action}-${part.battery_w}`"
-                                class="schedule-segment"
-                                :class="part.gap ? 'action-gap' : actionClass(part.action)"
-                                :style="{ flexGrow: String(part.end - part.start) }"
-                                :title="partTitle(part)"
+                                v-if="futureBlocks.length > operationRows.length"
+                                class="small text-body-secondary mt-2"
                             >
-                                <span class="visually-hidden">{{ partTitle(part) }}</span>
+                                {{
+                                    copy.moreBlocks.replace(
+                                        '{count}',
+                                        String(futureBlocks.length - operationRows.length)
+                                    )
+                                }}
                             </div>
-                        </div>
-                        <span
-                            v-if="nowPosition != null"
-                            class="now-marker"
-                            :style="{ left: `${nowPosition}%` }"
-                            aria-hidden="true"
-                        ></span>
-                    </div>
-                    <div class="d-flex justify-content-between small text-body-secondary mt-1">
-                        <span>{{ shortDateTime(windowStart) }}</span>
-                        <span>{{ shortDateTime(windowMiddle) }}</span>
-                        <span>{{ shortDateTime(windowEnd) }}</span>
-                    </div>
-                </section>
+                        </section>
 
-                <section class="rounded border p-3 mb-3" aria-labelledby="hems-operation-plan">
-                    <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
-                        <div>
-                            <h2 id="hems-operation-plan" class="h6 mb-1">{{ copy.operationPlan }}</h2>
-                            <div class="small text-body-secondary">{{ copy.operationPlanHint }}</div>
-                        </div>
-                        <RouterLink to="/hems/diagnostics" class="small">{{ t('hemsUi.fullSchedule') }}</RouterLink>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm align-middle mb-0 operation-table">
-                            <thead>
-                                <tr class="small text-body-secondary">
-                                    <th scope="col">{{ copy.period }}</th>
-                                    <th scope="col">{{ copy.action }}</th>
-                                    <th scope="col">{{ copy.power }}</th>
-                                    <th scope="col">{{ copy.soc }}</th>
-                                    <th scope="col">{{ copy.price }}</th>
-                                    <th scope="col">{{ copy.reason }}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="block in operationRows"
-                                    :key="`${block.start}-${block.action}-${block.battery_w}`"
-                                >
-                                    <td class="text-nowrap">{{ timeRange(block.start, block.end) }}</td>
-                                    <td>
-                                        <span class="operation-dot" :class="actionClass(block.action)"></span>
-                                        {{ actionLabel(block.action) }}
-                                    </td>
-                                    <td class="text-nowrap">{{ powerLabel(block.battery_w) }}</td>
-                                    <td class="text-nowrap">{{ soc(block.end_soc_pct) }}</td>
-                                    <td class="text-nowrap">{{ blockPrice(block) }}</td>
-                                    <td class="small text-body-secondary">{{ reasonLabel(block.reason || '') }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div v-if="futureBlocks.length > operationRows.length" class="small text-body-secondary mt-2">
-                        {{ copy.moreBlocks.replace('{count}', String(futureBlocks.length - operationRows.length)) }}
-                    </div>
-                </section>
+                        <section v-if="socPath" class="rounded border p-3 mb-3" aria-labelledby="hems-soc-plan">
+                            <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
+                                <div>
+                                    <h2 id="hems-soc-plan" class="h6 mb-1">{{ copy.socPlan }}</h2>
+                                    <div class="small text-body-secondary">
+                                        {{ soc(startSoc) }} → {{ soc(visibleEndSoc) }}
+                                    </div>
+                                </div>
+                                <div class="small text-body-secondary">
+                                    {{ copy.reserve }} {{ plan.config.min_soc_pct }}% · {{ copy.maximum }}
+                                    {{ plan.config.max_soc_pct }}%
+                                </div>
+                            </div>
+                            <svg
+                                class="soc-chart"
+                                viewBox="0 0 1000 140"
+                                preserveAspectRatio="none"
+                                role="img"
+                                :aria-label="copy.socPlan"
+                            >
+                                <line
+                                    x1="0"
+                                    x2="1000"
+                                    :y1="socY(plan.config.min_soc_pct)"
+                                    :y2="socY(plan.config.min_soc_pct)"
+                                    class="reserve-line"
+                                />
+                                <path :d="socPath" class="soc-line" />
+                            </svg>
+                            <div class="d-flex justify-content-between small text-body-secondary">
+                                <span>{{ soc(socRange[0]) }}</span>
+                                <span>{{ copy.plannedRange }}</span>
+                                <span>{{ soc(socRange[1]) }}</span>
+                            </div>
+                        </section>
 
-                <section v-if="socPath" class="rounded border p-3 mb-3" aria-labelledby="hems-soc-plan">
-                    <div class="d-flex flex-wrap align-items-end justify-content-between gap-2 mb-2">
-                        <div>
-                            <h2 id="hems-soc-plan" class="h6 mb-1">{{ copy.socPlan }}</h2>
-                            <div class="small text-body-secondary">{{ soc(startSoc) }} → {{ soc(visibleEndSoc) }}</div>
-                        </div>
-                        <div class="small text-body-secondary">
-                            {{ copy.reserve }} {{ plan.config.min_soc_pct }}% · {{ copy.maximum }}
-                            {{ plan.config.max_soc_pct }}%
-                        </div>
-                    </div>
-                    <svg
-                        class="soc-chart"
-                        viewBox="0 0 1000 140"
-                        preserveAspectRatio="none"
-                        role="img"
-                        :aria-label="copy.socPlan"
-                    >
-                        <line
-                            x1="0"
-                            x2="1000"
-                            :y1="socY(plan.config.min_soc_pct)"
-                            :y2="socY(plan.config.min_soc_pct)"
-                            class="reserve-line"
-                        />
-                        <path :d="socPath" class="soc-line" />
-                    </svg>
-                    <div class="d-flex justify-content-between small text-body-secondary">
-                        <span>{{ soc(socRange[0]) }}</span>
-                        <span>{{ copy.plannedRange }}</span>
-                        <span>{{ soc(socRange[1]) }}</span>
-                    </div>
-                </section>
+                        <section
+                            class="rounded bg-body-tertiary p-3 mb-3 small"
+                            aria-labelledby="hems-storage-strategy"
+                        >
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                                <strong id="hems-storage-strategy">{{ copy.strategy }}</strong>
+                                <RouterLink to="/energy/planning">{{ copy.editStrategy }}</RouterLink>
+                            </div>
+                            <div class="row g-2 mt-1">
+                                <div class="col-sm-6 col-lg-3">
+                                    <span class="text-body-secondary">{{ copy.reserve }}</span
+                                    ><br />
+                                    <strong>{{ plan.config.min_soc_pct }}%</strong>
+                                </div>
+                                <div class="col-sm-6 col-lg-3">
+                                    <span class="text-body-secondary">{{ copy.gridCharging }}</span
+                                    ><br />
+                                    <strong>{{ yesNo(plan.config.policies?.grid_charging_allowed !== false) }}</strong>
+                                </div>
+                                <div class="col-sm-6 col-lg-3">
+                                    <span class="text-body-secondary">{{ copy.discharge }}</span
+                                    ><br />
+                                    <strong>{{ yesNo(plan.config.policies?.discharge_allowed !== false) }}</strong>
+                                </div>
+                                <div class="col-sm-6 col-lg-3">
+                                    <span class="text-body-secondary">{{ copy.target }}</span
+                                    ><br />
+                                    <strong>{{ targetLabel }}</strong>
+                                </div>
+                            </div>
+                        </section>
 
-                <section class="rounded bg-body-tertiary p-3 mb-3 small" aria-labelledby="hems-storage-strategy">
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <strong id="hems-storage-strategy">{{ copy.strategy }}</strong>
-                        <RouterLink to="/hems/settings">{{ copy.editStrategy }}</RouterLink>
+                        <EnergyManagementSummary :plan="plan" />
                     </div>
-                    <div class="row g-2 mt-1">
-                        <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.reserve }}</span
-                            ><br />
-                            <strong>{{ plan.config.min_soc_pct }}%</strong>
-                        </div>
-                        <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.gridCharging }}</span
-                            ><br />
-                            <strong>{{ yesNo(plan.config.policies?.grid_charging_allowed !== false) }}</strong>
-                        </div>
-                        <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.discharge }}</span
-                            ><br />
-                            <strong>{{ yesNo(plan.config.policies?.discharge_allowed !== false) }}</strong>
-                        </div>
-                        <div class="col-sm-6 col-lg-3">
-                            <span class="text-body-secondary">{{ copy.target }}</span
-                            ><br />
-                            <strong>{{ targetLabel }}</strong>
-                        </div>
-                    </div>
-                </section>
-
-                <EnergyManagementSummary :plan="plan" />
+                </details>
                 <div class="row g-3">
                     <div class="col-sm-6">
                         <div class="small text-body-secondary">{{ t('hemsUi.modeledSavings') }}</div>
@@ -273,14 +295,15 @@
             </template>
 
             <div class="d-flex flex-wrap gap-3 mt-3 small">
-                <RouterLink to="/hems/settings">{{ copy.settings }}</RouterLink>
-                <RouterLink to="/hems/diagnostics">{{ t('hemsUi.fullSchedule') }}</RouterLink>
+                <RouterLink to="/energy/planning">{{ copy.settings }}</RouterLink>
+                <RouterLink to="/energy/diagnostics">{{ t('hemsUi.fullSchedule') }}</RouterLink>
             </div>
         </template>
     </CardElement>
 </template>
 
 <script setup lang="ts">
+import HelpHint from '@/components/HelpHint.vue';
 import { computed, getCurrentInstance, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';

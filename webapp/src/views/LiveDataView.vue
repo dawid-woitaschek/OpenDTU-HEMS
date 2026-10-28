@@ -1,14 +1,24 @@
 <template>
     <BasePage
-        :title="$t('home.LiveData')"
+        :title="$t(invertersOnly ? 'redesign.inverters' : 'home.LiveData')"
         :isLoading="dataLoading"
         :isWideScreen="true"
         :showWebSocket="true"
         :isWebsocketConnected="isWebsocketConnected"
         @reload="reloadData"
     >
+        <div v-if="invertersOnly" class="d-flex flex-wrap gap-2 mb-3">
+            <RouterLink to="/plant/inverters/configuration" class="btn btn-outline-primary btn-sm">{{
+                $t('redesign.deviceConfiguration')
+            }}</RouterLink>
+            <RouterLink to="/plant/inverters/power-limit" class="btn btn-outline-secondary btn-sm">{{
+                $t('redesign.powerLimit')
+            }}</RouterLink>
+        </div>
+        <DplStatusPanel v-if="invertersOnly" :inverters="inverterData" />
         <HintView :hints="liveData.hints" />
         <InverterTotalInfo
+            v-if="!invertersOnly"
             :totalData="liveData.total"
             :hasInverters="hasInverters"
             :solarChargerData="liveData.solarcharger"
@@ -349,9 +359,9 @@
                 </div>
             </div>
         </div>
-        <SolarChargerView v-if="liveData.solarcharger.enabled" />
-        <BatteryView v-if="liveData.battery.enabled" />
-        <GridChargerView v-if="liveData.gridcharger.enabled" />
+        <SolarChargerView v-if="!invertersOnly && liveData.solarcharger.enabled" />
+        <BatteryView v-if="!invertersOnly && liveData.battery.enabled" />
+        <GridChargerView v-if="!invertersOnly && liveData.gridcharger.enabled" />
     </BasePage>
 
     <ModalDialog modalId="eventView" :title="$t('home.EventLog')" :loading="eventLogLoading">
@@ -544,11 +554,13 @@ import {
     BIconToggleOn,
 } from 'bootstrap-icons-vue';
 import { defineComponent } from 'vue';
+import DplStatusPanel from '@/components/hems/DplStatusPanel.vue';
 import WebSocketService from '@/utils/websocketService';
 
 export default defineComponent({
     components: {
         BasePage,
+        DplStatusPanel,
         BootstrapAlert,
         DataAgeDisplay,
         DevInfo,
@@ -572,6 +584,7 @@ export default defineComponent({
         GridChargerView,
         BatteryView,
     },
+    props: { invertersOnly: { type: Boolean, default: false } },
     data() {
         return {
             isLogged: isLoggedIn(),
@@ -672,7 +685,7 @@ export default defineComponent({
             return this.$n(this.currentLimitList.limit_relative, 'decimalOneDigit');
         },
         inverterData(): Inverter[] {
-            return this.liveData.inverters.slice().sort((a: Inverter, b: Inverter) => {
+            return (this.liveData.inverters || []).slice().sort((a: Inverter, b: Inverter) => {
                 return a.order - b.order;
             });
         },
