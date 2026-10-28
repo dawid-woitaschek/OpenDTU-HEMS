@@ -1,10 +1,12 @@
 # PR #34 consistency review
 
-Reviewed against integration base `hems-energy-management` at
+Historical review (2026-10-23), reviewed against integration base `hems-energy-management` at
 `693eafe60fb2538ec11019dc0875737eb7e0495c`. The fetched PR head before these
 fixes was `bc41747e88cfe3eb0d239e0097a3892b39651ba5`; its two status-document
-commits were preserved. PR #34 remains **draft, unmerged and physically
-unvalidated**. These are source and deterministic software findings.
+commits were preserved at that time. PR #34 is now merged onto hardened `hems`
+with PRs #35/#31/#36. Physical validation remains pending. These historical source
+and deterministic findings are retained; current integration evidence is in
+[energy management](HEMS_Energy_Management.md).
 
 1. **Night discharge: confirmed, with a narrower remedy than declaring DPL
    available.** `PowerLimiterInverter::getEligibility()` deliberately returns

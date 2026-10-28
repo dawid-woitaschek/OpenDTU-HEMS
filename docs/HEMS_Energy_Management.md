@@ -1,7 +1,7 @@
 # Coordinated energy management
 
 This extends the bounded time-slot / stored-energy DP; it does not replace numeric
-prices with price categories or minimum-profit gates. Source baseline fetched from
+prices with price categories or minimum-profit gates. Original implementation baseline fetched from
 `hems`: **693eafe60fb2538ec11019dc0875737eb7e0495c**. At that source the load was
 constant, throughput only broke ties, terminal energy had to remain at least the
 planning start energy, export compensation also permitted battery export, and the
@@ -272,7 +272,7 @@ measure live ESP32 heap, stack high-water marks, planning latency, network jitte
 export transients, TLS headroom or physical Marstek behavior. These still require
 hardware validation; no device was flashed, deployed or operated by this change.
 
-## ESP32-S3 resource budget
+## Historical ESP32-S3 resource budget (before PR #35 integration)
 
 Representative local `generic_esp32s3_usb`, 8 MB flash, **no PSRAM** builds use the
 same installed toolchain/dependencies. The base is an archived checkout of the
@@ -323,10 +323,10 @@ and one value per energy state. Extra monetary/flow arithmetic increases the
 constant factor; no ESP32 latency or battery/network response timing is inferred
 from host execution time.
 
-The integration-base CI runs normal build/test jobs but skips firmware-channel
-publication for this base. CI artifacts remain downloadable. No CI polling,
-merging, deployment, hardware flashing or live installation changes are part of
-this work.
+The original separate integration base was configured for normal build/test jobs
+without channel publication. PR #34 now targets `hems`, using its existing build/channel workflow.
+No GitHub Actions were polled or awaited during integration. No device was flashed
+or operated.
 
 The [PR #34 consistency review](HEMS_PR34_Review.md) records the ten investigated
 concerns, remedies, rejected unsafe alternatives and regression invariants.
@@ -340,3 +340,70 @@ passed after the final source changes. `GITHUB_ACTIONS=true` skipped only the
 redundant automatic web build; the actual pinned frontend build was run locally
 first. The sizes above describe this reviewed source, with the original base
 comparison unchanged. No remote Actions monitoring or physical validation occurred.
+
+
+## Hardened hems integration (2026-10-28)
+
+PR #34 is merged into `hems` after rebasing its existing branch onto `49a2526b`,
+which contains PR #35 runtime/PSRAM hardening, refreshed PR #31 CMT and PR #36
+cleanup. Documentation conflicts retained the newer runtime, radio, cleanup and
+hardware evidence; obsolete separate-branch status was replaced. No PR #33 work
+was replayed. The numeric global DP and all economics/flow behavior above remain.
+
+Expanded candidate/retained Results (including Plans), DP Workspace and Series
+already inherit `hems/Memory.h`; the optional 2,160-byte learning/checkpoint
+snapshot now uses it too. With PSRAM present, these allocations request
+`SPIRAM|8BIT` and fail without INTERNAL fallback; no-PSRAM targets use the normal
+8-bit heap. The fixed retained learner remains in static service storage, like
+retained provider Series. Constant-load mode avoids snapshot allocation. No third
+Plan, new task, stack reservation, allocator-policy tuning or DP redesign is added.
+Stable Result publication and scratch release before provider TLS remain intact.
+
+Physical validation of the combined build remains pending: Marstek V148 sign/
+scale, acquire/Stop/Release and watchdog/persistence, WARP control/EV protection,
+DPL/grid-export transients and timestamp alignment, load learning and optimizer/
+dispatch decisions, planning latency and runtime INTERNAL/PSRAM/stack/TLS headroom.
+Use Device A with 2 MB quad PSRAM (`generic_esp32s3_usb_quad_psram`) and the
+[hardware validation runbook](HEMS_Hardware_Validation.md). No-PSRAM USB is a
+compatibility build. The accepted PR #35 run does not validate these later changes.
+
+Local integration checks on 2026-10-28 passed all 37 native executables and the
+control-surface guard, plus focused memory/optimizer reruns after the new failure
+regressions. Coverage includes expanded Plan/Profile capability placement, no
+INTERNAL spill and retry after learning-snapshot exhaustion, alongside existing
+CMT, provider, controller, mailbox, executor, DP, economics and flow cases.
+Production configuration, firmware channel/provenance and catalog-generation
+checks passed. Node 26 / pinned Yarn 4.18.1 frontend tests, type check, production
+build, oxlint, focused ESLint/Prettier and repository/focused C++ lint passed.
+All three intercepted-API browser suites passed: HEMS/presentation and economic
+flows at 320/360/768/1440 px, plus firmware/catalog regressions at 360/1440 px.
+These checks send no commands to physical devices.
+
+Xtensa GCC 8.4.0 layout checks confirm Series 5,184 B, Workspace 16,200 B, Plan
+18,672 B, Result 19,104 B, learner 2,160 B and service 2,320 B. Two Results, two
+Series, Workspace and learner snapshot can overlap at **66,936 B**, excluding
+allocator/SDK/JSON/network overhead. These dynamic bounded objects all use the
+explicit memory model. Selected optimized USB compiler frames are `calculate`
+368 B, `evaluateRetained` 208 B, `Service::due` 560 B and `Service::run` 832 B;
+these are individual compiler frames, not full call chains or measured watermarks.
+No large Plan/Profile temporary appeared on these production stack frames.
+
+Both local PlatformIO 6.2.0 builds passed with espressif32 6.13.0 / Arduino-ESP32
+2.0.17 and the newly built full webapp assets (`app.js.gz` 339,332 B). The local
+`GITHUB_ACTIONS=true` setting skipped only the frontend freshness hook; assets were
+built/type-checked separately before firmware. The compiled application source
+matches code commit `a52504cf`; subsequent edits are documentation only. These
+are compile/link results, not release/OTA identity or hardware acceptance:
+
+| Environment | Reported static RAM | Reported firmware flash |
+| --- | ---: | ---: |
+| `generic_esp32s3_usb_quad_psram` | 120,852 B | 2,912,941 B |
+| `generic_esp32s3_usb` | 120,592 B | 2,910,505 B |
+
+Radio, provider/runtime hardening and cleanup support-snapshot paths match the
+`49a2526b` base exactly. Comparing PR #34's production/UI files with its original
+head finds only the three optimizer allocation paths changed by inheritance of
+PR #35 and learning-snapshot placement. Obsolete separate-base CI scaffolding
+was removed; the existing `hems` workflow is unchanged. `git diff --check` passed.
+GitHub Actions were not queried or awaited. No firmware was flashed or hardware
+operated, and no PR #33 branch or implementation was changed.
