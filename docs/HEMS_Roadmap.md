@@ -53,7 +53,9 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
    Existing APIs, permissions, forms and opt-in behavior remain authoritative;
    firmware changes only remove unsupported presentation locales and provide
    English fallbacks for old display settings. Existing alarm identifiers and
-   German/English messages are preserved. The existing branding is retained.
+   German/English messages are preserved. The header uses the supplied official
+   OpenDTU-HEMS SVG beside the existing wordmark, replacing the house icon;
+   the live-connection indicator remains to the right.
    Focused frontend/type/build/Node checks and all four intercepted-API browser
    suites passed locally; the route audit covers EN/DE at 320/768/1440 px,
    including attached help and mobile overflow fixes. [Current status](HEMS_Current_Status.md#product-ui)

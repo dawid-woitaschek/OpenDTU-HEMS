@@ -24,6 +24,21 @@ async function currentMeasurements(card) {
 async function assertMeasurementsUnavailable(card) {
     assert.deepEqual(await currentMeasurements(card), ['—', '—', '—'], 'Unverified output, limit and temperature must not look like current numeric measurements');
 }
+async function assertHeaderBranding(page) {
+    const brand = page.locator('header a.navbar-brand');
+    const logo = brand.locator('img.brand-logo');
+    await logo.evaluate(img => img.decode());
+    assert.equal(await brand.getAttribute('href'), '/');
+    assert.equal(await brand.innerText(), 'OpenDTU-HEMS');
+    assert.equal(await brand.locator('svg').count(), 0, 'The house icon is replaced');
+    assert.equal(await logo.getAttribute('alt'), '', 'Adjacent wordmark identifies the product');
+    assert.equal(await brand.getByRole('img').count(), 0, 'Decorative logo does not duplicate the accessible name');
+    assert.equal(await logo.evaluate(img => img.naturalWidth === 1254 && img.naturalHeight === 1254 && getComputedStyle(img).objectFit === 'contain'), true);
+    const bounds = await logo.boundingBox(), text = await brand.locator(':scope > span').boundingBox();
+    const connection = await page.locator('.live-connection-dot').boundingBox();
+    assert.ok(Math.abs(bounds.width - bounds.height) < 1 && bounds.height === 36, 'Logo preserves its square proportions at header size');
+    assert.ok(bounds.x + bounds.width <= text.x && connection.x >= text.x + text.width, 'Logo, wordmark and connection indicator keep their order');
+}
 try {
     for (const locale of (process.env.REDESIGN_LOCALES?.split(',') || ['en', 'de'])) for (const width of (process.env.REDESIGN_WIDTHS?.split(',').map(Number) || [320, 768, 1440])) {
         const fixture = createHemsFixture(), live = createLiveFixture(), posts = [], sockets = [], requests = [];
@@ -71,6 +86,14 @@ try {
             await assertHelpPlacement(page);
             if (!['/', '/about'].includes(path)) assert.ok(await page.locator('#main-navigation .active').count() > 0, `${path}: sidebar locates the page`);
             if (path === '/') {
+                await assertHeaderBranding(page);
+                for (const theme of ['dark', 'light']) {
+                    await page.locator('#bd-theme').click();
+                    await page.locator(`[data-bs-theme-value="${theme}"]`).click();
+                    await assertHeaderBranding(page);
+                    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Header fits in ${theme} mode`);
+                    await page.locator('header').screenshot({ path: `${screenshots}/${locale}-${width}-header-${theme}.png` });
+                }
                 assert.equal(await page.locator('nav a[href^="#overview-"]').count(), 0);
                 assert.equal(await page.getByText(locale === 'en' ? 'Import price now' : 'Bezugspreis jetzt', { exact: true }).count(), 1);
                 assert.equal(await page.locator('.energy-drilldown[open]').count(), 0);

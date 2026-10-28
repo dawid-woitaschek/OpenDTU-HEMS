@@ -135,7 +135,10 @@ based on `hems` commit `6b45ebcd`. This is not a release or merge claim.
   `lang/README.md` documents the fixed language set and the existing EN/DE
   device-display overrides; uploaded packs do not add selector languages or
   replace bundled WebUI/event/alarm translations.
-- Existing branding is unchanged; no replacement product logo was invented.
+- The supplied official `OpenDTU_HEMS_logo_transparent.svg` is a WebUI asset and
+  replaces the header house icon beside the existing clickable wordmark. The
+  SVG is decorative beside the product text; its colors/proportions and the
+  live-connection indicator to the right are preserved in both themes.
   No fixture/mock readings are included in the production UI.
 
 The preceding UX/IA pass on **2026-10-28** passed:

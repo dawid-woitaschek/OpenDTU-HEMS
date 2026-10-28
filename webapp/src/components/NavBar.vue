@@ -7,7 +7,7 @@
                 to="/"
                 @click="expanded = false"
             >
-                <BIconHouse class="brand-logo text-primary" aria-hidden="true" />
+                <img :src="headerLogo" class="brand-logo" alt="" width="36" height="36" />
                 <span><span class="text-primary">Open</span>DTU-HEMS</span>
             </RouterLink>
             <HelpHint :label="$t('redesign.connection' + liveConnection)" plain>
@@ -83,6 +83,7 @@
 </template>
 <script setup lang="ts">
 import { computed, getCurrentInstance, onUnmounted, ref } from 'vue';
+import headerLogo from '@/assets/OpenDTU_HEMS_logo_transparent.svg';
 import { useRoute, useRouter } from 'vue-router';
 import {
     BIconHouse,
