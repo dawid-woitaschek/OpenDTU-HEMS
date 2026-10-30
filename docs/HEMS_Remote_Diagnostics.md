@@ -111,11 +111,37 @@ identity-register read is introduced, and unavailable phase/counter data is not
 fabricated. No tariff, household history, schedule or arbitrary configuration
 snapshot is included.
 
+Collector-compatible summary aliases supplement these detailed fields:
+
+| Summary path | Source and availability |
+| --- | --- |
+| `heap.internal.free_bytes`, `minimum_free_bytes`, `largest_free_block` | Existing current INTERNAL heap snapshot (unchanged). |
+| `heap.psram.free_bytes`, `minimum_free_bytes`, `largest_free_block` | Existing current PSRAM snapshot (unchanged). |
+| `storage.state_of_charge` | Numeric `last_observations.soc_pct` only when the storage snapshot and SoC are valid and finite; omitted otherwise. |
+| `wallbox.connected` | Boolean cached WARP `reachable`, describing provider connectivity, not vehicle presence. |
+| `wallbox.charging` | Boolean cached charging observation only when the snapshot is valid, has an update, and charging is known; omitted otherwise. |
+| `diagnostics.allocation_failure_count` | Authoritative current-boot `diagnostics.runtime.heap.failed_alloc_count`, including failures no longer pending in the remote spool. |
+| `system.reset_reason` | Existing current CPU-0 `system.resetreason_0` string. |
+
+The detailed `last_observations`, runtime diagnostics and reset/raw fields remain
+intact, including last-known measurements when a summary alias is unavailable.
+The collector's current `internal/telemetry/telemetry.go` on main was inspected at
+`4cba646e45c52b07c9390a45cb6684860c38380c`. This is an additive schema-v1
+compatibility layer; ACKs, retry identity/body, spool, TLS and control are unchanged.
+
 Focused native targets: `test_remote_diagnostics`, `test_remote_sender`,
 `test_remote_transport`, `test_remote_runtime`; frontend methods/DTO test:
 `node test/test_remote_diagnostics_ui.mjs`. Existing storage/EVSE/WARP, runtime
 journal, provider-worker and configuration regressions remain applicable.
 See both project-state documents for the tests actually run on this branch.
+
+`make -C test test-remote` also checks collector paths/types in a serialized
+production sender body with cached hardware test inputs. To compare it against
+the actual parser in a local checkout of current collector main, run
+`python3 test/test_remote_collector_contract.py --collector /path/to/collector --go-bin /path/to/go`.
+This runs the unmodified stdlib-only parser in an isolated temporary Go module,
+without the collector server/database or network access. Path/type or extraction
+drift fails the test; no physical validation is implied.
 
 Physical validation must measure peak simultaneous INTERNAL/PSRAM use, allocator
 pressure, the shared worker's stack watermark and provider latency; verify actual

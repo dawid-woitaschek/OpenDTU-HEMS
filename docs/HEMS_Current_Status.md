@@ -21,6 +21,17 @@ checkpoints; cached storage/WARP/raw Modbus observations require no additional p
 No-PSRAM, heap pressure and transport/collector failures defer telemetry safely.
 No remote control, inbound connection or household-history upload is added.
 
+The PR #38 compatibility follow-up adds collector summary aliases for valid
+storage SoC, cached wallbox connectivity/known charging, the authoritative current
+boot allocation-failure count and current reset reason. Existing detailed fields
+and transport/ACK/retry/spool/control semantics are preserved. A serialized-payload
+contract regression checks the collector's paths and JSON types, with an optional
+direct comparison against its current Go parser. The follow-up passed all four
+Remote Diagnostics native targets, all 15 payload contract path/type checks,
+direct extraction with the current collector parser (`4cba646e`), and existing
+storage/EVSE/WARP/runtime-diagnostics/energy-service/retry regressions. This is
+software validation only; no additional physical validation is claimed.
+
 **Physical field validation is pending.** Peak INTERNAL/PSRAM memory and fragmentation,
 TLS/CA/SNI against the actual Traefik endpoint, shared-worker stack/latency, RTC
 retention, spool overflow/ACK-loss recovery and unattended HEMS/provider/radio

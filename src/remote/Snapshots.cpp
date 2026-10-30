@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <remote/Snapshots.h>
+#include <cmath>
 namespace Remote {
 namespace {
 void rawJson(Hems::Modbus::Observations const& raw, JsonObject out) {
@@ -26,6 +27,9 @@ void storageJson(Hems::Storage::Snapshot const& s, JsonObject out) {
     auto number = [&](char const* key, Hems::Storage::NumberValue const& n) { native[key] = nullptr; if (n.valid) { native[key] = n.value; } };
     auto flag = [&](char const* key, Hems::Storage::BoolValue const& n) { native[key] = nullptr; if (n.valid) { native[key] = n.value; } };
     auto const& v = s.sample;
+    // Collector summary aliases describe current valid observations; detailed
+    // last_observations below still retain their original validity/age semantics.
+    if (s.valid && v.socPct.valid && std::isfinite(v.socPct.value)) { out["state_of_charge"] = v.socPct.value; }
     number("soc_pct", v.socPct); number("ac_power_w", v.acPowerW); number("dc_power_w", v.dcPowerW);
     number("battery_voltage_v", v.batteryVoltageV); number("battery_current_a", v.batteryCurrentA);
     number("temperature_c", v.temperatureC); number("charge_energy_total_kwh", v.chargeEnergyTotalKWh);
@@ -36,9 +40,11 @@ void storageJson(Hems::Storage::Snapshot const& s, JsonObject out) {
 }
 void wallboxJson(Hems::Warp::Snapshot const& s, JsonObject out) {
     connection(s, out); out["provider"] = "warp_modbus"; out["profile_loaded"] = s.profileLoaded;
+    out["connected"] = s.reachable; // Provider reachability, not vehicle presence.
     out["profile_driven"] = s.profileDriven;
     auto native = out["last_observations"].to<JsonObject>();
     auto const& v = s.sample;
+    if (s.valid && s.hasUpdate && v.chargingKnown) { out["charging"] = v.charging; }
     for (auto key : {"table_version", "iec_state", "charging_state", "allowed_current_a", "power_w", "session_energy_kwh", "vehicle_connected", "charging"}) { native[key] = nullptr; }
     if (s.hasUpdate) {
         native["table_version"] = v.tableVersion; native["iec_state"] = v.iecState;

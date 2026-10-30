@@ -115,12 +115,15 @@ bool Service::buildPayload() {
     doc["schema_version"] = 1; doc["boot_id"] = Diagnostics::remoteBootId();
     doc["telemetry_sequence"] = _flight.sequence;
     systemSnapshot(doc["system"].to<JsonObject>(), false); // No observer checkpoint.
+    doc["system"]["reset_reason"] = doc["system"]["resetreason_0"];
     currentHeapSnapshot(doc["heap"].to<JsonObject>());
     deviceSnapshot(doc["storage"].to<JsonObject>(), doc["wallbox"].to<JsonObject>());
     Diagnostics::remoteCollect();
     auto cursor = Diagnostics::remoteCursor();
     auto diagnostics = doc["diagnostics"].to<JsonObject>();
     Diagnostics::serialize(diagnostics["runtime"].to<JsonObject>(), false);
+    // Alias the authoritative current-boot counter, not retained/spool counts.
+    diagnostics["allocation_failure_count"] = diagnostics["runtime"]["heap"]["failed_alloc_count"];
     Diagnostics::HeapSample boot;
     Diagnostics::bootHeapSample(boot);
     auto baseline = diagnostics["boot_baseline"].to<JsonObject>(); baseline["sequence"] = 1;

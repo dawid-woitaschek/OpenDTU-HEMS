@@ -8,6 +8,7 @@
 #include <cassert>
 #include <string>
 #include <iostream>
+#include <limits>
 using namespace Remote;
 int main() {
     Settings settings;
@@ -61,14 +62,38 @@ int main() {
     uint8_t bytes[] {0x12, 0x34, 0xab, 0xcd};
     storage.sample.raw.record(Hems::Modbus::ReadFunction::HoldingRegisters, 32104, 2, bytes);
     doc.clear(); storageJson(storage, doc.to<JsonObject>());
+    assert(doc["state_of_charge"].is<double>() && doc["state_of_charge"] == 63.5);
     assert(doc["last_observations"]["soc_pct"] == 63.5 && doc["last_observations"]["fault_code"] == 7);
     assert(doc["raw_modbus"]["registers"][1]["address"] == 32105 && doc["raw_modbus"]["registers"][1]["value"] == 0xabcd);
     assert(doc["last_observations"]["temperature_c"].isNull());
     std::string payload; serializeJson(doc, payload); assert(payload.find(token) == std::string::npos);
+    storage.sample.socPct.value = 0;
+    doc.clear(); storageJson(storage, doc.to<JsonObject>()); assert(doc["state_of_charge"] == 0);
+    storage.sample.socPct.valid = false;
+    doc.clear(); storageJson(storage, doc.to<JsonObject>()); assert(doc["state_of_charge"].isNull());
+    storage.sample.socPct.valid = true; storage.sample.socPct.value = 63.5; storage.valid = false; storage.stale = true;
+    doc.clear(); storageJson(storage, doc.to<JsonObject>());
+    assert(doc["state_of_charge"].isNull() && doc["last_observations"]["soc_pct"] == 63.5);
+    storage.valid = true; storage.sample.socPct.value = std::numeric_limits<double>::quiet_NaN();
+    doc.clear(); storageJson(storage, doc.to<JsonObject>()); assert(doc["state_of_charge"].isNull());
+    doc.clear(); storageJson(Hems::Storage::Snapshot {}, doc.to<JsonObject>()); assert(doc["state_of_charge"].isNull());
     Hems::Warp::Snapshot wallbox; wallbox.hasUpdate = true; wallbox.sample.chargingKnown = true; wallbox.sample.charging = true;
+    wallbox.valid = wallbox.reachable = true;
     wallbox.sample.allowedCurrentA = 16; wallbox.sample.meterAvailable = true; wallbox.sample.powerW = 11040; wallbox.sample.chargingState = 3;
     doc.clear(); wallboxJson(wallbox, doc.to<JsonObject>());
+    assert(doc["connected"].is<bool>() && doc["connected"] == true); // Independent of vehicle_connected (false here).
+    assert(doc["charging"].is<bool>() && doc["charging"] == true);
     assert(doc["last_observations"]["charging"] == true && doc["last_observations"]["allowed_current_a"] == 16 && doc["last_observations"]["power_w"] == 11040);
+    wallbox.sample.charging = false;
+    doc.clear(); wallboxJson(wallbox, doc.to<JsonObject>()); assert(doc["charging"].is<bool>() && doc["charging"] == false);
+    wallbox.sample.chargingKnown = false;
+    doc.clear(); wallboxJson(wallbox, doc.to<JsonObject>()); assert(doc["charging"].isNull() && doc["connected"] == true);
+    wallbox.sample.chargingKnown = wallbox.sample.charging = true; wallbox.valid = false;
+    doc.clear(); wallboxJson(wallbox, doc.to<JsonObject>());
+    assert(doc["charging"].isNull() && doc["connected"] == true && doc["last_observations"]["charging"] == true);
+    wallbox.reachable = false; wallbox.stale = true;
+    doc.clear(); wallboxJson(wallbox, doc.to<JsonObject>()); assert(doc["charging"].isNull() && doc["connected"].is<bool>() && doc["connected"] == false);
+    doc.clear(); wallboxJson(Hems::Warp::Snapshot {}, doc.to<JsonObject>()); assert(doc["charging"].isNull() && doc["connected"] == false);
     for (unsigned i = 0; i < 60; ++i) wallbox.sample.raw.record(Hems::Modbus::ReadFunction::InputRegisters, i, 1, bytes);
     assert(wallbox.sample.raw.count == 48 && wallbox.sample.raw.dropped == 12);
     std::cout << "remote diagnostics core/snapshots passed\n";

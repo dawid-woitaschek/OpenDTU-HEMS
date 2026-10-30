@@ -218,7 +218,7 @@ energy-management-test: test_energy_management
 test_remote_diagnostics: test_remote_diagnostics.cpp ../src/remote/Core.cpp ../src/remote/Snapshots.cpp ../src/diagnostics/Breadcrumb.cpp ../src/hems/modbus/Protocol.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
-test_remote_sender: test_remote_sender.cpp ../src/remote/Service.cpp ../src/remote/Core.cpp ../src/diagnostics/Breadcrumb.cpp
+test_remote_sender: test_remote_sender.cpp ../src/remote/Service.cpp ../src/remote/Core.cpp ../src/remote/Snapshots.cpp ../src/hems/modbus/Protocol.cpp ../src/diagnostics/Breadcrumb.cpp
 	$(CXX) $(CXXFLAGS) -DESP32 -Iremote_stubs -Ienergy_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $(filter %.cpp,$^)
 
 test_remote_transport: test_remote_transport.cpp ../src/remote/Transport.cpp ../src/remote/Core.cpp
@@ -233,6 +233,7 @@ test-remote: test_remote_diagnostics test_remote_sender test_remote_transport te
 	./test_remote_sender
 	./test_remote_transport
 	./test_remote_runtime
+	python3 test_remote_collector_contract.py
 
 REMOTE_HEADERS = $(wildcard ../include/remote/*.h) ../include/RuntimeDiagnostics.h $(wildcard remote_stubs/*.h) $(wildcard remote_stubs/freertos/*.h)
 test_remote_diagnostics test_remote_sender test_remote_transport test_remote_runtime: $(REMOTE_HEADERS)

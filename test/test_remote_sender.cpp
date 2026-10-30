@@ -10,6 +10,7 @@
 #include <NtpSettings.h>
 #include <cassert>
 #include <iostream>
+#include <fstream>
 #include <string>
 namespace {
 Remote::Ring<Diagnostics::HeapSample> samples;
@@ -18,6 +19,7 @@ Remote::Ring<Diagnostics::HeapSample>::Entry sampleEntries[512];
 Remote::Ring<Diagnostics::HeapFailure>::Entry failureEntries[16];
 uint32_t checkpoint = 0;
 unsigned attempts = 0, observerCheckpoints = 0;
+uint32_t allocationFailureCount = 7;
 bool accept = false, oversized = false;
 std::string lastBody;
 void sample() { Diagnostics::HeapSample v; v.uptimeMs = millis(); samples.push(++checkpoint, v); }
@@ -40,12 +42,28 @@ void remoteAcknowledge(uint32_t seq, uint32_t failure) { samples.acknowledge(seq
 void bootHeapSample(HeapSample& out) { out = {}; }
 char const* remoteBootId() { return "9ee99ae59ee99ae59ee99ae59ee99ae5"; }
 bool previousCapsule(Remote::Capsule& out) { out = {}; out.checkpoint = 19; Remote::seal(out); return true; }
-void serialize(JsonObject out, bool history) { out["current_boot"]["valid"] = true; out["heap"]["checkpoint_count"] = checkpoint; out["history_requested"] = history; }
+void serialize(JsonObject out, bool history) { out["current_boot"]["valid"] = true; out["heap"]["checkpoint_count"] = checkpoint; out["heap"]["failed_alloc_count"] = allocationFailureCount; out["history_requested"] = history; }
 }
-void systemSnapshot(JsonObject out, bool) { out["uptime"] = millis() / 1000; out["firmware_version"] = "test"; if (oversized) { for (int i = 0; i < 16; ++i) out["padding"].add(std::string(16384, 'x')); } }
-void currentHeapSnapshot(JsonObject out) { out["psram"]["total_bytes"] = 8 * 1024 * 1024; }
+// Hardware seams provide realistic cached inputs; Service builds the actual
+// transmitted JSON and the device serializers below are production code.
+void systemSnapshot(JsonObject out, bool) { out["uptime"] = millis() / 1000; out["firmware_version"] = "test"; out["resetreason_0"] = "Software reset CPU"; if (oversized) { for (int i = 0; i < 16; ++i) out["padding"].add(std::string(16384, 'x')); } }
+void currentHeapSnapshot(JsonObject out) {
+    out["internal"]["free_bytes"] = 128000U; out["internal"]["minimum_free_bytes"] = 100000U; out["internal"]["largest_free_block"] = 96000U;
+    out["psram"]["total_bytes"] = 8 * 1024 * 1024;
+    out["psram"]["free_bytes"] = 7000000U; out["psram"]["minimum_free_bytes"] = 6000000U; out["psram"]["largest_free_block"] = 6500000U;
+}
 namespace Remote {
-void deviceSnapshot(JsonObject storage, JsonObject wallbox) { storage["provider"] = "test"; wallbox["provider"] = "warp"; }
+void deviceSnapshot(JsonObject storage, JsonObject wallbox) {
+    Hems::Storage::Snapshot battery;
+    battery.configured = battery.enabled = battery.profileLoaded = battery.reachable = battery.valid = battery.hasUpdate = true;
+    battery.sample.socPct = {true, 63.5}; battery.sample.acPowerW = {true, 350};
+    storageJson(battery, storage);
+    Hems::Warp::Snapshot evse;
+    evse.configured = evse.enabled = evse.reachable = evse.valid = evse.hasUpdate = true;
+    evse.sample.chargingKnown = evse.sample.charging = true; evse.sample.chargingState = 3;
+    evse.sample.allowedCurrentA = 16;
+    wallboxJson(evse, wallbox);
+}
 bool post(Settings const&, char const* body, size_t size, Transmission const& flight, int& code, char const*& error) {
     ++attempts; lastBody.assign(body, size); code = 200;
     JsonDocument doc; assert(!deserializeJson(doc, body, size));
@@ -56,7 +74,8 @@ bool post(Settings const&, char const* body, size_t size, Transmission const& fl
 }
 JsonDocument status(Remote::Service& service) { JsonDocument d; service.status(d.to<JsonObject>()); return d; }
 JsonDocument config(bool enabled = true) { JsonDocument d; d["enabled"] = enabled; d["endpoint"] = "https://collector.example.org/api/v1/telemetry"; d["token"] = "hems_NEVER_IN_PAYLOAD"; d["interval_minutes"] = 60; return d; }
-int main() {
+int main(int argc, char** argv) {
+    assert(argc <= 2); // Optional output lets the collector's real parser consume this body.
     Remote::Service sender; sender.init(); assert(!sender.due()); sender.run(); assert(attempts == 0);
     testFiles["/remote-diagnostics.json"] = std::make_shared<std::string>("{\"version\":99}");
     Remote::Service unsupported; unsupported.init();
@@ -76,6 +95,9 @@ int main() {
     internalFree = 128 * 1024; testNow += 240000; sender.run();
     assert(attempts == 1 && status(sender)["retry_pending"] == true && status(sender)["telemetry_sequence"] == 1);
     auto original = lastBody; JsonDocument first; assert(!deserializeJson(first, original));
+    if (argc == 2) { std::ofstream payload(argv[1]); payload << original; assert(payload.good()); }
+    assert(first["diagnostics"]["allocation_failure_count"].is<uint32_t>() && first["diagnostics"]["allocation_failure_count"] == 7);
+    assert(first["diagnostics"]["allocation_failures"].size() == 0); // Total failures are not pending-spool size.
     assert(original.find("hems_NEVER_IN_PAYLOAD") == std::string::npos && observerCheckpoints == 0);
     assert(first["diagnostics"]["previous_crash_capsule"]["checkpoint_sequence"] == 19);
     assert(first["diagnostics"]["runtime"]["history_requested"] == false);
@@ -83,12 +105,14 @@ int main() {
     assert(first["diagnostics"]["checkpoints"].as<JsonArrayConst>().size() <= Remote::BatchSamples);
     assert(first["diagnostics"]["checkpoints"][first["diagnostics"]["checkpoints"].size() - 1]["sequence"] == sentCheckpoint);
     assert(samples.count() > 0 && samples.acknowledged() == 0);
+    allocationFailureCount = 9;
     sample(); sample(); testNow += 480000; accept = true; sender.run();
     assert(lastBody == original && status(sender)["telemetry_sequence"] == 2 && samples.acknowledged() == sentCheckpoint);
     assert(samples.count() > 0 && samples.oldest() > sentCheckpoint); // Newer checkpoints retained, including request diagnostics.
     assert(!sender.due()); testNow += 60000; assert(!sender.due()); // Normal heartbeat is hourly.
     sender.requestSend(); sender.run(); assert(status(sender)["telemetry_sequence"] == 3);
     JsonDocument second; assert(!deserializeJson(second, lastBody)); assert(second["diagnostics"]["previous_crash_capsule"].isNull());
+    assert(second["diagnostics"]["allocation_failure_count"] == 9); // Only a newly built body reflects the new counter.
     testNow += 60000; auto before = attempts; oversized = true; sender.requestSend(); sender.run();
 
     assert(attempts == before && status(sender)["last_error"] == "payload_overflow" && samples.count() > 0);
