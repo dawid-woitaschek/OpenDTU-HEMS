@@ -1875,6 +1875,19 @@
         "pending_allocation_failures": "Pending allocation failures",
         "dropped_allocation_failures": "Dropped allocation failure records",
         "spool_available": "PSRAM spool available",
-        "payload_bytes": "Pending payload (bytes)"
+        "payload_bytes": "Pending payload (bytes)",
+        "quarterHour": "Send at HEMS 15-minute boundaries",
+        "quarterHelp": "Add UTC quarter-hour captures to regular uploads. Coincident events share one upload and respect retry spacing. New plans are captured independently. No device control; unacknowledged bodies expire after 60 minutes.",
+        "quarter_hour": "Quarter-hour trigger enabled",
+        "pending_transmission_age_seconds": "Pending transmission age (seconds)",
+        "expired_transmission_count": "Expired transmissions",
+        "dropped_telemetry_count": "Locally dropped telemetry transmissions",
+        "coalesced_hems_trigger_count": "Coalesced HEMS triggers",
+        "last_hems_capture_utc": "Last HEMS capture (UTC)",
+        "last_hems_trigger": "Last capture triggers",
+        "pending_hems_trigger": "Pending triggers",
+        "last_optimizer_plan_revision_observed": "Last published plan revision observed",
+        "expired_samples": "Expired diagnostic samples",
+        "expired_allocation_failures": "Expired allocation-failure records"
     }
 }

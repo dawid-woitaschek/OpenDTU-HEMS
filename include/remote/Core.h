@@ -10,9 +10,10 @@
 
 namespace Remote {
 constexpr size_t MaxPayload = 192 * 1024; // Well below the collector's 1 MiB limit.
+constexpr uint32_t RetentionMs = 60U * 60 * 1000;
 constexpr size_t SampleCapacity = 4096, FailureCapacity = 64, BatchSamples = 128;
 struct Settings {
-    bool enabled = false;
+    bool enabled = false, quarterHour = false;
     uint16_t intervalMinutes = 60;
     char endpoint[257] {}, token[129] {};
 };
@@ -49,6 +50,17 @@ public:
         while (_count && oldest() <= sequence) { --_count; }
         _acked = sequence;
     }
+    // Local retention is deliberately separate from collector acknowledgement.
+    size_t expire(uint32_t now, uint32_t age, size_t budget = 16) {
+        size_t removed = 0;
+        while (_count && removed < budget) {
+            auto const& entry = _entries[(_next + _capacity - _count) % _capacity];
+            if (now - entry.value.uptimeMs < age) { break; }
+            --_count; ++removed; ++_expired;
+        }
+        return removed;
+    }
+    uint32_t expired() const { return _expired; }
     size_t count() const { return _count; }
     uint32_t newest() const { return _newest; }
     uint32_t acknowledged() const { return _acked; }
@@ -57,12 +69,14 @@ public:
 private:
     Entry* _entries = nullptr;
     size_t _capacity = 0, _count = 0, _next = 0;
-    uint32_t _newest = 0, _acked = 0, _dropped = 0;
+    uint32_t _newest = 0, _acked = 0, _dropped = 0, _expired = 0;
 };
 struct Transmission {
-    uint32_t sequence = 1, checkpoint = 0, failure = 0;
+    uint32_t sequence = 1, checkpoint = 0, failure = 0, stagedMs = 0;
     bool pending = false;
-    void stage(uint32_t highest, uint32_t failures) { checkpoint = highest; failure = failures; pending = true; }
+    void stage(uint32_t highest, uint32_t failures, uint32_t now = 0) { checkpoint = highest; failure = failures; stagedMs = now; pending = true; }
+    bool expired(uint32_t now) const { return pending && now - stagedMs >= RetentionMs; }
+    void abandon() { if (pending) { pending = false; ++sequence; } }
     bool accepts(JsonVariantConst ack) const {
         return pending && ack.is<JsonObjectConst>() && ack["accepted"].is<bool>() && ack["accepted"].as<bool>()
             && ack["accepted_checkpoint_sequence"].is<uint32_t>()
@@ -72,7 +86,9 @@ struct Transmission {
 };
 inline uint32_t retrySeconds(unsigned failures) { return 60U << (failures > 5 ? 5 : failures); } // 1–32 minutes
 inline void bootId(uint8_t const (&random)[16], char (&out)[33]) {
-    for (size_t i = 0; i < 16; ++i) { snprintf(out + 2 * i, 3, "%02x", random[i]); }
+    for (size_t i = 0; i < 16; ++i) {
+        snprintf(out + 2 * i, 3, "%02x", random[i]);  // NOLINT(runtime/printf): one byte, two digits plus NUL.
+    }
 }
 // RTC uses a byte array, never a C++ dynamically initialized retained object.
 struct Capsule {

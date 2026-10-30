@@ -56,7 +56,7 @@ $(TEST_PROVIDER_CLEANUP): ../src/hems/economic/Dispatch.cpp economic_disabled.cp
 test_economic_dispatch: test_economic_dispatch.cpp ../src/hems/economic/Dispatch.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 test_economic_integration: test_economic_integration.cpp test_provider_cleanup.cpp $(wildcard ../src/hems/*/*.cpp) ../src/hems/Controller.cpp
-	$(CXX) $(CXXFLAGS) -Ieconomic_stubs -Ienergy_stubs -Iprovider_stubs -Iwarp_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $< ../src/hems/Controller.cpp ../src/hems/economic/Dispatch.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/actuation/Readiness.cpp ../src/hems/policies/EvProtection.cpp ../src/hems/model/Normalize.cpp ../src/hems/storage/Provider.cpp ../src/hems/warp/Provider.cpp ../src/hems/storage/State.cpp ../src/hems/warp/State.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/evse/Telemetry.cpp ../src/hems/warp/ProfileAdapter.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/actuation/Mailbox.cpp ../src/hems/actuation/Capabilities.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp ../src/hems/modbus/Protocol.cpp
+	$(CXX) $(CXXFLAGS) -Ieconomic_stubs -Ienergy_stubs -Iprovider_stubs -Iwarp_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $< ../src/hems/Controller.cpp ../src/hems/economic/Dispatch.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Remote.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/actuation/Readiness.cpp ../src/hems/policies/EvProtection.cpp ../src/hems/model/Normalize.cpp ../src/hems/storage/Provider.cpp ../src/hems/warp/Provider.cpp ../src/hems/storage/State.cpp ../src/hems/warp/State.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/evse/Telemetry.cpp ../src/hems/warp/ProfileAdapter.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/actuation/Mailbox.cpp ../src/hems/actuation/Capabilities.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp ../src/hems/modbus/Protocol.cpp
 
 $(TEST_OVERSCALING): test_overscaling.cpp ../src/OverscalingCalculator.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $< ../src/OverscalingCalculator.cpp
@@ -121,7 +121,7 @@ $(TEST_EV_PROTECTION): test_ev_protection.cpp ../src/hems/policies/EvProtection.
 $(TEST_FIRMWARE_UPDATE): test_firmware_update.cpp
 	$(CXX) $(CXXFLAGS) -I../include -o $@ $<
 
-$(TEST_OPTIMIZER_SERVICE): test_optimizer_service.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
+$(TEST_OPTIMIZER_SERVICE): test_optimizer_service.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Remote.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -Ioptimizer_stubs -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $^
 
 $(TEST_TRANSPORT): test_energy_transport.cpp provider_fixtures.h ../src/hems/energy/Transport.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
@@ -139,7 +139,7 @@ $(TEST_SHADOW): test_shadow_optimizer.cpp ../src/hems/optimizer/Planner.cpp ../s
 $(TEST_ENERGY): test_energy.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $^
 
-$(TEST_ENERGY_SERVICE) $(TEST_ENERGY_RETRY): %: %.cpp energy_harness.h provider_fixtures.h ../src/hems/energy/Native.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
+$(TEST_ENERGY_SERVICE) $(TEST_ENERGY_RETRY): %: %.cpp energy_harness.h provider_fixtures.h ../src/hems/energy/Native.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Remote.cpp ../src/hems/energy/Provider.cpp ../src/hems/profiles/Profile.cpp
 	$(CXX) $(CXXFLAGS) -Ienergy_stubs -Iprovider_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $(filter %.cpp,$^)
 
 $(TEST_RUNTIME_DIAGNOSTICS): test_runtime_diagnostics.cpp ../src/diagnostics/Breadcrumb.cpp ../include/diagnostics/Heap.h ../include/diagnostics/HeapSerialize.h
@@ -218,7 +218,7 @@ energy-management-test: test_energy_management
 test_remote_diagnostics: test_remote_diagnostics.cpp ../src/remote/Core.cpp ../src/remote/Snapshots.cpp ../src/diagnostics/Breadcrumb.cpp ../src/hems/modbus/Protocol.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
-test_remote_sender: test_remote_sender.cpp ../src/remote/Service.cpp ../src/remote/Core.cpp ../src/remote/Snapshots.cpp ../src/hems/modbus/Protocol.cpp ../src/diagnostics/Breadcrumb.cpp
+test_remote_sender: test_remote_sender.cpp remote_hems_fixture.h ../src/remote/HemsJson.cpp ../src/hems/energy/Remote.cpp ../src/hems/energy/Provider.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/actuation/Readiness.cpp ../src/remote/Service.cpp ../src/remote/Core.cpp ../src/remote/Snapshots.cpp ../src/hems/modbus/Protocol.cpp ../src/diagnostics/Breadcrumb.cpp
 	$(CXX) $(CXXFLAGS) -DESP32 -Iremote_stubs -Ienergy_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $(filter %.cpp,$^)
 
 test_remote_transport: test_remote_transport.cpp ../src/remote/Transport.cpp ../src/remote/Core.cpp
@@ -243,3 +243,30 @@ test: test-remote
 clean: clean-remote
 clean-remote:
 	rm -f test_remote_diagnostics test_remote_sender test_remote_transport test_remote_runtime
+
+test_remote_schedule: test_remote_schedule.cpp ../src/remote/Core.cpp ../include/remote/Schedule.h
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+test-remote: remote-schedule-test
+.PHONY: remote-schedule-test
+remote-schedule-test: test_remote_schedule
+	./test_remote_schedule
+all: test_remote_schedule
+clean-remote: clean-remote-schedule
+.PHONY: clean-remote-schedule
+clean-remote-schedule:
+	rm -f test_remote_schedule
+
+# Same real controller/provider/optimizer integration seam, with remote read-only serialization.
+test_remote_hems: test_remote_hems.cpp test_provider_cleanup.cpp $(wildcard ../src/hems/*/*.cpp) ../src/hems/Controller.cpp ../src/remote/HemsSnapshot.cpp ../src/remote/HemsJson.cpp
+	$(CXX) $(CXXFLAGS) -Ieconomic_stubs -Ienergy_stubs -Iprovider_stubs -Iwarp_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $< ../src/hems/Controller.cpp ../src/hems/economic/Dispatch.cpp ../src/hems/optimizer/Service.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Service.cpp ../src/hems/energy/Remote.cpp ../src/hems/energy/Native.cpp ../src/hems/energy/Provider.cpp ../src/hems/actuation/Readiness.cpp ../src/hems/policies/EvProtection.cpp ../src/hems/model/Normalize.cpp ../src/hems/storage/Provider.cpp ../src/hems/warp/Provider.cpp ../src/hems/storage/State.cpp ../src/hems/warp/State.cpp ../src/hems/storage/Telemetry.cpp ../src/hems/evse/Telemetry.cpp ../src/hems/warp/ProfileAdapter.cpp ../src/hems/profiles/Profile.cpp ../src/hems/profiles/ControlPlan.cpp ../src/hems/actuation/Executor.cpp ../src/hems/actuation/ProfileSession.cpp ../src/hems/actuation/Mailbox.cpp ../src/hems/actuation/Capabilities.cpp ../src/hems/storage/Actuator.cpp ../src/hems/evse/Actuator.cpp ../src/hems/modbus/Protocol.cpp ../src/remote/HemsSnapshot.cpp ../src/remote/HemsJson.cpp
+all: test_remote_hems
+.PHONY: remote-hems-test
+test-remote: remote-hems-test
+remote-hems-test: test_remote_hems
+	./test_remote_hems
+clean-remote: clean-remote-hems
+.PHONY: clean-remote-hems
+clean-remote-hems:
+	rm -f test_remote_hems
+
+test_remote_hems test_remote_schedule: $(REMOTE_HEADERS)

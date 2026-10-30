@@ -24,7 +24,7 @@ const redirects = [];
 const state = { ...component.data(), $t: key => key.split('.').reduce((value, part) => value?.[part], translations) || key,
     $emitter: { emit() {} }, $router: { push: route => redirects.push(route), currentRoute: { value: { fullPath: '/system/remote-diagnostics' } } } };
 for (const [name, method] of Object.entries(component.methods)) state[name] = method.bind(state);
-assert.equal(state.config.interval_minutes, 60); assert.equal(state.config.enabled, false);
+assert.equal(state.config.interval_minutes, 60); assert.equal(state.config.quarter_hour, false); assert.equal(state.config.enabled, false);
 assert.equal(state.token, '');
 const config = { enabled: true, endpoint: 'https://collector.example.org/api/v1/telemetry', interval_minutes: 60, token_set: true };
 let posted, sends = 0;
@@ -39,10 +39,15 @@ fetcher = async (url, options) => {
     return new Response(JSON.stringify(url.endsWith('/config') ? config : { enabled: true, token_set: true, pending_samples: 12 }));
 };
 await state.loadConfiguration(); assert.equal(state.config.token_set, true); assert.equal(state.token, '');
-await state.save(); assert.equal(posted.token, undefined); assert.equal(posted.token_set, undefined);
+state.config.quarter_hour = true;
+await state.save(); assert.equal(posted.quarter_hour, true); assert.equal(posted.token, undefined); assert.equal(posted.token_set, undefined);
 state.token = 'hems_replacement'; await state.save(); assert.equal(posted.token, 'hems_replacement'); assert.equal(state.token, '');
 state.config.enabled = false; state.clearToken = true; state.token = 'ignored'; await state.save(); assert.equal(posted.token, ''); assert.equal(state.clearToken, false);
-await state.sendNow(); assert.equal(sends, 1); assert.equal(state.sending, false); assert.equal(state.status.pending_samples, 12);
+await state.sendNow(); assert.equal(sends, 1);
+state.status = { ...state.status, pending_transmission_age_seconds: 3599, expired_transmission_count: 2, last_hems_trigger: ['quarter_hour', 'plan_revision'] };
+const rows = component.computed.statusRows.call(state);
+assert.equal(rows.find(row => row.key === 'pending_transmission_age_seconds').value, 3599);
+assert.equal(rows.find(row => row.key === 'last_hems_trigger').value, 'quarter_hour, plan_revision'); assert.equal(state.sending, false); assert.equal(state.status.pending_samples, 12);
 fetcher = async () => new Response('{"success":false}', { status: 400 });
 state.token = 'keep_until_saved'; await state.save(); assert.equal(state.failed, true); assert.equal(state.token, 'keep_until_saved'); assert.equal(state.saving, false);
 fetcher = async () => new Response('{}', { status: 401 }); await state.sendNow(); assert.equal(redirects.at(-1).path, '/login');

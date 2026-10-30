@@ -14,6 +14,7 @@ public:
     void init(Scheduler& scheduler);
     bool configure(Domain domain, Settings const& settings);
     void serialize(Domain domain, JsonObject output, bool all = false) const;
+    bool serializeRemote(Domain domain, JsonObject output) const;
     bool ingest(Domain domain, JsonVariantConst payload);
     RefreshDecision requestRefresh(Domain domain);
     // Consistent normalized input for later optimizer code; caller owns bounded destination.

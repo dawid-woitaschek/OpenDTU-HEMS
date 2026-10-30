@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Service.h>
+#include <hems/energy/Remote.h>
 #include <RuntimeDiagnostics.h>
 #include <hems/Memory.h>
 #include <hems/profiles/Profile.h>
@@ -244,6 +245,25 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
             intervalJson(domain, data.intervals[i], intervals.add<JsonObject>());
         }
     }
+}
+bool Service::serializeRemote(Domain domain, JsonObject output) const
+{
+#if defined(ESP32)
+    if (!heap_caps_get_total_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) { return false; }
+#endif
+    // Short POD copy only under the provider lock; large JSON work is outside.
+    // Memory::make cannot spill to INTERNAL when PSRAM is present but full.
+    auto series = Memory::make<Series>();
+    if (!series) { return false; }
+    Status status; char const* providerName;
+    auto utc = utcNow();
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto const& source = provider(domain); *series = source.data();
+        status = source.status(utc, millis()); providerName = sourceName(source.settings());
+    }
+    remoteJson(domain, providerName, *series, status, utc, output);
+    return true;
 }
 bool Service::ingest(Domain domain, JsonVariantConst payload)
 {

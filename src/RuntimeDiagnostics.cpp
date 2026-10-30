@@ -199,11 +199,19 @@ void remoteCollect()
         if (heapJournal.failures.read(copiedFailures, value)) { remoteFailures.push(copiedFailures, value); }
     }
 }
+void remoteExpire(uint32_t now)
+{
+    // Bound each critical section, including on recovery from a long outage.
+    // No allocation/network/JSON here and acknowledgement remains untouched.
+    size_t removed;
+    do { Lock lock; removed = remoteSamples.expire(now, Remote::RetentionMs); } while (removed == 16);
+    do { Lock lock; removed = remoteFailures.expire(now, Remote::RetentionMs); } while (removed == 16);
+}
 RemoteCursor remoteCursor()
 {
     Lock lock;
     return {remoteSamples.oldest(), remoteSamples.newest(), remoteSamples.acknowledged(), remoteSamples.dropped(),
-        remoteFailures.oldest(), remoteFailures.newest(), remoteFailures.dropped(), remoteSamples.count(), remoteFailures.count(), remoteSamples.available()};
+        remoteFailures.oldest(), remoteFailures.newest(), remoteFailures.dropped(), remoteSamples.count(), remoteFailures.count(), remoteSamples.available(), remoteSamples.expired(), remoteFailures.expired()};
 }
 bool remoteSample(uint32_t sequence, HeapSample& out) { Lock lock; return remoteSamples.read(sequence, out); }
 bool remoteFailure(uint32_t sequence, HeapFailure& out) { Lock lock; return remoteFailures.read(sequence, out); }

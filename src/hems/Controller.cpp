@@ -269,9 +269,12 @@ uint64_t Controller::economicContextRevision() const
 }
 Flow::Decision Controller::flowDecision(Optimizer::PlanView const& plan) const
 {
+    return flowDecision(plan, getConstraints().storage);
+}
+Flow::Decision Controller::flowDecision(Optimizer::PlanView const& plan, Constraints::StorageConstraints const& limits) const
+{
     if (!plan.config.flow.enabled) { Flow::Decision d; d.batteryW = plan.batteryW; return d; }
     auto state = getNormalizedState(); auto dpl = Flow::Coordination.dpl();
-    auto limits = getConstraints().storage;
     uint32_t charge = plan.config.maxChargeW, discharge = plan.config.maxDischargeW;
     auto physical = getStoragePowerLimits();
     if (physical.known) { charge = std::min(charge, physical.chargeW); discharge = std::min(discharge, physical.dischargeW); }
@@ -312,6 +315,70 @@ bool Controller::economicAuthorized(Actuation::Command const& command) const
         && desired.action == command.action
         && desired.hasValue == command.hasValue && (!desired.hasValue || desired.value == command.value);
 }
+namespace {
+bool excessiveFlow(Economic::Context const& in, Flow::Decision const& flow, bool authority)
+{
+    bool discharge = in.storage.acPowerW.usable() && in.storage.acPowerW.value < -std::max(0, -flow.batteryW) - 20;
+    bool charge = in.storage.acPowerW.usable() && in.storage.acPowerW.value > std::max(0, flow.batteryW) + 20
+        && (!authority || !flow.usable || in.storage.socPct.value >= in.plan.config.maxSoc);
+    return discharge || charge;
+}
+bool needsFlowStop(Economic::Context const& in, Flow::Decision const& flow, bool authority)
+{
+    return in.plan.config.flow.enabled && !in.plan.paused && in.permission && in.mode == Mode::Active
+        && in.owner != Actuation::Origin::Manual && in.owner != Actuation::Origin::Protection && in.cleanupReady
+        && in.mailbox.state != Actuation::MailboxState::Pending && in.mailbox.state != Actuation::MailboxState::Running
+        && excessiveFlow(in, flow, authority);
+}
+} // namespace
+Economic::Preview Controller::shadowIfActive() const
+{
+    Economic::Context in;
+    in.plan = Optimizer::ShadowOptimizer.dispatchPlan();
+    in.mode = Mode::Active; in.permission = true; // Only these two explicit assumptions.
+    in.storage = getStoragePlanningState(); in.constraints = getConstraints().storage;
+    auto proposed = getEvProtectionShadowSnapshot().proposedConstraints.storage;
+    in.constraints.chargeAllowed = in.constraints.chargeAllowed && proposed.chargeAllowed;
+    in.constraints.dischargeAllowed = in.constraints.dischargeAllowed && proposed.dischargeAllowed;
+    auto telemetry = _storage.snapshot();
+    in.successfulPolls = telemetry.successfulPolls; in.cleanupReady = telemetry.reachable && telemetry.valid && !telemetry.stale;
+    auto ready = readiness(ControlTarget::Storage, true);
+    ready.blockers &= ~(Actuation::readinessBit(Actuation::ReadinessBlocker::GlobalModeInactive)
+        | Actuation::readinessBit(Actuation::ReadinessBlocker::DevicePermissionMissing));
+    in.ready = ready.allowed();
+    auto profile = _storage.profileInfo(); in.profile = &profile;
+    in.providerGeneration = _storage.generation(); in.owner = _storage.owner(); in.protectionOwned = _evProtectionOwned;
+    in.mailbox = _storage.commandSnapshot(); in.result = _storage.commandResult();
+    in.now = time(nullptr); in.nowMs = millis();
+    auto requested = in.plan;
+    bool authority = requested.valid && requested.config.dispatchEnabled && Flow::economicWearAcknowledged(requested.config.flow, requested.config.wearSource);
+    if (!authority) { requested.batteryW = 0; requested.config.maxChargeW = requested.config.maxDischargeW = 0; }
+    auto flow = flowDecision(requested, in.constraints);
+    std::lock_guard<std::mutex> lock(_economicMutex);
+    if (needsFlowStop(in, flow, authority)) {
+        Economic::Preview out; out.planRevision = in.plan.revision; out.reason = "flow_stop_wait";
+        auto attempts = _flowStopSlot == in.now / 900 ? _flowStopAttempts : 0;
+        if (in.ready && attempts < 3 && (!attempts || (in.successfulPolls > _flowStopPoll && in.nowMs - _lastFlowAttemptMs >= 30000))) {
+            Actuation::OperationInfo op;
+            if (_storage.operationInfo(Actuation::Action::Stop, op)) {
+                out.valid = true; out.reason = "flow_protection";
+                out.command = {ControlTarget::Storage, Actuation::Action::Stop};
+            } else { out.reason = "unsupported_action"; }
+        }
+        return out;
+    }
+    if (in.plan.config.flow.enabled) { in.plan.batteryW = flow.batteryW; }
+    auto out = _economic.preview(in);
+    if (out.valid && in.plan.config.flow.enabled) { out.reason = flow.reason; }
+    if (!out.valid && !in.ready) {
+        for (auto blocker : {Actuation::ReadinessBlocker::DeviceNotConfigured, Actuation::ReadinessBlocker::DeviceNotEnabled,
+                Actuation::ReadinessBlocker::ProfileNotControllable, Actuation::ReadinessBlocker::DeviceUnreachable,
+                Actuation::ReadinessBlocker::TelemetryNotFresh, Actuation::ReadinessBlocker::CommandBusy}) {
+            if (ready.has(blocker)) { out.reason = Actuation::readinessBlockerName(blocker); break; }
+        }
+    }
+    return out;
+}
 void Controller::applyEconomic()
 {
     Economic::Context input;
@@ -340,19 +407,9 @@ void Controller::applyEconomic()
     std::lock_guard<std::mutex> lock(_economicMutex);
     _flow = flow;
     if (_flowStopSlot != input.now / 900) { _flowStopSlot = input.now / 900; _flowStopAttempts = 0; }
-    bool excessiveDischarge = input.storage.acPowerW.usable()
-        && input.storage.acPowerW.value < -std::max(0, -flow.batteryW) - 20;
-    bool excessiveCharge = input.storage.acPowerW.usable()
-        && input.storage.acPowerW.value > std::max(0, flow.batteryW) + 20
-        && (!economicAuthority || !flow.usable || input.storage.socPct.value >= input.plan.config.maxSoc);
-    if (!excessiveDischarge && !excessiveCharge) { _flowStopAttempts = 0; }
-    // A hard flow restriction can require reducing an already running command
-    // even while no economic plan is valid. Do not release into autonomous
-    // export. Manual pause/ownership and all provider authorization still apply.
-    if (coordinate && !input.plan.paused && input.permission && input.mode == Mode::Active
-            && input.owner != Actuation::Origin::Manual && input.owner != Actuation::Origin::Protection && input.cleanupReady
-            && input.mailbox.state != Actuation::MailboxState::Pending && input.mailbox.state != Actuation::MailboxState::Running
-            && (excessiveDischarge || excessiveCharge)) {
+    if (!excessiveFlow(input, flow, economicAuthority)) { _flowStopAttempts = 0; }
+    // Same pure flow-stop guard is used by the read-only Active preview.
+    if (coordinate && needsFlowStop(input, flow, economicAuthority)) {
         Actuation::Command stop { ControlTarget::Storage, Actuation::Action::Stop };
         stop.origin = Actuation::Origin::Flow; stop.automatic = true;
         uint32_t id;

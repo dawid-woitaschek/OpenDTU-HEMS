@@ -2,6 +2,7 @@ export interface RemoteDiagnosticsConfig {
     enabled: boolean;
     endpoint: string;
     interval_minutes: number;
+    quarter_hour: boolean;
     token_set: boolean;
 }
 export interface RemoteDiagnosticsStatus {
@@ -26,14 +27,33 @@ export interface RemoteDiagnosticsStatus {
     dropped_allocation_failures: number;
     spool_available: boolean;
     spool_capacity: number;
+    quarter_hour: boolean;
+    pending_transmission_age_seconds: number | null;
+    expired_transmission_count: number;
+    dropped_telemetry_count: number;
+    coalesced_hems_trigger_count: number;
+    last_hems_capture_utc: number | null;
+    last_hems_capture_uptime_ms: number;
+    last_hems_trigger: string[];
+    pending_hems_trigger: string[];
+    last_optimizer_plan_revision_observed: number;
+    expired_samples: number;
+    expired_allocation_failures: number;
     payload_bytes: number;
     payload_max_bytes: number;
 }
 export function remoteDiagnosticsWrite(config: RemoteDiagnosticsConfig, token: string, clear: boolean) {
-    const result: { enabled: boolean; endpoint: string; interval_minutes: number; token?: string } = {
+    const result: {
+        enabled: boolean;
+        endpoint: string;
+        interval_minutes: number;
+        quarter_hour: boolean;
+        token?: string;
+    } = {
         enabled: config.enabled,
         endpoint: config.endpoint,
         interval_minutes: config.interval_minutes,
+        quarter_hour: config.quarter_hour,
     };
     if (clear) result.token = '';
     else if (token) result.token = token;

@@ -21,6 +21,14 @@ struct Decision {
     bool submit = false, cleanup = false, replan = false, cancel = false;
     Actuation::Command command;
 };
+struct Preview {
+    bool valid = false;
+    Actuation::Command command;
+    char const* reason = "plan_unavailable";
+    uint32_t planRevision = 0;
+};
+// These same pure eligibility gates are used by the actual dispatcher.
+char const* blocker(Context const& input);
 struct Snapshot {
     char const* state = "disabled";
     uint32_t planRevision = 0, start = 0, end = 0, commandId = 0;
@@ -33,6 +41,7 @@ struct Snapshot {
 // Fixed-size decision state. It never performs I/O or invents profile operations.
 class Dispatch {
 public:
+    Preview preview(Context const& input) const;
     Decision update(Context const& input);
     void accepted(Actuation::Command const& command, uint32_t id, uint32_t nowMs);
     Snapshot snapshot() const { return _state; }

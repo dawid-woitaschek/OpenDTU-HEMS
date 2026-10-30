@@ -64,6 +64,19 @@
                         required
                     />
                 </div>
+                <div class="form-check mb-3">
+                    <input
+                        id="remote-quarter-hour"
+                        v-model="config.quarter_hour"
+                        class="form-check-input"
+                        type="checkbox"
+                        aria-describedby="remote-quarter-help"
+                    />
+                    <label for="remote-quarter-hour" class="form-check-label">{{
+                        $t('remoteDiagnostics.quarterHour')
+                    }}</label>
+                    <div id="remote-quarter-help" class="form-text">{{ $t('remoteDiagnostics.quarterHelp') }}</div>
+                </div>
                 <button class="btn btn-primary" type="submit" :disabled="saving">
                     {{ $t('remoteDiagnostics.save') }}
                 </button>
@@ -108,7 +121,13 @@ export default defineComponent({
             sending: false,
             failed: false,
             message: '',
-            config: { enabled: false, endpoint: '', interval_minutes: 60, token_set: false } as RemoteDiagnosticsConfig,
+            config: {
+                enabled: false,
+                endpoint: '',
+                interval_minutes: 60,
+                quarter_hour: false,
+                token_set: false,
+            } as RemoteDiagnosticsConfig,
             token: '',
             clearToken: false,
             status: null as RemoteDiagnosticsStatus | null,
@@ -141,9 +160,25 @@ export default defineComponent({
                 'dropped_allocation_failures',
                 'spool_available',
                 'payload_bytes',
+                'quarter_hour',
+                'pending_transmission_age_seconds',
+                'expired_transmission_count',
+                'dropped_telemetry_count',
+                'coalesced_hems_trigger_count',
+                'last_hems_capture_utc',
+                'last_hems_trigger',
+                'pending_hems_trigger',
+                'last_optimizer_plan_revision_observed',
+                'expired_samples',
+                'expired_allocation_failures',
             ] as const;
             return keys.map((key) => {
-                const value = status[key];
+                const raw = status[key];
+                const value = Array.isArray(raw)
+                    ? raw.join(', ')
+                    : key === 'last_hems_capture_utc' && typeof raw === 'number'
+                      ? new Date(raw * 1000).toISOString()
+                      : raw;
                 return {
                     key,
                     value:
@@ -176,7 +211,7 @@ export default defineComponent({
             return handleResponse(response, this.$emitter, this.$router, true);
         },
         async loadConfiguration() {
-            this.config = await this.read('config');
+            this.config = { quarter_hour: false, ...(await this.read('config')) };
         },
         async refreshStatus() {
             this.status = await this.read('status');

@@ -22,3 +22,6 @@ webapp_dist/
 /test/test_remote_sender
 /test/test_remote_transport
 /test/test_remote_runtime
+
+/test/test_remote_hems
+/test/test_remote_schedule

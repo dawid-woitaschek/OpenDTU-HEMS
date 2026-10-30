@@ -13,7 +13,7 @@ try {
         page.on('pageerror', error => errors.push(error.message));
         await page.addInitScript(locale => { localStorage.setItem('locale', locale); localStorage.setItem('user', JSON.stringify({ authdata: btoa('fixture:fixture') })); }, locale);
         await page.routeWebSocket(/\/livedata$/, () => {});
-        let config = { enabled: false, endpoint: '', interval_minutes: 60, token_set: false };
+        let config = { enabled: false, endpoint: '', interval_minutes: 60, quarter_hour: false, token_set: false };
         let send = 0;
         await page.route('**/api/**', async route => {
             const path = new URL(route.request().url()).pathname;
@@ -35,16 +35,19 @@ try {
         await page.locator('#remote-interval').waitFor();
         assert.equal(await page.locator('#remote-interval').inputValue(), '60');
         assert.equal(await page.locator('#remote-enabled').isChecked(), false);
+        assert.equal(await page.locator('#remote-quarter-hour').isChecked(), false);
         assert.equal(await page.locator('#remote-token').getAttribute('type'), 'password');
         assert.equal(await page.locator('form button').count(), 1);
         assert.equal(await page.locator('#main-navigation a[href="/system/remote-diagnostics"].active').count(), 1);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         await page.locator('#remote-enabled').check();
+        await page.locator('#remote-quarter-hour').check();
         await page.locator('#remote-endpoint').fill('https://collector.example.org/api/v1/telemetry');
         await page.locator('#remote-token').fill('hems_browser_secret');
         await page.locator('form button').click();
         await page.waitForFunction(() => document.querySelector('#remote-token').value === '');
         assert.equal(posts[0].token, 'hems_browser_secret');
+        assert.equal(posts[0].quarter_hour, true);
         await page.getByRole('button', { name: locale === 'en' ? 'Send now' : 'Jetzt senden', exact: true }).click();
         await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent.includes('vorgemerkt') || document.querySelector('[role="status"]')?.textContent.includes('scheduled'));
         assert.equal(send, 1);

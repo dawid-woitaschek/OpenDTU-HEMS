@@ -3,6 +3,7 @@
 #include <RuntimeDiagnostics.h>
 #include <hems/Memory.h>
 #include <hems/energy/Service.h>
+#include <hems/energy/Remote.h>
 #include <hems/Controller.h>
 #include <LittleFS.h>
 #include <Arduino.h>
@@ -269,7 +270,7 @@ void Service::run()
     _energyRevision = latestRevision;
     if (_result) { *_result = *result; }
     else { _result = std::move(result); }
-    _error = nullptr; ++_planRevision;
+    _error = nullptr; _publishedRevision = ++_planRevision;
 }
 PlanView Service::dispatchPlan() const
 {
@@ -296,10 +297,24 @@ PlanView Service::dispatchPlan() const
     view.reason = view.valid ? "current_interval" : "plan_unavailable";
     return view;
 }
-void Service::serialize(JsonObject output, bool all, size_t offset) const
+uint32_t Service::publishedRevision() const { std::lock_guard<std::mutex> lock(_mutex); return _publishedRevision; }
+bool Service::serializeRemote(JsonObject output) const {
+    serializeSnapshot(output, true, 0, true);
+    return output["snapshot_error"].isNull();
+}
+void Service::serialize(JsonObject output, bool all, size_t offset) const { serializeSnapshot(output, all, offset, false); }
+void Service::serializeSnapshot(JsonObject output, bool all, size_t offset, bool remote) const
 {
+    Memory::Ptr<Result> copy;
+    if (remote) {
+#if defined(ESP32)
+        if (!heap_caps_get_total_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) { output["snapshot_error"] = "psram_required"; return; }
+#endif
+        copy = Memory::make<Result>();
+        if (!copy) { output["snapshot_error"] = "psram_optimizer_snapshot_exhausted"; return; }
+    }
     auto inputs = liveInputs(); auto revision = Energy::EnergyData.revision();
-    std::lock_guard<std::mutex> lock(_mutex);
+    std::unique_lock<std::mutex> lock(_mutex);
     inputs.loadRevision = _config.automaticLoad ? _load.revision : 0;
     if (_config.flow.enabled && !_config.flow.evProtection) { inputs.currentConstraints.dischargeAllowed = true; }
     unsigned days = 0;
@@ -312,18 +327,55 @@ void Service::serialize(JsonObject output, bool all, size_t offset) const
     output["replan_reason"] = _replanReason; output["replan_pending"] = _pending;
     output["last_error"] = _error;
     output["last_run_ms"] = _lastRunMs;
+    if (remote) {
+        output["published_plan_revision"] = _publishedRevision;
+        output["plan_valid"] = _config.enabled && _result && _result->plan.count && !changedLocked(inputs, revision) && !_result->plan.blocker;
+        auto reason = changedLocked(inputs, revision);
+        output["plan_reason"] = reason ? reason : _result && _result->plan.blocker ? _result->plan.blocker : _result ? "current_interval" : "plan_unavailable";
+        output["plan_blocker"] = _result ? _result->plan.blocker : _error;
+        output["current_planned_battery_w"] = nullptr; output["current_planned_start_wh"] = nullptr; output["current_planned_end_wh"] = nullptr;
+        output["current_planned_soc_pct"] = nullptr; output["calculation_us"] = 0;
+        output["schedule_total_steps"] = 0; output["schedule_serialized_steps"] = 0; output["schedule_truncated"] = false;
+    }
     output["plan_energy_revision"] = _result ? _result->energyRevision : 0;
-    if (!_result) {
-        serializeConfig(_config, output["config"].to<JsonObject>()); output["shadow_only"] = true; output["device_writes"] = false;
-        output["state"] = _config.enabled ? "not_ready" : "disabled";
+    bool stale = changedLocked(inputs, revision) != nullptr;
+    auto const* result = _result.get(); auto config = _config; auto error = _error;
+    if (remote) {
+        if (_result) { *copy = *_result; result = copy.get(); }
+        lock.unlock(); // JSON schedule serialization cannot block control/plan readers.
+    }
+    if (!result) {
+        serializeConfig(config, output["config"].to<JsonObject>()); output["shadow_only"] = true; output["device_writes"] = false;
+        output["state"] = config.enabled ? "not_ready" : "disabled";
         auto blockers = output["blockers"].to<JsonArray>();
-        if (_config.enabled) { blockers.add(_error ? _error : "waiting_for_calculation"); }
+        if (config.enabled) { blockers.add(error ? error : "waiting_for_calculation"); }
         output["storage_soc_fresh"] = inputs.storage.socPct.usable() && inputs.storage.device.reachable;
         output["current_discharge_allowed"] = inputs.currentConstraints.dischargeAllowed;
         output["schedule"].to<JsonArray>(); return;
     }
-    bool stale = changedLocked(inputs, revision) != nullptr;
-    serializePlan(_result->config, _result->inputs, _result->plan, output, stale ? 0 : all ? 24 : 12, offset);
+    if (remote) {
+        // Keep the cached plan visible with validity, but exclude completed slots.
+        while (offset < result->plan.count && result->plan.steps[offset].end <= inputs.now) { ++offset; }
+    }
+    serializePlan(result->config, result->inputs, result->plan, output, remote ? 96 : stale ? 0 : all ? 24 : 12, offset);
+    if (remote) {
+        output["tariff_source"] = Energy::remoteSource(result->plan.tariffSource);
+        output["forecast_source"] = result->plan.pvIncluded ? Energy::remoteSource(result->plan.forecastSource) : "excluded";
+        size_t available = result->plan.count - offset;
+        output["schedule_total_steps"] = available;
+        output["schedule_serialized_steps"] = output["schedule"].size();
+        output["schedule_truncated"] = output["schedule"].size() < available;
+        output["current_planned_battery_w"] = nullptr; output["current_planned_start_wh"] = nullptr; output["current_planned_end_wh"] = nullptr;
+        output["current_planned_soc_pct"] = nullptr;
+        if (offset < result->plan.count) {
+            auto const& step = result->plan.steps[offset];
+            if (step.start <= inputs.now && inputs.now < step.end) {
+                output["current_planned_battery_w"] = step.batteryW;
+                output["current_planned_start_wh"] = step.startWh; output["current_planned_end_wh"] = step.endWh;
+                if (result->config.capacityWh) { output["current_planned_soc_pct"] = 100.0 * step.startWh / result->config.capacityWh; }
+            }
+        }
+    }
     output["stale_inputs"] = stale;
     if (stale) { output["state"] = "stale_inputs"; output["blockers"].as<JsonArray>().add("inputs_changed_recalculation_required"); }
 }

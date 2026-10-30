@@ -84,6 +84,71 @@ func main() {
     print(f"Current collector Parse extracted all {len(FIELDS)} contract paths ({source})")
 
 
+def check_hems(hems):
+    def typed(path, kind):
+        value = at(hems, path)
+        assert type(value) is kind, f"HEMS {path}: expected {kind.__name__}"
+        return value
+    assert typed("read_only", bool)
+    typed("global_mode", str)
+    for target in ("storage", "evse"):
+        typed(f"control.{target}.mode", str)
+        typed(f"control.{target}.permission", bool)
+        for role in ("manual", "automatic"):
+            typed(f"control.{target}.{role}.writes_possible", bool)
+            typed(f"control.{target}.{role}.blockers", list)
+    paths = ["grid.power_w", "pv.ac_power_w"]
+    paths += ["storage." + name for name in ("soc_pct", "ac_power_w", "dc_power_w", "battery_voltage_v", "battery_current_a", "temperature_c", "charging", "discharging", "fault", "alarm")]
+    paths += ["evse." + name for name in ("power_w", "vehicle_connected", "charging", "allowed_current_a")]
+    for path in paths:
+        signal = at(hems, "normalized." + path)
+        assert signal["quality"] in ("fresh", "stale", "unknown")
+        if signal["quality"] == "unknown":
+            assert signal["value"] is None
+        else:
+            assert type(signal["value"]) in (int, float, bool)
+    for domain in ("tariff", "forecast"):
+        typed(domain + ".provider", str)
+        typed(domain + ".source", str)
+        for flag in ("fresh", "current_covered", "planning_usable", "truncated"):
+            typed(domain + "." + flag, bool)
+        total = typed(domain + ".available_interval_count", int)
+        count = typed(domain + ".serialized_interval_count", int)
+        rows = typed(domain + ".intervals", list)
+        assert len(rows) == count == min(total, 96)
+        for row in rows:
+            assert type(row["start"]) is int and type(row["end"]) is int
+            if domain == "tariff":
+                assert type(row["price_micros_per_kwh"]) is int
+                assert row["import_price_micros_per_kwh"] is None or type(row["import_price_micros_per_kwh"]) is int
+            else:
+                assert type(row["power_w"]) is int and type(row["energy_wh"]) in (int, float)
+    for path in ("plan_revision", "energy_revision", "configuration_generation", "published_plan_revision", "calculation_us"):
+        typed("optimizer." + path, int)
+    for path in ("plan_valid", "replan_pending", "manual_paused", "schedule_truncated"):
+        typed("optimizer." + path, bool)
+    rows = typed("optimizer.schedule", list)
+    assert len(rows) == typed("optimizer.schedule_serialized_steps", int) <= 96
+    assert typed("optimizer.schedule_total_steps", int) >= len(rows)
+    for row in rows:
+        for field in ("start", "end", "battery_w", "start_wh", "end_wh", "market_price_micros_per_kwh", "used_price_micros_per_kwh", "grid_import_ws", "grid_export_ws", "cost_nano", "assumed_load_w", "load_coverage_pct"):
+            assert type(row[field]) is int, field
+    for field in ("global_mode", "state", "owner", "desired_action", "commanded_action", "command_result", "coordination_state"):
+        typed("economic_dispatch." + field, str)
+    typed("shadow_if_active.valid", bool)
+    typed("shadow_if_active.reason", str)
+    typed("shadow_if_active.plan_revision", int)
+    assert typed("shadow_if_active.assumed_mode", str) == "Active"
+    assert typed("shadow_if_active.assumed_storage_permission", bool)
+    assert not typed("shadow_if_active.device_writes", bool)
+    typed("constraints.physical.known", bool)
+    typed("constraints.applicable.charge_allowed", bool)
+    typed("constraints.ev_protection.proposed.discharge_allowed", bool)
+    typed("flow.dpl_fresh", bool)
+    typed("flow.topology_supported", bool)
+    print("Rich HEMS signal/energy/plan/economics/preview/constraints field/type contract passed")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--collector", type=Path, help="Local checkout of current collector main")
@@ -101,6 +166,12 @@ def main():
             # Exact type checks keep JSON booleans from passing as integers.
             assert type(value) is kind, f"{path}: expected {kind.__name__}, got {type(value).__name__}"
         assert payload["schema_version"] == 1 and payload["boot_id"]
+        capture = payload["hems"]
+        assert type(capture["captured_at_utc"]) is int and type(capture["captured_at_uptime_ms"]) is int
+        assert 0 < len(capture["trigger"]) <= 5 and all(flag in ("periodic", "quarter_hour", "plan_revision", "manual", "diagnostic_event") for flag in capture["trigger"])
+        rich_body = work / "hems.json"
+        subprocess.run([str(ROOT / "test/test_remote_hems"), str(rich_body)], cwd=ROOT / "test", check=True, capture_output=True)
+        check_hems(json.loads(rich_body.read_text()))
         assert at(payload, "diagnostics.allocation_failure_count") == 7
         assert at(payload, "diagnostics.runtime.heap.failed_alloc_count") == 7
         assert at(payload, "diagnostics.allocation_failures") == []

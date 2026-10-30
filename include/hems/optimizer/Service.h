@@ -11,6 +11,8 @@ public:
     bool configure(Config const& config);
     bool requestRecalculate();
     void serialize(JsonObject output, bool all, size_t offset = 0) const;
+    bool serializeRemote(JsonObject output) const;
+    uint32_t publishedRevision() const;
     bool due();
     void run();
     PlanView dispatchPlan() const;
@@ -18,6 +20,7 @@ public:
     bool resume();
     void invalidate(char const* reason);
 private:
+    void serializeSnapshot(JsonObject output, bool all, size_t offset, bool remote) const;
     bool persistLocked(Config const& config, bool paused);
     char const* changedLocked(Inputs const& inputs, uint32_t revision) const;
     struct Result {
@@ -34,7 +37,7 @@ private:
     uint32_t _generation = 0, _lastRunMs = 0, _energyRevision = 0;
     bool _pending = false, _attempted = false;
     bool _manualPaused = false;
-    uint32_t _planRevision = 0;
+    uint32_t _planRevision = 0, _publishedRevision = 0;
     char const* _replanReason = "startup";
     char const* _error = nullptr;
     Memory::Ptr<Result> _result;

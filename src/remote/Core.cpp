@@ -52,7 +52,7 @@ bool validToken(char const* token) {
 }
 void settingsJson(Settings const& s, JsonObject out, bool persist) {
     out["enabled"] = s.enabled; out["endpoint"] = static_cast<char const*>(s.endpoint);
-    out["interval_minutes"] = s.intervalMinutes;
+    out["interval_minutes"] = s.intervalMinutes; out["quarter_hour"] = s.quarterHour;
     if (persist) { out["token"] = static_cast<char const*>(s.token); }
     else { out["token_set"] = s.token[0] != 0; }
 }
@@ -60,14 +60,16 @@ bool parseSettings(JsonVariantConst in, Settings& s, bool persisted) {
     if (!in.is<JsonObjectConst>() || !in["enabled"].is<bool>() || !in["endpoint"].is<char const*>()
         || !in["interval_minutes"].is<uint16_t>()) { return false; }
     Settings candidate = s;
+    if (!in["quarter_hour"].isUnbound() && !in["quarter_hour"].is<bool>()) { return false; }
+    candidate.quarterHour = in["quarter_hour"].isUnbound() ? (persisted ? false : s.quarterHour) : in["quarter_hour"].as<bool>();
     candidate.enabled = in["enabled"].as<bool>(); candidate.intervalMinutes = in["interval_minutes"].as<uint16_t>();
     auto endpoint = in["endpoint"].as<char const*>();
     if (strlen(endpoint) >= sizeof(candidate.endpoint) || (*endpoint && !validEndpoint(endpoint))
         || !candidate.intervalMinutes || candidate.intervalMinutes > 1440) { return false; }
-    strcpy(candidate.endpoint, endpoint);
+    strcpy(candidate.endpoint, endpoint);  // NOLINT(runtime/printf): bounded above.
     if (persisted || !in["token"].isNull()) {
         if (!in["token"].is<char const*>() || !validToken(in["token"].as<char const*>())) { return false; }
-        strcpy(candidate.token, in["token"].as<char const*>()); // Empty explicitly clears; omission preserves.
+        strcpy(candidate.token, in["token"].as<char const*>());  // NOLINT(runtime/printf): validToken bounds length. // Empty explicitly clears; omission preserves.
     }
     if (candidate.enabled && (!candidate.endpoint[0] || !candidate.token[0])) { return false; }
     s = candidate; return true;

@@ -20,10 +20,12 @@ struct RemoteCursor {
     uint32_t failureOldest = 0, failureNewest = 0, failureDropped = 0;
     size_t pending = 0, pendingFailures = 0;
     bool available = false;
+    uint32_t expired = 0, failuresExpired = 0;
 };
 // Safe task context only. The allocator callback continues to touch only HeapJournal.
 bool remoteStart();
 void remoteCollect();
+void remoteExpire(uint32_t now);
 RemoteCursor remoteCursor();
 bool remoteSample(uint32_t sequence, HeapSample& out);
 bool remoteFailure(uint32_t sequence, HeapFailure& out);

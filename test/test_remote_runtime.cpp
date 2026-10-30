@@ -2,6 +2,7 @@
 #include <RuntimeDiagnostics.h>
 #include <esp_system.h>
 #include <esp_heap_caps.h>
+#include <Arduino.h>
 #include <cassert>
 #include <iostream>
 #include <string>
@@ -35,5 +36,13 @@ int main() {
     cursor = remoteCursor(); assert(cursor.pending == Remote::SampleCapacity && cursor.dropped > 0 && cursor.oldest > oldest);
     remoteAcknowledge(cursor.oldest + 2, cursor.failureNewest);
     assert(remoteCursor().pending == Remote::SampleCapacity - 3 && remoteCursor().pendingFailures == 0);
+    mockReset = ESP_RST_SW; init(); assert(previousCapsule(capsule));
+    auto pendingBeforeExpiry = remoteCursor().pending;
+    auto ack = remoteCursor().acknowledged;
+    testNow += Remote::RetentionMs;
+    remoteExpire(testNow);
+    auto expired = remoteCursor();
+    assert(expired.pending == 0 && expired.expired == pendingBeforeExpiry && expired.acknowledged == ack);
+    assert(previousCapsule(capsule) && Remote::valid(capsule)); // Retention never discards the previous RTC capsule.
     std::cout << "runtime remote spool/hook/crash capsule/boot identity passed\n";
 }

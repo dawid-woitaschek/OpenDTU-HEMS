@@ -34,16 +34,41 @@ direct extraction with the current collector parser (`4cba646e`), and existing
 storage/EVSE/WARP/runtime-diagnostics/energy-service/retry regressions. This is
 software validation only; no additional physical validation is claimed.
 
-**Physical field validation is pending.** Peak INTERNAL/PSRAM memory and fragmentation,
-TLS/CA/SNI against the actual Traefik endpoint, shared-worker stack/latency, RTC
-retention, spool overflow/ACK-loss recovery and unattended HEMS/provider/radio
-stability remain physical-validation risks. No physical validation or GitHub
-Actions result is claimed. Local checks passed: four focused sender/core/transport/
-RTC native targets; existing WARP, storage, EVSE, runtime-journal, energy-service,
-retry, provider-control and production configuration regressions; the frontend
-Node suite, TypeScript, ESLint/Oxlint, and intercepted-API browser checks in EN/DE
-at 320/1440 px. The `generic_esp32s3_usb` compatibility firmware and production
-web assets built locally; this does not establish on-device PSRAM/TLS stability. [Implementation and operating bounds](HEMS_Remote_Diagnostics.md).
+The rich observation extension adds a stable `hems` capture with normalized
+signal quality, actual control/readiness, remote-safe tariff/forecast series
+(up to 96 intervals), cached optimizer/economics and up to 96 detailed future
+steps, actual economic/flow context and a pure **would-act-if-Active** storage
+preview. No additional polls, DP calculation or writes are caused by telemetry.
+The existing regular interval remains; optional persisted UTC quarter-hour and
+published-plan triggers coalesce behind one immutable body. At 60-minute pending
+age it expires locally, frees PSRAM and advances sequence without acknowledging
+checkpoints. Old spool entries expire separately; previous RTC capsules remain
+independent. Limits remain 192 KiB payload / 384 KiB PSRAM JSON.
+
+Local validation of this rich extension passed six focused Remote Diagnostics
+native targets, the stable rich HEMS and collector-compatible field/type contracts,
+the existing collector's unmodified parser, and 15 relevant optimizer/economic/
+flow/storage/EVSE/WARP/energy/runtime/TLS/retry regressions. Frontend Node tests,
+TypeScript, ESLint/Oxlint, formatting, changed-production C++ cpplint and EN/DE
+browser checks at 320/1440 px passed. Both `generic_esp32s3_usb` and
+`generic_esp32s3_usb_quad_psram` firmware targets built with production web assets.
+These are local software checks, not new physical validation or CI observations.
+
+**Initial field evidence, user-reported 2026-10-30:** the
+`generic_esp32s3_usb_quad_psram` build ran on Fusion v2.1/N8R2; the PSRAM spool was
+available. An initial real `tls_failed` body remained immutable. Enabling TLS 1.2
+on the Traefik router allowed a retry with HTTP 200 and accepted checkpoint ACK
+24; only acknowledged checkpoints were released, the telemetry sequence advanced,
+and newer checkpoints stayed pending. No allocation failure occurred in that
+test. Marstek/WARP were unreachable: no physical provider telemetry or actuation
+validation is claimed.
+
+**The new rich HEMS extension still needs physical validation after reflash.**
+Its software tests do not establish peak INTERNAL/PSRAM/stack headroom, long-term
+stability, actual decisions, quarter-hour timing, outage expiry or physical device
+behavior. Collector-side analysis/graphing is separate; no CI result is claimed.
+[Schema, limits and validation scope](HEMS_Remote_Diagnostics.md).
+
 
 
 ## Product model implemented in `hems`

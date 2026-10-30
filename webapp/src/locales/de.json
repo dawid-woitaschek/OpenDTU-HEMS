@@ -1871,6 +1871,19 @@
         "pending_allocation_failures": "Ausstehende Allokationsfehler",
         "dropped_allocation_failures": "Verlorene Allokationsfehler",
         "spool_available": "PSRAM-Puffer verfügbar",
-        "payload_bytes": "Ausstehende Nutzdaten (Bytes)"
+        "payload_bytes": "Ausstehende Nutzdaten (Bytes)",
+        "quarterHour": "Zusätzlich an HEMS-15-Minuten-Grenzen senden",
+        "quarterHelp": "Zusätzlich zu regulären Uploads an UTC-Viertelstunden erfassen. Ereignisse werden gebündelt, Wiederholungspausen gelten weiter. Neue Pläne werden unabhängig erfasst. Keine Gerätesteuerung; unbestätigte Nutzdaten verfallen nach 60 Minuten.",
+        "quarter_hour": "Viertelstunden-Auslöser aktiviert",
+        "pending_transmission_age_seconds": "Alter der ausstehenden Übertragung (Sekunden)",
+        "expired_transmission_count": "Abgelaufene Übertragungen",
+        "dropped_telemetry_count": "Lokal verworfene Telemetrieübertragungen",
+        "coalesced_hems_trigger_count": "Gebündelte HEMS-Auslöser",
+        "last_hems_capture_utc": "Letzte HEMS-Erfassung (UTC)",
+        "last_hems_trigger": "Letzte Erfassungsauslöser",
+        "pending_hems_trigger": "Ausstehende Auslöser",
+        "last_optimizer_plan_revision_observed": "Zuletzt beobachtete veröffentlichte Planrevision",
+        "expired_samples": "Abgelaufene Diagnosewerte",
+        "expired_allocation_failures": "Abgelaufene Allokationsfehler-Datensätze"
     }
 }
