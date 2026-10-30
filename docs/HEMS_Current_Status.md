@@ -4,6 +4,35 @@ Snapshot: 2026-10-28. Product branch: `hems`. The promoted HEMS line includes fo
 
 PR #26 was superseded by #27. PR #34 was rebased onto hardened `hems` head `49a2526b` (including PRs #35, #31 and #36) and merged into `hems`. Its implementation is integrated; physical optimizer, coordination and dispatch validation remains pending.
 
+## Remote Diagnostics sender (2026-10-30, unmerged)
+
+Remote Telemetry is implemented on **`remote-telemetry-sender`**, based on the
+unmerged **`redesign-v1` / [PR #37](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/37)**
+head `1018a4c5`. It is **not merged into `hems`**. The draft sender PR targets
+`redesign-v1` and depends on #37; collector-side infrastructure remains separate
+in `dawid-woitaschek/OpenDTU-HEMS-Telemetry`.
+
+Default-off System > Remote Diagnostics / Ferndiagnose provides authenticated,
+redacted configuration/status and scheduled Send now. A PSRAM-only bounded spool,
+immutable retry batches, committed checkpoint ACK gating, random per-boot identity,
+RTC crash capsule, verified outbound HTTPS and the shared serial energy worker
+support the hourly field-test path. Shared system snapshots do not create observer
+checkpoints; cached storage/WARP/raw Modbus observations require no additional poll.
+No-PSRAM, heap pressure and transport/collector failures defer telemetry safely.
+No remote control, inbound connection or household-history upload is added.
+
+**Physical field validation is pending.** Peak INTERNAL/PSRAM memory and fragmentation,
+TLS/CA/SNI against the actual Traefik endpoint, shared-worker stack/latency, RTC
+retention, spool overflow/ACK-loss recovery and unattended HEMS/provider/radio
+stability remain physical-validation risks. No physical validation or GitHub
+Actions result is claimed. Local checks passed: four focused sender/core/transport/
+RTC native targets; existing WARP, storage, EVSE, runtime-journal, energy-service,
+retry, provider-control and production configuration regressions; the frontend
+Node suite, TypeScript, ESLint/Oxlint, and intercepted-API browser checks in EN/DE
+at 320/1440 px. The `generic_esp32s3_usb` compatibility firmware and production
+web assets built locally; this does not establish on-device PSRAM/TLS stability. [Implementation and operating bounds](HEMS_Remote_Diagnostics.md).
+
+
 ## Usable control model
 
 | Global mode | Behavior |

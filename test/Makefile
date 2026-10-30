@@ -213,3 +213,32 @@ test: energy-management-test
 .PHONY: energy-management-test
 energy-management-test: test_energy_management
 	./test_energy_management
+
+# Focused Remote Diagnostics tests; no firmware/CI matrix required.
+test_remote_diagnostics: test_remote_diagnostics.cpp ../src/remote/Core.cpp ../src/remote/Snapshots.cpp ../src/diagnostics/Breadcrumb.cpp ../src/hems/modbus/Protocol.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+
+test_remote_sender: test_remote_sender.cpp ../src/remote/Service.cpp ../src/remote/Core.cpp ../src/diagnostics/Breadcrumb.cpp
+	$(CXX) $(CXXFLAGS) -DESP32 -Iremote_stubs -Ienergy_stubs -I../include -I$(ARDUINOJSON) -pthread -o $@ $(filter %.cpp,$^)
+
+test_remote_transport: test_remote_transport.cpp ../src/remote/Transport.cpp ../src/remote/Core.cpp
+	$(CXX) $(CXXFLAGS) -DESP32 -Iremote_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+
+test_remote_runtime: test_remote_runtime.cpp ../src/RuntimeDiagnostics.cpp ../src/diagnostics/Breadcrumb.cpp
+	$(CXX) $(CXXFLAGS) -DESP32 -Iremote_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+
+.PHONY: test-remote
+test-remote: test_remote_diagnostics test_remote_sender test_remote_transport test_remote_runtime
+	./test_remote_diagnostics
+	./test_remote_sender
+	./test_remote_transport
+	./test_remote_runtime
+
+REMOTE_HEADERS = $(wildcard ../include/remote/*.h) ../include/RuntimeDiagnostics.h $(wildcard remote_stubs/*.h) $(wildcard remote_stubs/freertos/*.h)
+test_remote_diagnostics test_remote_sender test_remote_transport test_remote_runtime: $(REMOTE_HEADERS)
+all: test_remote_diagnostics test_remote_sender test_remote_transport test_remote_runtime
+test: test-remote
+.PHONY: clean-remote
+clean: clean-remote
+clean-remote:
+	rm -f test_remote_diagnostics test_remote_sender test_remote_transport test_remote_runtime

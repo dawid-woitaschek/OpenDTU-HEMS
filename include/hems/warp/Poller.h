@@ -10,9 +10,11 @@ namespace Hems::Warp {
 template<typename Reader>
 Modbus::Result poll(Reader& reader, Sample& sample)
 {
+    sample = {}; // Replace raw/normalized observations on each normal poll.
     uint8_t version[4] {};
     auto result = reader.readInputRegisters(0, 2, version);
     if (!result) { return result; }
+    sample.raw.record(Modbus::ReadFunction::InputRegisters, 0, 2, version);
     sample.tableVersion = Modbus::decodeUint32(version);
     if (sample.tableVersion < 2 || sample.tableVersion > 5) {
         return { Modbus::Error::UnsupportedTable, 0, true };
@@ -20,16 +22,19 @@ Modbus::Result poll(Reader& reader, Sample& sample)
     uint8_t features[1] {};
     result = reader.readDiscreteInputs(0, 2, features);
     if (!result) { return result; }
+    sample.raw.record(Modbus::ReadFunction::DiscreteInputs, 0, 2, features);
     if (!(features[0] & 1)) { return { Modbus::Error::NoEvse, 0, true }; }
     sample.meterAvailable = features[0] & 2;
     uint8_t evse[24] {};
     result = reader.readInputRegisters(1000, 12, evse);
     if (!result) { return result; }
+    sample.raw.record(Modbus::ReadFunction::InputRegisters, 1000, 12, evse);
     uint8_t meter[16] {};
     if (sample.meterAvailable) {
         result = reader.readInputRegisters(2002, 8, meter);
         if (!result) { return result; }
     }
+    if (sample.meterAvailable) { sample.raw.record(Modbus::ReadFunction::InputRegisters, 2002, 8, meter); }
     if (!decode(sample, evse, sample.meterAvailable ? meter : nullptr)) {
         return { Modbus::Error::InvalidData, 0, true };
     }

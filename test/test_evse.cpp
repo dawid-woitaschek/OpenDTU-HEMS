@@ -99,6 +99,7 @@ void testWarpProfilePollAndAdapter()
     Evse::Sample sample;
     auto result = Evse::poll(reader, profile, sample);
     assert(result);
+    assert(sample.raw.count == 8 && sample.raw.words[0].address == 0 && sample.raw.words[1].value == 5);
     assert(reader.calls == 4); // uptime is not an operational semantic and is skipped
     assert(sample.recognizedValues == 4 && sample.validValues == 4);
     assert(sample.tableVersion.valid && sample.tableVersion.value == 5);
@@ -109,6 +110,7 @@ void testWarpProfilePollAndAdapter()
 
     Warp::Sample warp;
     assert(Warp::fromProfileSample(sample, warp));
+    assert(warp.raw.count == sample.raw.count && warp.raw.words[1].value == 5);
     assert(warp.tableVersion == 5 && warp.iecState == 2 && warp.chargingState == 3);
     assert(std::abs(warp.allowedCurrentA - 16.0f) < 1e-6f);
     assert(warp.vehicleKnown && warp.vehicleConnected);

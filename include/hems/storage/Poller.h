@@ -30,6 +30,7 @@ Modbus::Result poll(Reader& reader, Profiles::Profile const& profile, Sample& sa
         }
         if (!result) { return result; }
 
+        sample.raw.record(entry.space, entry.address, entry.count, payload);
         size_t payloadSize = entry.type == Profiles::Type::Bool ? 1 : entry.count * 2;
         apply(sample, entry.key, Profiles::decode(entry, payload, payloadSize));
     }

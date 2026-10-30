@@ -104,6 +104,12 @@ static void testMarstekCatalog()
         { 35100, 2 }, { 36000, 0 }, { 36001, 0 }, { 36100, 0 }, { 36101, 0 } };
     Storage::Sample sample;
     assert(Storage::poll(registers, profile, sample));
+    assert(sample.raw.count > 0 && sample.raw.count <= 48 && sample.raw.dropped == 0);
+    bool rawSoc = false;
+    for (unsigned i = 0; i < sample.raw.count; ++i) {
+        if (sample.raw.words[i].address == 34002) { rawSoc = sample.raw.words[i].value == 500; }
+    }
+    assert(rawSoc);
     assert(sample.socPct.valid && sample.socPct.value == 50);
     assert(sample.acPowerW.valid && sample.acPowerW.value == 500); // normalized charging positive
     assert(sample.dcPowerW.valid && sample.dcPowerW.value == 520);

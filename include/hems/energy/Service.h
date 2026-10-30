@@ -22,7 +22,14 @@ public:
     Status status(Domain domain) const;
     // Share the optional low-priority worker with pure background calculations.
     void background(bool (*due)(void*), void (*run)(void*), void* context);
+    // Remote Diagnostics shares this serial worker, after energy requests.
+    void diagnosticsBackground(bool (*due)(void*), void (*run)(void*), void* context) {
+        _diagnosticsDue = due; _diagnosticsRun = run; _diagnosticsContext = context;
+    }
 private:
+    bool (*_diagnosticsDue)(void*) = nullptr;
+    void (*_diagnosticsRun)(void*) = nullptr;
+    void* _diagnosticsContext = nullptr;
     JsonProvider& provider(Domain domain) { return domain == Domain::Tariff ? _tariff : _forecast; }
     JsonProvider const& provider(Domain domain) const { return domain == Domain::Tariff ? _tariff : _forecast; }
     RefreshDecision refreshDecision(Domain domain) const; // Caller holds _mutex.

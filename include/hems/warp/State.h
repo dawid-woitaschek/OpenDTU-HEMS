@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include <hems/modbus/Observations.h>
 
 #include <hems/modbus/Protocol.h>
 
@@ -9,6 +10,7 @@ constexpr uint32_t PollIntervalMs = 3000;
 constexpr uint32_t StaleTimeoutMs = 15000;
 
 struct Sample {
+    Modbus::Observations raw;
     uint32_t tableVersion = 0;
     uint32_t iecState = 0;
     uint32_t chargingState = 0;

@@ -290,6 +290,7 @@ Status Service::status(Domain domain) const
 void Service::loop()
 {
     bool needed = _backgroundDue && _backgroundDue(_backgroundContext);
+    needed = (_diagnosticsDue && _diagnosticsDue(_diagnosticsContext)) || needed;
     std::lock_guard<std::mutex> lock(_mutex);
     for (auto domain : { Domain::Tariff, Domain::Forecast }) {
         auto i = static_cast<unsigned>(domain);
@@ -319,6 +320,7 @@ void Service::workerEntry(void* context)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (service._backgroundRun) { service._backgroundRun(service._backgroundContext); }
         for (auto domain : { Domain::Tariff, Domain::Forecast }) { service.runPending(domain); }
+        if (service._diagnosticsRun) { service._diagnosticsRun(service._diagnosticsContext); }
         // fetch/runPending frames, unpublished Series and optimizer scratch are gone.
         Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::WorkerIdle);
         auto freeStack = uxTaskGetStackHighWaterMark(nullptr); // ESP-IDF reports bytes.

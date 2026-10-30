@@ -28,6 +28,7 @@
 #include "PinMapping.h"
 #include "RestartHelper.h"
 #include <RuntimeDiagnostics.h>
+#include <remote/Service.h>
 #include "Scheduler.h"
 #include "SunPosition.h"
 #include "Utils.h"
@@ -140,6 +141,7 @@ void setup()
     HemsController.init(scheduler);
     Hems::Energy::EnergyData.init(scheduler);
     Hems::Optimizer::ShadowOptimizer.init();
+    Remote::Sender.init();
 
     // Initialize WebApi
     ESP_LOGI(TAG, "Initializing WebApi...");

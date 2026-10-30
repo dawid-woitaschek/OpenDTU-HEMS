@@ -20,6 +20,7 @@ bool unsignedValue(Evse::NumberValue const& value, uint32_t maximum, uint32_t& o
 bool fromProfileSample(Evse::Sample const& source, Sample& target)
 {
     target = {};
+    target.raw = source.raw;
 
     if (!unsignedValue(source.tableVersion, 5, target.tableVersion)
             || target.tableVersion < 2

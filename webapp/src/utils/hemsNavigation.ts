@@ -82,6 +82,7 @@ export const mainNavigation: { label: string; items: NavigationItem[] }[] = [
             { path: '/settings/config', label: 'configuration' },
             { path: '/firmware/upgrade', label: 'firmware' },
             { path: '/info/system', label: 'systemStatus' },
+            { path: '/system/remote-diagnostics', label: 'remoteDiagnostics' },
             { path: '/maintenance/reboot', label: 'reboot' },
         ],
     },

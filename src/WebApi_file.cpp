@@ -74,6 +74,9 @@ void WebApiFileClass::onFileGet(AsyncWebServerRequest* request)
         }
     }
 
+    // This credential file is configured through a redacted API. Do not let
+    // generic file downloads bypass that boundary (including temporary files).
+    if (requestFile.indexOf("remote-diagnostics") >= 0) { request->send(403); return; }
     request->send(LittleFS, requestFile, String(), true);
 }
 
