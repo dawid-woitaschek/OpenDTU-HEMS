@@ -4,6 +4,71 @@ Snapshot: 2026-10-28. Product branch: `hems`. The promoted HEMS line includes fo
 
 PR #26 was superseded by #27. PR #34 was rebased onto hardened `hems` head `49a2526b` (including PRs #35, #31 and #36) and merged into `hems`. Its implementation is integrated; physical optimizer, coordination and dispatch validation remains pending.
 
+## Remote Diagnostics sender (2026-10-30, unmerged)
+
+Remote Telemetry is implemented on **`remote-telemetry-sender`**, based on the
+unmerged **`redesign-v1` / [PR #37](https://github.com/dawid-woitaschek/OpenDTU-HEMS/pull/37)**
+head `1018a4c5`. It is **not merged into `hems`**. The draft sender PR targets
+`redesign-v1` and depends on #37; collector-side infrastructure remains separate
+in `dawid-woitaschek/OpenDTU-HEMS-Telemetry`.
+
+Default-off System > Remote Diagnostics / Ferndiagnose provides authenticated,
+redacted configuration/status and scheduled Send now. A PSRAM-only bounded spool,
+immutable retry batches, committed checkpoint ACK gating, random per-boot identity,
+RTC crash capsule, verified outbound HTTPS and the shared serial energy worker
+support the hourly field-test path. Shared system snapshots do not create observer
+checkpoints; cached storage/WARP/raw Modbus observations require no additional poll.
+No-PSRAM, heap pressure and transport/collector failures defer telemetry safely.
+No remote control, inbound connection or household-history upload is added.
+
+The PR #38 compatibility follow-up adds collector summary aliases for valid
+storage SoC, cached wallbox connectivity/known charging, the authoritative current
+boot allocation-failure count and current reset reason. Existing detailed fields
+and transport/ACK/retry/spool/control semantics are preserved. A serialized-payload
+contract regression checks the collector's paths and JSON types, with an optional
+direct comparison against its current Go parser. The follow-up passed all four
+Remote Diagnostics native targets, all 15 payload contract path/type checks,
+direct extraction with the current collector parser (`4cba646e`), and existing
+storage/EVSE/WARP/runtime-diagnostics/energy-service/retry regressions. This is
+software validation only; no additional physical validation is claimed.
+
+The rich observation extension adds a stable `hems` capture with normalized
+signal quality, actual control/readiness, remote-safe tariff/forecast series
+(up to 96 intervals), cached optimizer/economics and up to 96 detailed future
+steps, actual economic/flow context and a pure **would-act-if-Active** storage
+preview. No additional polls, DP calculation or writes are caused by telemetry.
+The existing regular interval remains; optional persisted UTC quarter-hour and
+published-plan triggers coalesce behind one immutable body. At 60-minute pending
+age it expires locally, frees PSRAM and advances sequence without acknowledging
+checkpoints. Old spool entries expire separately; previous RTC capsules remain
+independent. Limits remain 192 KiB payload / 384 KiB PSRAM JSON.
+
+Local validation of this rich extension passed six focused Remote Diagnostics
+native targets, the stable rich HEMS and collector-compatible field/type contracts,
+the existing collector's unmodified parser, and 15 relevant optimizer/economic/
+flow/storage/EVSE/WARP/energy/runtime/TLS/retry regressions. Frontend Node tests,
+TypeScript, ESLint/Oxlint, formatting, changed-production C++ cpplint and EN/DE
+browser checks at 320/1440 px passed. Both `generic_esp32s3_usb` and
+`generic_esp32s3_usb_quad_psram` firmware targets built with production web assets.
+These are local software checks, not new physical validation or CI observations.
+
+**Initial field evidence, user-reported 2026-10-30:** the
+`generic_esp32s3_usb_quad_psram` build ran on Fusion v2.1/N8R2; the PSRAM spool was
+available. An initial real `tls_failed` body remained immutable. Enabling TLS 1.2
+on the Traefik router allowed a retry with HTTP 200 and accepted checkpoint ACK
+24; only acknowledged checkpoints were released, the telemetry sequence advanced,
+and newer checkpoints stayed pending. No allocation failure occurred in that
+test. Marstek/WARP were unreachable: no physical provider telemetry or actuation
+validation is claimed.
+
+**The new rich HEMS extension still needs physical validation after reflash.**
+Its software tests do not establish peak INTERNAL/PSRAM/stack headroom, long-term
+stability, actual decisions, quarter-hour timing, outage expiry or physical device
+behavior. Collector-side analysis/graphing is separate; no CI result is claimed.
+[Schema, limits and validation scope](HEMS_Remote_Diagnostics.md).
+
+
+
 ## Usable control model
 
 | Global mode | Behavior |

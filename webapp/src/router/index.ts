@@ -26,6 +26,7 @@ import NtpAdminView from '@/views/NtpAdminView.vue';
 import NtpInfoView from '@/views/NtpInfoView.vue';
 import SecurityAdminView from '@/views/SecurityAdminView.vue';
 import SystemInfoView from '@/views/SystemInfoView.vue';
+import RemoteDiagnosticsView from '@/views/RemoteDiagnosticsView.vue';
 import WaitRestartView from '@/views/WaitRestartView.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
@@ -40,6 +41,7 @@ const router = createRouter({
         });
     },
     routes: [
+        { path: '/system/remote-diagnostics', name: 'Remote Diagnostics', component: RemoteDiagnosticsView },
         {
             path: '/energy/diagnostics',
             alias: '/hems/diagnostics',

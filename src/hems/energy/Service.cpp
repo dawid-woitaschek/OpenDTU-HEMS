@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <hems/energy/Service.h>
+#include <hems/energy/Remote.h>
 #include <RuntimeDiagnostics.h>
 #include <hems/Memory.h>
 #include <hems/profiles/Profile.h>
@@ -245,6 +246,25 @@ void Service::serialize(Domain domain, JsonObject output, bool all) const
         }
     }
 }
+bool Service::serializeRemote(Domain domain, JsonObject output) const
+{
+#if defined(ESP32)
+    if (!heap_caps_get_total_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) { return false; }
+#endif
+    // Short POD copy only under the provider lock; large JSON work is outside.
+    // Memory::make cannot spill to INTERNAL when PSRAM is present but full.
+    auto series = Memory::make<Series>();
+    if (!series) { return false; }
+    Status status; char const* providerName;
+    auto utc = utcNow();
+    {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto const& source = provider(domain); *series = source.data();
+        status = source.status(utc, millis()); providerName = sourceName(source.settings());
+    }
+    remoteJson(domain, providerName, *series, status, utc, output);
+    return true;
+}
 bool Service::ingest(Domain domain, JsonVariantConst payload)
 {
     auto series = Memory::make<Series>();
@@ -290,6 +310,7 @@ Status Service::status(Domain domain) const
 void Service::loop()
 {
     bool needed = _backgroundDue && _backgroundDue(_backgroundContext);
+    needed = (_diagnosticsDue && _diagnosticsDue(_diagnosticsContext)) || needed;
     std::lock_guard<std::mutex> lock(_mutex);
     for (auto domain : { Domain::Tariff, Domain::Forecast }) {
         auto i = static_cast<unsigned>(domain);
@@ -319,6 +340,7 @@ void Service::workerEntry(void* context)
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (service._backgroundRun) { service._backgroundRun(service._backgroundContext); }
         for (auto domain : { Domain::Tariff, Domain::Forecast }) { service.runPending(domain); }
+        if (service._diagnosticsRun) { service._diagnosticsRun(service._diagnosticsContext); }
         // fetch/runPending frames, unpublished Series and optimizer scratch are gone.
         Diagnostics::heapCheckpoint(Diagnostics::HeapPoint::WorkerIdle);
         auto freeStack = uxTaskGetStackHighWaterMark(nullptr); // ESP-IDF reports bytes.

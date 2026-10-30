@@ -48,6 +48,8 @@ public:
     Constraints::ConstraintSet getConstraints() const;
     Policies::EvProtectionSnapshot getEvProtectionShadowSnapshot() const;
     uint64_t economicContextRevision() const;
+    Actuation::Readiness automaticReadiness(ControlTarget target) const { return readiness(target, true); }
+    Economic::Preview shadowIfActive() const;
     void serializeEconomic(JsonObject output) const;
 
 private:
@@ -58,6 +60,7 @@ private:
     void applyEvProtection();
     void applyEconomic();
     Flow::Decision flowDecision(Optimizer::PlanView const& plan) const;
+    Flow::Decision flowDecision(Optimizer::PlanView const& plan, Constraints::StorageConstraints const& constraints) const;
     bool economicAuthorized(Actuation::Command const& command) const;
     bool flowAuthorized(Actuation::Command const& command) const;
     mutable std::mutex _economicMutex;

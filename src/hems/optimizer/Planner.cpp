@@ -417,6 +417,7 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
 {
     serializeConfig(c, out["config"].to<JsonObject>());
     out["shadow_only"] = true; out["device_writes"] = false; out["state"] = p.state;
+    out["initial_wh"] = p.initialWh; out["final_wh"] = p.finalWh;
     out["generated_at"] = p.generatedAt; out["pv_included"] = p.pvIncluded; out["partial_horizon"] = p.partial;
     for (auto key : { "initial_soc_pct", "final_soc_pct", "baseline_cost_nano", "optimized_cost_nano", "modeled_savings_nano" }) { out[key] = nullptr; }
     if (p.count) {
@@ -492,18 +493,18 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     out["horizon_start"] = p.count ? p.steps[0].start : 0; out["horizon_end"] = p.count ? p.steps[p.count - 1].end : 0;
     out["interval_count"] = p.count;
     auto schedule = out["schedule"].to<JsonArray>();
-    limit = std::min(limit, static_cast<size_t>(24));
+    limit = std::min(limit, static_cast<size_t>(96));
     out["schedule_offset"] = offset; out["has_more"] = offset + limit < p.count;
-    for (size_t n = offset; n < p.count && n - offset < std::min(limit, size_t(24)); ++n) {
+    for (size_t n = offset; n < p.count && n - offset < limit; ++n) {
         auto const& s = p.steps[n]; auto j = schedule.add<JsonObject>();
         j["start"] = s.start; j["end"] = s.end; j["market_price_micros_per_kwh"] = s.marketPrice;
         j["import_price_micros_per_kwh"] = nullptr; if (s.hasImportPrice) { j["import_price_micros_per_kwh"] = s.importPrice; }
         j["used_price_micros_per_kwh"] = s.usedPrice; j["pv_w"] = s.pvW;
         j["pv_wh"] = static_cast<double>(s.pvW) * (s.end - s.start) / 3600; j["assumed_load_w"] = s.loadW; j["load_coverage_pct"] = s.loadCoverage; j["load_learned"] = s.loadLearned;
         j["action"] = s.endWh > s.startWh ? "charge" : s.endWh < s.startWh ? "discharge" : "hold";
-        j["battery_w"] = s.batteryW; j["start_soc_pct"] = 100.0 * s.startWh / c.capacityWh;
+        j["battery_w"] = s.batteryW; j["start_wh"] = s.startWh; j["end_wh"] = s.endWh; j["start_soc_pct"] = 100.0 * s.startWh / c.capacityWh;
         j["end_soc_pct"] = 100.0 * s.endWh / c.capacityWh; j["grid_import_wh"] = static_cast<double>(s.gridImportWs) / 3600;
-        j["grid_export_wh"] = static_cast<double>(s.gridExportWs) / 3600; j["cost_nano"] = s.costNano;
+        j["grid_export_wh"] = static_cast<double>(s.gridExportWs) / 3600; j["cost_nano"] = s.costNano; j["grid_import_ws"] = s.gridImportWs; j["grid_export_ws"] = s.gridExportWs;
         j["reason"] = s.endWh == s.startWh ? "least_cost_hold_with_policies" : "horizon_cost_minimum_with_policies_and_losses";
     }
 }

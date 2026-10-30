@@ -32,6 +32,22 @@ struct Fixture {
     }
 };
 int main() {
+    { Fixture f; unsigned char before[sizeof(f.dispatch)]; memcpy(before, &f.dispatch, sizeof(before));
+      auto preview = f.dispatch.preview(f.in);
+      for (unsigned i = 0; i < 1000; ++i) { assert(f.dispatch.preview(f.in).valid); }
+      assert(!memcmp(before, &f.dispatch, sizeof(before)));
+      auto actual = f.tick(); assert(actual.submit && preview.command.action == actual.command.action && preview.command.value == actual.command.value); }
+    { Fixture f; auto decision = f.tick(); f.dispatch.accepted(decision.command, 123, f.in.nowMs);
+      f.in.mailbox = {MailboxState::Failed, 123, 1, decision.command};
+      assert(!strcmp(f.dispatch.preview(f.in).reason, "command_failed_replan_pending")); }
+    { Fixture f; f.in.storage.socPct = Model::Signal<double>::stale(50); assert(!f.dispatch.preview(f.in).valid); }
+    { Fixture f; f.in.plan.config.flow.enabled = true; assert(!strcmp(f.dispatch.preview(f.in).reason, "waiting_wear_cost")); }
+    { Fixture f; f.in.plan.valid = false; assert(!f.dispatch.preview(f.in).valid); }
+    { Fixture f; f.in.storage.faultActive = Model::Signal<bool>::fresh(true); assert(!f.dispatch.preview(f.in).valid); }
+    { Fixture f; f.in.plan.batteryW = -537; f.in.constraints.dischargeAllowed = false; assert(!strcmp(f.dispatch.preview(f.in).reason, "blocked_protection")); }
+    { Fixture f; f.profile.operationCount = 0; assert(!strcmp(f.dispatch.preview(f.in).reason, "unsupported_action")); }
+    { Fixture f; f.in.storage.socPct.value = 90; auto p = f.dispatch.preview(f.in); assert(p.valid && p.command.action == Action::Stop && !strcmp(p.reason, "soc_upper_limit")); }
+
     { Fixture f; f.in.plan.config.flow.enabled=true; assert(!f.tick().submit);
       assert(!strcmp(f.dispatch.snapshot().state,"waiting_wear_cost"));
       f.in.plan.config.wearSource=1; assert(f.tick().submit);

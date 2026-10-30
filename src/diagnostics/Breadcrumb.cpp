@@ -14,7 +14,7 @@ uint32_t checksum(Record const& r)
 unsigned lane(Component c)
 {
     switch (c) {
-    case Component::Energy: case Component::Optimizer: return 0; // One shared serial worker.
+    case Component::Energy: case Component::Optimizer: case Component::RemoteDiagnostics: return 0; // One shared serial worker.
     case Component::FirmwareUpdate: return 1;
     case Component::Configuration: return 2;
     case Component::Network: return 3;
@@ -99,7 +99,7 @@ void Journal::restartRequested(RestartSource source, uint32_t ms)
 void Journal::intentionalRestart(uint32_t ms) { current.intentionalRestart = 1; current.restartAt = ms; next(); commit(); }
 void Journal::hookRegistered(bool registered) { current.shutdownRegistered = registered; next(); commit(); }
 void Journal::espRestart() { current.espRestartCalled = 1; next(); commit(); }
-char const* name(Component v) { constexpr char const* names[] = { "none", "energy", "optimizer", "firmware_update", "configuration", "network", "maintenance", "runtime" }; return v < Component::Count ? names[unsigned(v)] : "unknown"; }
+char const* name(Component v) { constexpr char const* names[] = { "none", "energy", "optimizer", "firmware_update", "configuration", "network", "maintenance", "runtime", "remote_diagnostics" }; return v < Component::Count ? names[unsigned(v)] : "unknown"; }
 char const* name(Operation v) { constexpr char const* names[] = { "none", "tariff", "forecast", "calculate", "upload", "write", "reset", "restore", "apply", "reconnect", "boot", "restart" }; return v < Operation::Count ? names[unsigned(v)] : "unknown"; }
 char const* name(Phase v) { constexpr char const* names[] = { "start", "provider_start", "dns", "connect", "tls_http", "decode", "aggregate", "configuration", "network", "complete" }; return v < Phase::Count ? names[unsigned(v)] : "unknown"; }
 char const* name(RestartSource v) { constexpr char const* names[] = { "none", "maintenance_reboot", "firmware_update", "configuration_reset", "file_restore", "pin_mapping_change", "inverter_unresponsive", "unspecified" }; return v < RestartSource::Count ? names[unsigned(v)] : "unknown"; }

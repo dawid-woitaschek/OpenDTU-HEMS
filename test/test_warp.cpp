@@ -87,6 +87,8 @@ static void testDecoding()
     Warp::Sample sample;
     assert(Warp::poll(reader, sample));
     assert(sample.charging && sample.chargingKnown && sample.vehicleConnected && sample.vehicleKnown);
+    assert(sample.raw.count == 24 && sample.raw.dropped == 0);
+    assert(sample.raw.words[4].address == 1000 && sample.raw.words[4].function == Modbus::ReadFunction::InputRegisters);
     assert(sample.allowedCurrentA == 16 && sample.powerW == 7420);
     assert(sample.sessionEnergyKWh > 4.299f && sample.sessionEnergyKWh < 4.301f);
     for (uint32_t state = 0; state < 4; ++state) {

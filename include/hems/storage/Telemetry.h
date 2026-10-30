@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
+#include <hems/modbus/Observations.h>
 
 #include <cstdint>
 #include <hems/profiles/Profile.h>
@@ -17,6 +18,7 @@ struct BoolValue {
 };
 
 struct Sample {
+    Modbus::Observations raw;
     NumberValue socPct;
     NumberValue acPowerW;
     NumberValue dcPowerW;

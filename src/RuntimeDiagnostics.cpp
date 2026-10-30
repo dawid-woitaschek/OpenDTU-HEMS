@@ -6,6 +6,9 @@
 #include <diagnostics/HeapSerialize.h>
 #include <Arduino.h>
 #include <esp_attr.h>
+#include <esp_system.h>
+#include <cstring>
+#include <new>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
@@ -15,6 +18,21 @@ namespace {
 RTC_NOINIT_ATTR Storage retained;
 Journal journal;
 HeapJournal heapJournal;
+Remote::Ring<HeapSample> remoteSamples;
+Remote::Ring<HeapFailure> remoteFailures;
+uint32_t copiedFailures = 0;
+char bootIdentity[33] {};
+alignas(Remote::Capsule) RTC_NOINIT_ATTR uint8_t retainedCapsule[sizeof(Remote::Capsule)];
+Remote::Capsule previousCrash {};
+bool previousCrashValid = false;
+void capsuleCommit(Remote::Capsule& c) {
+    Remote::seal(c);
+    memset(retainedCapsule, 0, sizeof(uint32_t));
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    memcpy(retainedCapsule + sizeof(uint32_t), reinterpret_cast<uint8_t*>(&c) + sizeof(uint32_t), sizeof(c) - sizeof(uint32_t));
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    memcpy(retainedCapsule, &c.magic, sizeof(uint32_t));
+}
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 bool shutdownRegistered = false;
 bool allocationHookRegistered = false;
@@ -86,6 +104,10 @@ void serializeHeap(JsonObject out, bool history)
 } // namespace
 void init()
 {
+    memcpy(&previousCrash, retainedCapsule, sizeof(previousCrash));
+    previousCrashValid = mayRetain(esp_reset_reason()) && Remote::valid(previousCrash);
+    uint8_t random[16]; esp_fill_random(random, sizeof(random));
+    Remote::bootId(random, bootIdentity);
     journal.boot(retained, mayRetain(esp_reset_reason()));
     shutdownRegistered = esp_register_shutdown_handler(shutdown) == ESP_OK;
     journal.hookRegistered(shutdownRegistered);
@@ -101,7 +123,11 @@ void workerPhase(Phase p, int8_t index)
     if (worker.active) { journal.phase(worker.sequence, p, index, millis()); }
 }
 void restartRequested(RestartSource source) { Lock lock; journal.restartRequested(source, millis()); }
-void intentionalRestart() { Lock lock; journal.intentionalRestart(millis()); }
+void intentionalRestart() {
+    Lock lock; journal.intentionalRestart(millis());
+    Remote::Capsule capsule; memcpy(&capsule, retainedCapsule, sizeof(capsule));
+    if (Remote::valid(capsule)) { capsule.intentionalRestart = 1; capsuleCommit(capsule); }
+}
 void heapCheckpoint(HeapPoint point, HeapProvider provider, int8_t plane)
 {
     // Heap walks and stack-watermark scans happen in the worker/calling task,
@@ -127,7 +153,74 @@ void heapCheckpoint(HeapPoint point, HeapProvider provider, int8_t plane)
     sample.context.plane = plane >= 0 ? plane : provider == HeapProvider::ForecastSolar ? sample.context.subIndex : -1;
     if (point == HeapPoint::Boot) { sample.context.component = Component::Runtime; sample.context.operation = Operation::Boot; }
     heapJournal.sample(sample);
+    auto sequence = heapJournal.samples.cursor().sequence;
+    remoteSamples.push(sequence, sample);
+    Remote::Capsule capsule {};
+    capsule.checkpoint = sequence; capsule.sample = sample;
+    memcpy(capsule.boot, bootIdentity, sizeof(capsule.boot));
+    capsule.failureCount = heapJournal.failures.cursor().sequence;
+    heapJournal.failures.read(capsule.failureCount, capsule.failure);
+    capsule.intentionalRestart = journal.current.intentionalRestart;
+    capsuleCommit(capsule);
 }
+bool remoteStart()
+{
+    { Lock lock; if (remoteSamples.available()) { return true; } }
+    if (!heap_caps_get_total_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) { return false; }
+    // Explicit PSRAM only. Never turn an absent/full PSRAM into a large INTERNAL allocation.
+    using Samples = Remote::Ring<HeapSample>::Entry;
+    using Failures = Remote::Ring<HeapFailure>::Entry;
+    auto samples = static_cast<Samples*>(heap_caps_malloc(sizeof(Samples) * Remote::SampleCapacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    auto failures = static_cast<Failures*>(heap_caps_malloc(sizeof(Failures) * Remote::FailureCapacity, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!samples || !failures) { free(samples); free(failures); return false; }
+    // Begin POD entry lifetimes in ordinary task context, outside the short lock.
+    for (size_t i = 0; i < Remote::SampleCapacity; ++i) { ::new (samples + i) Samples; }
+    for (size_t i = 0; i < Remote::FailureCapacity; ++i) { ::new (failures + i) Failures; }
+    Lock lock;
+    remoteSamples.attach(samples, Remote::SampleCapacity); remoteFailures.attach(failures, Remote::FailureCapacity);
+    auto cursor = heapJournal.samples.cursor();
+    for (uint32_t i = 0; i < cursor.count; ++i) {
+        HeapSample value; auto sequence = cursor.sequence - cursor.count + 1 + i;
+        if (heapJournal.samples.read(sequence, value)) { remoteSamples.push(sequence, value); }
+    }
+    return true;
+}
+void remoteCollect()
+{
+    Lock lock;
+    if (!remoteFailures.available()) { return; }
+    auto cursor = heapJournal.failures.cursor();
+    if (cursor.sequence - copiedFailures > cursor.count) {
+        remoteFailures.lost(cursor.sequence - copiedFailures - cursor.count);
+        copiedFailures = cursor.sequence - cursor.count;
+    }
+    while (copiedFailures < cursor.sequence) {
+        HeapFailure value; ++copiedFailures;
+        if (heapJournal.failures.read(copiedFailures, value)) { remoteFailures.push(copiedFailures, value); }
+    }
+}
+void remoteExpire(uint32_t now)
+{
+    // Bound each critical section, including on recovery from a long outage.
+    // No allocation/network/JSON here and acknowledgement remains untouched.
+    size_t removed;
+    do { Lock lock; removed = remoteSamples.expire(now, Remote::RetentionMs); } while (removed == 16);
+    do { Lock lock; removed = remoteFailures.expire(now, Remote::RetentionMs); } while (removed == 16);
+}
+RemoteCursor remoteCursor()
+{
+    Lock lock;
+    return {remoteSamples.oldest(), remoteSamples.newest(), remoteSamples.acknowledged(), remoteSamples.dropped(),
+        remoteFailures.oldest(), remoteFailures.newest(), remoteFailures.dropped(), remoteSamples.count(), remoteFailures.count(), remoteSamples.available(), remoteSamples.expired(), remoteFailures.expired()};
+}
+bool remoteSample(uint32_t sequence, HeapSample& out) { Lock lock; return remoteSamples.read(sequence, out); }
+bool remoteFailure(uint32_t sequence, HeapFailure& out) { Lock lock; return remoteFailures.read(sequence, out); }
+void remoteAcknowledge(uint32_t checkpoint, uint32_t failure) {
+    Lock lock; remoteSamples.acknowledge(checkpoint); remoteFailures.acknowledge(failure);
+}
+char const* remoteBootId() { return bootIdentity; }
+void bootHeapSample(HeapSample& out) { Lock lock; out = heapJournal.boot; }
+bool previousCapsule(Remote::Capsule& out) { if (previousCrashValid) { out = previousCrash; } return previousCrashValid; }
 void serialize(JsonObject out, bool heapHistory)
 {
     // No JSON allocation while interrupts are disabled.

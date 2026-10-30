@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 namespace Diagnostics {
-enum class Component : uint8_t { None, Energy, Optimizer, FirmwareUpdate, Configuration, Network, Maintenance, Runtime, Count };
+enum class Component : uint8_t { None, Energy, Optimizer, FirmwareUpdate, Configuration, Network, Maintenance, Runtime, RemoteDiagnostics, Count };
 enum class Operation : uint8_t { None, Tariff, Forecast, Calculate, Upload, Write, Reset, Restore, Apply, Reconnect, Boot, Restart, Count };
 enum class Phase : uint8_t { Start, ProviderStart, Dns, Connect, TlsHttp, Decode, Aggregate, Configuration, Network, Complete, Count };
 enum class RestartSource : uint8_t { None, MaintenanceReboot, FirmwareUpdate, ConfigurationReset, FileRestore, PinMappingChange, InverterUnresponsive, Unspecified, Count };

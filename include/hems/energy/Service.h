@@ -14,6 +14,7 @@ public:
     void init(Scheduler& scheduler);
     bool configure(Domain domain, Settings const& settings);
     void serialize(Domain domain, JsonObject output, bool all = false) const;
+    bool serializeRemote(Domain domain, JsonObject output) const;
     bool ingest(Domain domain, JsonVariantConst payload);
     RefreshDecision requestRefresh(Domain domain);
     // Consistent normalized input for later optimizer code; caller owns bounded destination.
@@ -22,7 +23,14 @@ public:
     Status status(Domain domain) const;
     // Share the optional low-priority worker with pure background calculations.
     void background(bool (*due)(void*), void (*run)(void*), void* context);
+    // Remote Diagnostics shares this serial worker, after energy requests.
+    void diagnosticsBackground(bool (*due)(void*), void (*run)(void*), void* context) {
+        _diagnosticsDue = due; _diagnosticsRun = run; _diagnosticsContext = context;
+    }
 private:
+    bool (*_diagnosticsDue)(void*) = nullptr;
+    void (*_diagnosticsRun)(void*) = nullptr;
+    void* _diagnosticsContext = nullptr;
     JsonProvider& provider(Domain domain) { return domain == Domain::Tariff ? _tariff : _forecast; }
     JsonProvider const& provider(Domain domain) const { return domain == Domain::Tariff ? _tariff : _forecast; }
     RefreshDecision refreshDecision(Domain domain) const; // Caller holds _mutex.

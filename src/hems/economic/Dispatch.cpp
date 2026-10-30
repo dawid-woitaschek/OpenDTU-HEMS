@@ -67,6 +67,41 @@ bool mapPowerCommand(Optimizer::PlanView const& plan, Constraints::StorageConstr
     }
     return true;
 }
+char const* blocker(Context const& in)
+{
+    if (!in.plan.config.dispatchEnabled) { return "disabled"; }
+    else if (in.plan.paused) { return "paused_manual"; }
+    else if (!Flow::economicWearAcknowledged(in.plan.config.flow, in.plan.config.wearSource)) { return "waiting_wear_cost"; }
+    else if (in.mode != Mode::Active) { return "waiting_active"; }
+    else if (!in.permission) { return "waiting_permission"; }
+    else if (!fresh(in.storage)) { return "waiting_telemetry"; }
+    else if (!in.plan.valid || in.now < in.plan.start || in.now >= in.plan.end) { return "plan_unavailable"; }
+    else if ((in.protectionOwned || in.owner == Actuation::Origin::Protection) && in.plan.batteryW <= 0) { return "blocked_protection"; }
+    else if (in.plan.batteryW < 0 && !in.constraints.dischargeAllowed) { return "blocked_protection"; }
+    return nullptr;
+}
+Preview Dispatch::preview(Context const& in) const
+{
+    Preview out; out.planRevision = in.plan.revision;
+    if (_pendingId && in.mailbox.id == _pendingId && in.mailbox.state == Actuation::MailboxState::Failed) {
+        // update() will consume this failure and request a replan. Observing it
+        // must not predict a fresh command before that normal transition.
+        out.reason = "command_failed_replan_pending"; return out;
+    }
+    if (auto reason = blocker(in)) { out.reason = reason; return out; }
+    if (!mapCommand(in, out.command)) { out.reason = "unsupported_action"; return out; }
+    if (busy(in.mailbox.state) || !in.ready) { out.reason = "waiting_ready"; return out; }
+    if (_state.failures && in.now / 900 == _failureSlot && (in.nowMs - _lastAttemptMs < 30000
+            || in.successfulPolls <= _failurePoll || in.plan.revision == _failureRevision || _state.failures >= 3)) {
+        out.reason = "retry_wait"; return out;
+    }
+    out.valid = true; out.reason = "current_interval";
+    if (out.command.action == Actuation::Action::Stop && in.plan.batteryW) {
+        out.reason = in.plan.batteryW > 0 ? (in.storage.socPct.value >= in.plan.config.maxSoc ? "soc_upper_limit" : "charge_restricted_or_below_minimum")
+            : (in.storage.socPct.value <= in.plan.config.minSoc ? "soc_lower_limit" : "discharge_restricted_or_below_minimum");
+    }
+    return out;
+}
 Decision Dispatch::update(Context const& in)
 {
     using Actuation::Origin;
@@ -93,16 +128,7 @@ Decision Dispatch::update(Context const& in)
     if (_state.failures && in.now / 900 != _failureSlot) { _state.failures = 0; }
     _state.planRevision = in.plan.revision; _state.start = in.plan.start; _state.end = in.plan.end;
     _state.cleanupPending = false;
-    char const* blocked = nullptr;
-    if (!in.plan.config.dispatchEnabled) { blocked = "disabled"; }
-    else if (in.plan.paused) { blocked = "paused_manual"; }
-    else if (!Flow::economicWearAcknowledged(in.plan.config.flow, in.plan.config.wearSource)) { blocked = "waiting_wear_cost"; }
-    else if (in.mode != Mode::Active) { blocked = "waiting_active"; }
-    else if (!in.permission) { blocked = "waiting_permission"; }
-    else if (!fresh(in.storage)) { blocked = "waiting_telemetry"; }
-    else if (!in.plan.valid || in.now < in.plan.start || in.now >= in.plan.end) { blocked = "plan_unavailable"; }
-    else if ((in.protectionOwned || in.owner == Origin::Protection) && in.plan.batteryW <= 0) { blocked = "blocked_protection"; }
-    else if (in.plan.batteryW < 0 && !in.constraints.dischargeAllowed) { blocked = "blocked_protection"; }
+    auto blocked = blocker(in);
     if (blocked) {
         // A usable feed revision often computes the identical action. Retain the
         // confirmed physical state for at most 10 s while replanning, without
