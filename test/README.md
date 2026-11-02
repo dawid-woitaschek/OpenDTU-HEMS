@@ -102,22 +102,32 @@ reproduced; XFAIL is not optimizer correctness or hardware validation.
 Additional focused KD01 checks:
 
 ```sh
-make -C test optimizer-actions-test test_hems_memory ARDUINOJSON=../work/ArduinoJson/src
+make -C test optimizer-actions-test optimizer-optimality-test test_hems_memory ARDUINOJSON=../work/ArduinoJson/src
 (cd test && ./test_hems_memory)
 ```
 
-`test_optimizer_actions` covers 1/3/25 Wh actions independent of SoC sample spacing,
-off-grid measured SoC, 10 kWh/1 MWh capacities, current/device permissions and power
-caps, efficiency losses, PV-only charge, repeated actions, future-price economics,
-split in-horizon targets, exact retained-plan replay and the 256-slot capacity.
-Sixteen independently enumerated small-battery cases compare the global objective
-against exhaustive whole-Wh search. `test_hems_memory` runs the actual production
-planner allocation through the ESP32 capability seam, checking the bounded PSRAM
-table, exhaustion without INTERNAL retry, recovery and absent-PSRAM refusal before
-any large INTERNAL allocation. Other HEMS allocations retain their compatibility
-fallback. The [status/resource review](../docs/HEMS_Current_Status.md#optimizer-audit-2026-11-02)
-and [roadmap](../docs/HEMS_Roadmap.md#optimizer-correctness-follow-up-2026-11-02)
-distinguish software results from pending Device A validation.
+`test_optimizer_actions` covers 1/3/25 Wh actions independent of the legacy SoC
+step field, off-grid measured SoC, 10 kWh/1 MWh capacities with bounded reachable
+ranges, current/device limits, efficiency losses, PV-only charge, repeated/global
+price decisions, split in-horizon targets, exact replay and the 256-slot cap.
+
+`test_optimizer_optimality` uses an independent exhaustive whole-Wh oracle at
+5/10/15/20 kWh, not only tiny fixtures: 48 seeded mixed price/PV/export cases,
+targets and split deadlines, 85–99.9% efficiencies, negative prices/export prices,
+wear, Local First saturation and 24/96-slot accumulation regressions. It compares
+primary objective, secondary throughput and physical replay, records representative
+24/48-hour runtimes and tests explicit state/work exhaustion. The target uses `-O2`
+so exhaustive reference loops remain practical. `--quick` skips long-horizon/runtime
+and exhaustion checks for focused sanitizer runs; default runs retain them.
+
+`test_hems_memory` exercises the actual ESP32 allocator path for metadata and
+three-row/deque storage, both allocation-failure stages, recovery and absent-PSRAM
+refusal before any large INTERNAL allocation. Other HEMS allocations keep their
+compatibility fallback. See the [independent evidence and exactness proof](../docs/HEMS_Optimizer_Exactness.md),
+[status/resource review](../docs/HEMS_Current_Status.md#optimizer-audit-2026-11-02)
+and [roadmap](../docs/HEMS_Roadmap.md#optimizer-correctness-follow-up-2026-11-02).
+These are software checks; Device A timing/headroom and physical behavior remain
+separate acceptance gates.
 
 ## Tariff / forecast and Admin regression coverage
 

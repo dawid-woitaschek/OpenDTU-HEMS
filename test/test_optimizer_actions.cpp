@@ -95,7 +95,7 @@ void repeatedAndTarget() {
     f.in.storage.socPct.value = 20;
     for (unsigned n = 0; n < 8; ++n) f.tariff.intervals[n].value = f.tariff.intervals[n].importPrice = n < 4 ? 50000 : 400000;
     f.run(); assert(f.p.steps[3].endWh == f.p.initialWh + 100 && f.p.finalWh == f.p.initialWh);
-    // Exact in-horizon reachability edge falls inside a value cell and requires
+    // Exact in-horizon target requires
     // repeated 25 Wh actions. A one-second deadline split must not disappear.
     f = Fixture(); f.c.capacityWh = 10000; f.in.storage.socPct.value = 20;
     f.c.policies.targetEnabled = true; f.c.policies.targetSoc = 21;
@@ -104,8 +104,7 @@ void repeatedAndTarget() {
     f.c.maxChargeW = 99;
     assert(!calculate(f.c, f.in, f.p) && !std::strcmp(f.p.blocker, "target_unreachable"));
 }
-// Independent exhaustive whole-Wh oracle where every inventory fits the value
-// budget. This checks multi-slot economics, rather than mirroring the search.
+// Independent exhaustive whole-Wh oracle for small inventories. This checks multi-slot economics, rather than mirroring the search.
 void exhaustiveSmallBattery() {
     constexpr int64_t Unreachable = std::numeric_limits<int64_t>::max()/4;
     for (unsigned scenario = 0; scenario < 16; ++scenario) {

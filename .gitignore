@@ -28,3 +28,5 @@ webapp_dist/
 /test/test_optimizer_known_defects
 
 /test/test_optimizer_actions
+
+/test/test_optimizer_optimality

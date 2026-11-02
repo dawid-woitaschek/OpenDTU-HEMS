@@ -43,7 +43,7 @@ int main()
     }
     // Run the actual planner allocation through the ESP32 capability path.
     // JSON validation uses ArduinoJson's ordinary small scratch allocations;
-    // the single large planning allocation must stay in PSRAM and fail closed.
+    // the planning allocations must stay in PSRAM and fail closed.
     hasPsram = true;
     Optimizer::Config c;
     c.enabled = c.socBoundsConfigured = true; c.capacityWh = 10000;
@@ -59,14 +59,18 @@ int main()
     Optimizer::Plan plan;
     auto before = attempts;
     assert(Optimizer::calculate(c, in, plan));
-    assert(attempts == before + 1 && lastCaps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    assert(lastSize <= 520 * 1024 && lastSize > 512 * 1024);
+    assert(attempts == before + 2 && lastCaps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    assert(lastSize == 38u * plan.states && plan.workspaceBytes <= 8192u + 38u * plan.states);
     assert(plan.finalWh == plan.initialWh + 25);
-    std::cout << "Actual bounded DP allocation=" << lastSize << " B in PSRAM\n";
+    std::cout << "Exact DP scratch allocation=" << lastSize << " B, total=" << plan.workspaceBytes << " B in PSRAM\n";
     before = attempts; memoryFailure = true;
     assert(!Optimizer::calculate(c, in, plan) && plan.count == 0 && !std::strcmp(plan.blocker, "insufficient_memory"));
     assert(attempts == before + 1 && lastCaps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     memoryFailure = false;
+    before = attempts; failAttempt = attempts+2;
+    assert(!Optimizer::calculate(c, in, plan) && !std::strcmp(plan.blocker, "insufficient_memory"));
+    assert(attempts == before+2 && lastCaps == (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    failAttempt = 0;
     assert(Optimizer::calculate(c, in, plan) && plan.finalWh == plan.initialWh + 25);
     hasPsram = false; before = attempts;
     assert(!Optimizer::calculate(c, in, plan) && !std::strcmp(plan.blocker, "optimizer_requires_psram"));

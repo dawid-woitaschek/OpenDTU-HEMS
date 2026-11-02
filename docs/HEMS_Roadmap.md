@@ -97,14 +97,15 @@ See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), 
 
 ## Optimizer correctness follow-up (2026-11-02)
 
-**KD01 is fixed in software** in the existing whole-Wh model. The bounded global
-DP separates physical actions from value samples: backward continuation-cost
-interpolation, exact physical forward reconstruction, horizon-reachable inventory
-and per-layer feasibility edges replace SoC-node-only transitions. Both original
-25 Wh audit witnesses now assert normal expected behavior. Additional focused
-checks cover smaller actions, losses, current/device limits, PV-only charging,
-repeated/future-price decisions, in-horizon targets and the 256-slot bound.
-This does not establish physical battery behavior or an exact continuous optimum.
+**KD01 is fixed in software using exact global whole-Wh DP.** PR #40's initial
+continuation interpolation was rejected: independent 5–20 kWh exhaustive
+comparisons exposed economic losses and multi-slot accumulation, with no useful
+certified approximation bound. It is replaced on the same PR by complete whole-Wh
+inventory rows, exact periodic-affine action convolution and iterative Hirschberg
+reconstruction. Ready results retain an exact global modeled objective/throughput
+guarantee. Resource exhaustion fails explicitly, without publishing approximation.
+Both original 25 Wh audit witnesses and the coupled KD05 witness remain normal
+PASS assertions; other unresolved case bodies stay intact.
 
 | ID | Remaining work / correction status |
 |---|---|
@@ -126,19 +127,31 @@ and [focused commands](../test/README.md#optimizer-known-defect-reproducers).
 Remote Diagnostics / telemetry functionality remains intact, including cached
 HEMS observation, preview, bounded spool/payload and sender behavior.
 
-**Resource gate:** at most 256 slots / 128 value samples, O(T × S²) work, a
-529,928 B native-measured workspace with a 520 KiB compile-time cap, exclusively
-in PSRAM on ESP32 and no INTERNAL fallback. No-PSRAM builds are compatibility-only
-and report `optimizer_requires_psram` for planning. Device A is the minimum Full
-HEMS reference: ESP32-S3, 8 MB flash, **2 MB quad PSRAM**,
-`generic_esp32s3_usb_quad_psram`. Allow approximately 1.39 MiB for the conservative
-planner/telemetry budget combination before other allocations; check actual free
-and largest PSRAM blocks, TLS/INTERNAL headroom and task watermarks on-device.
-Matched optimized native 48-hour timing was 10,576 µs (prior 3,291 µs); it does
-not establish ESP32 latency. The larger transient table is released before
-provider TLS on the existing shared worker. Local native, allocator failure,
-telemetry and sanitizer checks support the software conclusion only. No firmware
-build, Actions monitoring or physical validation was performed for this fix.
+**Exactness/resource gate:** up to 256 slots, 32,769 whole-Wh inventories and
+600 million counted work units including reconstruction. Scratch is 38 B/state
+plus native 5,360 B metadata (cap 8 KiB), strictly PSRAM without INTERNAL fallback.
+Full 10–90% ranges use approximately 157 / 309 / 613 kB at 5 / 10 / 20 kWh;
+20 kWh at 0–100% uses approximately 765 kB. The latter's conservative planner +
+telemetry maximum budget is about 1.61 MiB before overhead/other allocations.
+Maximum state count can require about 1.25 MB and exceed available PSRAM when
+combined with telemetry; explicit memory/state/work refusal is part of the model's
+availability contract. No-PSRAM builds are compatibility-only and report
+`optimizer_requires_psram` for planning. `soc_step_pct` remains a persisted legacy
+field, not an action quantum.
+
+Device A remains the minimum Full HEMS reference: ESP32-S3, 8 MB flash, **2 MB quad
+PSRAM**, `generic_esp32s3_usb_quad_psram`. Exact native solves are materially slower
+than the rejected sampler (approximately 464 ms for the 20 kWh / 96-slot alternating
+fixture; approximately 2.316 seconds / 535 million work units for the 20 kWh /
+48-hour day/night fixture). **Do not infer Device A runtime acceptance from these
+host tests.**
+Validate worst-case latency, watchdogs, DPL/shared-worker responsiveness, stack
+watermarks, largest PSRAM blocks and INTERNAL/TLS headroom with telemetry active.
+No task-stack reservation or TLS policy changed. The
+[exactness review](HEMS_Optimizer_Exactness.md) provides the counterexample,
+reference comparisons, proof and limits. Physical battery behavior, device timing
+and long-term stability remain unvalidated for this change; no Actions result or
+firmware-build result is claimed.
 
 ## Next milestones
 

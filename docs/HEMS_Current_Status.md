@@ -107,7 +107,7 @@ validated by this change. Remote Diagnostics / telemetry functionality is retain
 
 | ID | Current software status |
 |---|---|
-| KD01 | Fixed: physical action endpoints no longer have to coincide with SoC value samples. The original charge/discharge witnesses are normal PASS assertions; additional 1/3/25 Wh, limits, losses, multi-slot and deadline regressions pass. |
+| KD01 | Fixed with exact global whole-Wh DP. The initial interpolated implementation was rejected after realistic reference comparisons exposed economic losses. Original charge/discharge witnesses and additional small-action, limit, loss and deadline regressions pass. |
 | KD02 | Unresolved: with PV export forbidden and battery export allowed, simultaneous battery discharge permits PV export leakage; modeled export exceeds the energy supplied by the battery. |
 | KD03 | Unresolved: terminal inventory receives a future-use credit and induces charging even while the persistent policy forbids discharge. |
 | KD04 | Unresolved: equivalent pointwise tariffs with different future interval segmentation produce different terminal prices and planning results. |
@@ -123,57 +123,60 @@ regression failures and unexpected passes still fail the target. The unresolved
 case bodies are unchanged. XFAIL means reproducible defective behavior, not a fix.
 See [focused commands and semantics](../test/README.md#optimizer-known-defect-reproducers).
 
-#### KD01 representation and Device A resource review
+#### KD01 exactness review and Device A resources
 
-The bounded global optimizer now runs backward DP over at most **256 slots and
-128 value samples**. It searches hold, physical charge/discharge endpoints,
-continuation knots and flow-cost breakpoints, interpolating only continuation
-**cost**, never battery energy. Forward reconstruction carries actual whole-Wh
-inventory and rechecks every physical transition. The value grid covers the
-horizon-reachable inventory; each time layer has exact reachable domain edges
-and an exact in-horizon target-feasibility edge. `soc_step_pct` remains accepted
-as a maximum value-sample spacing, not a minimum action quantum. Reducing that
-setting is not required for small actions. Sub-Wh modeling is unchanged.
+PR #40's initial `633b9646` interpolation was **not exact**. Independent exhaustive
+whole-Wh comparisons found different, more expensive decisions at 5–20 kWh.
+For a 20 kWh alternating-price fixture, loss grew from zero at 8 slots to
+EUR 0.004639 at 24 slots and **EUR 0.013114886 at 96 slots** (approximately 2.95%
+of available modeled savings). These are observed losses, not a worst-case bound.
+No useful product approximation bound was established, so that design is replaced.
+See the [counterexample, exactness proof, resource limits and test evidence](HEMS_Optimizer_Exactness.md).
 
-This is a bounded approximate value DP, not an exact continuous optimum claim.
-Interpolation may affect economic ranking. Published costs are recomputed from
-the actual schedule, and a feasible hold benchmark wins if approximation would
-make that schedule cost more. Exact small-battery exhaustive comparisons and the
-existing economic, policy and retained-plan tests pass locally.
+The replacement preserves bounded global DP and computes the **exact minimum
+modeled half-nano objective, then minimum throughput, over feasible whole-Wh
+trajectories whenever it publishes a ready result**. Every whole-Wh inventory in
+the reachable range is represented. Exact periodic-affine action runs use sliding
+minima; iterative Hirschberg reconstruction uses three rows instead of T×S
+parents. Actual reconstructed cost/throughput must match the optimum. No future
+value interpolation, dropped economic breakpoints or approximate hold fallback
+remains. Legacy `soc_step_pct` round-trips but no longer selects resolution.
+Sub-Wh modeling and the separate unresolved policy semantics are unchanged.
 
-The table replaces parent pointers with all continuation rows: **529,928 B** in
-the native ESP32 allocation seam (versus the prior 16,200 B workspace), bounded
-at compile time to **520 KiB**. On Device A (ESP32-S3, 8 MB flash, **2 MB quad
-PSRAM**, `generic_esp32s3_usb_quad_psram`) this is about **25.3% of PSRAM**.
-The prior documented overlapping planner objects, substituting this workspace,
-are approximately **580,664 B**. Conservatively adding the unchanged telemetry
-rings (283,392 B), maximum payload (192 KiB) and JSON budget (384 KiB) gives
-approximately **1.39 MiB**, before other allocations/allocator overhead. These
-are budget arithmetic, not measured device peaks or contiguous-block guarantees.
-The workspace needs a roughly 518 KiB contiguous PSRAM block. Exhaustion reports
-`insufficient_memory`, without INTERNAL spill. Compatibility-only ESP32 builds
-without PSRAM report `optimizer_requires_psram` before attempting this allocation.
+Bounds: 256 slots, **32,769 inventories / 32,768 Wh span**, **600 million counted
+work units including reconstruction**. State/work/memory exhaustion returns an
+explicit blocker and no ready plan, rather than changing resolution. This is an
+operation budget, not an ESP32 wall-clock deadline or a guarantee every parsed
+configuration fits. More expensive valid configurations can be unavailable.
 
-Runtime remains **O(T × S²)**, with fewer than 4.5 million bounded action
-candidates at maximum dimensions; non-grid lookups add bounded binary searches.
-A matched optimized native 48-hour fixture measured **10,576 µs versus 3,291 µs**
-for the PR #39 implementation (126 versus 37 samples). These are host timings,
-not ESP32 timing estimates. Optimized host compiler frames were 528 B for
-`calculate`, 288 B for action selection and 48 B for interpolation lookup;
-these are not Xtensa frames or measured stack watermarks. No new worker, stack
-reservation, TLS allocation policy or persistent planner object was added. The
-workspace is released before the shared worker starts provider TLS. On-device
-latency, watchdog/DPL responsiveness, stack watermarks, largest PSRAM block and
-INTERNAL/TLS headroom still require Device A validation.
+Device A remains ESP32-S3, 8 MB flash, **2 MB quad PSRAM**,
+`generic_esp32s3_usb_quad_psram`. Scratch is **38 bytes per inventory** plus native
+5,360 B metadata (compile-capped at 8 KiB), exclusively in PSRAM. Full 10–90%
+ranges need 157,398 / 309,398 / 613,398 B at 5 / 10 / 20 kWh. A 20 kWh 0–100%
+range needs 765,398 B, including a contiguous 760,038 B block. Conservative
+planner + unchanged telemetry ring/payload/JSON budget arithmetic is approximately
+**1.61 MiB** for that case before overhead/other allocations. The absolute state
+cap can need 1,250,582 B and cannot coexist with all telemetry maxima in 2 MB;
+allocation must fail without INTERNAL spill. No-PSRAM compatibility reports
+`optimizer_requires_psram` before a large allocation.
 
-Focused native checks: audit suite, `test_optimizer_actions` (including 16
-independent exhaustive small-battery cases and the 256-slot cap),
-`test_shadow_optimizer`, `test_energy_management`, `test_hems_memory`,
-`test_optimizer_service`, `test_remote_sender` and `test_remote_hems`.
-The action and audit suites also pass AddressSanitizer/UndefinedBehaviorSanitizer
-with leak detection disabled (LeakSanitizer cannot run under this workspace's
-ptrace environment).
-No firmware build, GitHub Actions result or physical validation is claimed.
+Optimized native 20 kWh / 96-slot reference timing was approximately **464 ms**
+(111 million work units after exact pruning), substantially slower than sampling.
+The 20 kWh / 48-hour day/night fixture took approximately **2.316 seconds**
+natively (535 million units, about 89% of the budget), versus about 8 ms with
+sampling. The focused suite records 5/10/20 kWh 24/48-hour timings and explicit
+budget exhaustion. These are host results, **not Device A timing approval**.
+No new worker, task-stack reservation, recursive reconstruction stack or TLS policy
+is introduced. Work arrays are released before shared-worker provider TLS. Device A
+latency, watchdog/DPL/worker responsiveness, INTERNAL/TLS headroom, stack watermarks
+and PSRAM largest/free blocks remain acceptance gates. This draft establishes
+software/model correctness within explicit limits, not physical/runtime acceptance.
+
+Focused native checks cover the independent realistic-capacity exhaustive suite,
+audit/action/shadow/energy-management/service regressions, actual PSRAM allocation
+and both allocation-failure stages, plus remote sender and HEMS observations.
+The six unresolved case bodies and telemetry/diagnostics production code remain
+unchanged. No firmware build, Actions polling or physical validation is claimed.
 
 ## Merged PR #34 - coordinated energy management
 

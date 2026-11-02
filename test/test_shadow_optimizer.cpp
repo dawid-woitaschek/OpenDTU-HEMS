@@ -220,9 +220,11 @@ int main()
     f.c.exportConfigured=true; f.c.exportMicros=INT32_MAX;
     for(auto& i:f.forecast.intervals) i.value=6000000;
     for(auto& i:f.tariff.intervals) i.value=i.importPrice=INT32_MAX;
+    assert(!f.run() && !strcmp(f.p.blocker,"optimizer_state_capacity_exceeded"));
+    f.c.capacityWh=20000; f.c.horizonSeconds=3600;
     before=std::chrono::steady_clock::now(); assert(f.run() && f.p.states<=MaxStates);
     elapsed=std::chrono::steady_clock::now()-before;
-    std::cout<<"48h maximum-state/extreme-cost DP: "<<std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()<<" us, states="<<f.p.states<<'\n';
+    std::cout<<"20 kWh extreme-cost DP: "<<std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()<<" us, states="<<f.p.states<<'\n';
     f=Fixture(); f.c.socBoundsConfigured=false; assert(!f.run() && !strcmp(f.p.blocker,"soc_bounds_not_configured"));
     f=Fixture(); f.c.maxSoc=f.c.minSoc; assert(!f.run());
     f=Fixture(); f.in.now=UINT32_MAX-3600; f.c.horizonSeconds=3600; f.tariff.count=1;

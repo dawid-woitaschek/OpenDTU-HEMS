@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 #include <new>
+#include <numeric>
 
 namespace Hems::Optimizer {
 namespace {
@@ -18,19 +19,6 @@ constexpr int64_t Infinity = std::numeric_limits<int64_t>::max() / 4;
 // DP objective is in half-nano currency to retain the half-throughput convention.
 struct Score { int64_t cost = Infinity; uint64_t throughput = UINT64_MAX; };
 bool better(Score a, Score b) { return a.cost < b.cost || (a.cost == b.cost && a.throughput < b.throughput); }
-struct Workspace {
-    Score value[MaxSteps + 1][MaxStates];
-    uint32_t energy[MaxStates] {};
-    // Exact time-layer domain edges; never interpolate across unreachable stock.
-    uint32_t required[MaxSteps + 1] {}, reachableUpper[MaxSteps + 1] {};
-    int32_t priceScratch[MaxSteps] {};
-};
-static_assert(sizeof(Workspace) <= 520 * 1024, "Bound the PSRAM planning workspace");
-// Overflow-safe integer interpolation; monetary costs remain in half-nano units.
-int64_t interpolate(int64_t a, int64_t b, uint32_t offset, uint32_t width) {
-    int64_t delta = b - a;
-    return a + (delta / width) * offset + (delta % width) * offset / width;
-}
 // nano currency = price micro currency/kWh * Ws / 3600. Split before multiplication.
 int64_t money(int64_t ws, int32_t price) { return (ws / 3600) * price + ((ws % 3600) * price) / 3600; }
 struct Flow {
@@ -164,65 +152,223 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
     flow.cost = 2 * (flow.importCost - flow.exportRevenue) + flow.degradation + flow.buffer;
     return true;
 }
-// Interpolate continuation values only inside the physically feasible domain.
-// In particular, never interpolate across the unreachable side of a deadline.
-Score continuation(Workspace const& w, size_t layer, size_t states, uint32_t wh)
-{
-    if (wh < w.required[layer] || wh > w.reachableUpper[layer]) { return {}; }
-    auto begin = w.energy, end = begin + states - 2; // Two layer-specific edge samples.
-    auto hi = std::lower_bound(begin, end, wh);
-    if (hi != end && *hi == wh) { return w.value[layer][hi - begin]; }
-    uint32_t lower = w.required[layer], upper = w.reachableUpper[layer];
-    Score lo = w.value[layer][states - 1], high = w.value[layer][states - 2];
-    if (hi != end && *hi < upper) { upper = *hi; high = w.value[layer][hi - begin]; }
-    if (hi != begin && *(hi - 1) > lower) { lower = *(hi - 1); lo = w.value[layer][hi - begin - 1]; }
-    if (wh == lower) { return lo; }
-    if (wh == upper) { return high; }
-    if (lo.cost == Infinity || high.cost == Infinity || upper <= lower) { return {}; }
-    return {interpolate(lo.cost, high.cost, wh - lower, upper - lower),
-        static_cast<uint64_t>(interpolate(lo.throughput, high.throughput, wh - lower, upper - lower))};
+// Exact min-plus DP. An action cost is periodic-affine in whole Wh within each
+// import/export/curtailment regime, including the existing Ws/money rounding.
+// Charge period = eta_c/gcd(eta_c,1000); discharge period = 1000/gcd(eta_d,1000).
+// Every action is evaluated when building runs: no interpolation or convexity
+// assumption is used. Each verified affine run is convolved by a sliding minimum.
+struct Row { int64_t* cost = nullptr; uint32_t* throughput = nullptr; uint32_t lo = 0, hi = 0; };
+struct FreeStorage { void operator()(void* p) const noexcept { std::free(p); } };
+struct Segment { uint16_t a, b; uint32_t start, end; };
+struct Workspace {
+    std::unique_ptr<void, FreeStorage> storage;
+    Row rows[3];
+    uint16_t* queue = nullptr;
+    EnergyLimits limits[MaxSteps] {};
+    uint32_t prefixCharge[MaxSteps+1] {}, prefixDischarge[MaxSteps+1] {};
+    Segment pending[10] {};
+    uint32_t lower = 0, count = 0, work = 0;
+    int32_t priceScratch[MaxSteps] {};
+    char const* error = nullptr;
+    bool spend(uint32_t units = 1) {
+        if (units > MaxWorkUnits - work) { error = "optimizer_work_limit"; return false; }
+        work += units; return true;
+    }
+    bool init(uint32_t n) {
+        count = n;
+        // Three cost/throughput rows and one reusable deque. No parents indexed
+        // by time: depth-first Hirschberg reconstruction needs only ten frames.
+        storage.reset(Memory::allocate(38 * n));
+        if (!storage) { error = "insufficient_memory"; return false; }
+        auto costs = static_cast<int64_t*>(storage.get());
+        auto through = reinterpret_cast<uint32_t*>(costs + 3*n);
+        for (unsigned r = 0; r < 3; ++r) { rows[r].cost = costs + r*n; rows[r].throughput = through + r*n; }
+        queue = reinterpret_cast<uint16_t*>(through + 3*n);
+        return true;
+    }
+};
+static_assert(MaxSteps*(MaxStates-1) < UINT32_MAX, "Throughput rows fit uint32_t");
+static_assert(sizeof(Workspace) <= 8192, "Bound planner metadata in PSRAM");
+bool clear(Workspace& w, Row& row) {
+    if (!w.spend(w.count)) { return false; }
+    std::fill(row.cost, row.cost+w.count, Infinity); return true;
 }
-struct Choice { Score score; uint32_t energy = 0; };
-Choice choose(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in,
-    Plan const& plan, Workspace const& w, size_t t, uint32_t from)
-{
-    Choice best;
-    auto const& slot = plan.steps[t];
-    auto limits = actionLimits(c, goals, in, slot, t);
-    uint32_t lower = std::max(w.required[t + 1], from - std::min(from - goals.reserveWh, limits.dischargeWh));
-    uint32_t upper = std::min(w.reachableUpper[t + 1], from + std::min(goals.ceilingWh - from, limits.chargeWh));
-    if (lower > upper) { return best; }
-    auto consider = [&](uint32_t to, Score const* sampled = nullptr) {
-        if (to < lower || to > upper) { return; }
-        auto future = sampled ? *sampled : continuation(w, t + 1, plan.states, to);
-        if (future.cost == Infinity) { return; }
-        Flow f;
-        if (!transition(c, goals, in, slot, t, from, to, f)) { return; }
-        Score candidate {f.cost + future.cost, future.throughput + static_cast<uint64_t>(std::abs(static_cast<int64_t>(to) - from))};
-        if (better(candidate, best.score)) { best = {candidate, to}; }
-    };
-    // Hold and physical endpoints are always candidates, even within ONE value
-    // cell. No snapping of the action, energy or reconstructed schedule occurs.
-    consider(from); consider(lower); consider(upper);
-    auto begin = std::lower_bound(w.energy, w.energy + plan.states - 2, lower);
-    for (auto e = begin; e != w.energy + plan.states - 2 && *e <= upper; ++e) { consider(*e, &w.value[t + 1][e - w.energy]); }
-    // Flow cost changes slope at zero import/export and the curtailment limit.
-    // Include adjacent integer Wh around each AC breakpoint (efficiencies round
-    // asymmetrically). This is a bounded action search, not a power-step lattice.
-    int64_t seconds = slot.end - slot.start;
-    auto breakpoint = [&](int64_t batteryWs) {
-        int64_t delta = batteryWs >= 0 ? batteryWs * c.chargePermille / 3600000
-            : -((-batteryWs * 1000) / (3600 * c.dischargePermille));
-        int64_t energy = from + delta;
-        for (int offset : {-1, 0, 1}) {
-            if (energy + offset >= lower && energy + offset <= upper) { consider(energy + offset); }
+void relax(Row& row, uint32_t index, int64_t cost, uint32_t through) {
+    if (cost < row.cost[index] || (cost == row.cost[index] && through < row.throughput[index])) {
+        row.cost[index] = cost; row.throughput[index] = through;
+    }
+}
+struct ExactDp {
+    Config const& c; Policies::StorageEconomicGoals const& goals; Inputs const& in; Plan& plan; Workspace& w;
+    int targetBoundary = -1;
+    // Convolve ONE verified arithmetic progression of actions, inclusive ends.
+    bool convolve(Row const& src, Row& dst, int a, int b, unsigned period, int64_t base, int64_t slope) {
+        int sign = a < 0 ? -1 : 1;
+        for (unsigned g = 0; g < period; ++g) {
+            int j = dst.lo + (g + period - dst.lo%period)%period;
+            if (j > int(dst.hi)) { continue; }
+            unsigned h = (g + period - (a%int(period)+int(period))%int(period))%period;
+            int add = std::max<int>(src.lo, j-b);
+            add += (h + period - add%int(period))%period;
+            unsigned head = 0, tail = 0;
+            auto keyCost = [&](uint32_t i) { return src.cost[i] - int64_t((i-h)/period)*slope; };
+            auto keyThrough = [&](uint32_t i) { return int64_t(src.throughput[i]) - int64_t(sign)*i; };
+            for (; j <= int(dst.hi); j += period) {
+                if (!w.spend()) { return false; }
+                while (add <= int(src.hi) && add <= j-a) {
+                    if (!w.spend()) { return false; }
+                    if (src.cost[add] != Infinity) {
+                        auto cost = keyCost(add), through = keyThrough(add);
+                        while (tail > head) {
+                            auto old = w.queue[tail-1];
+                            if (keyCost(old) < cost || (keyCost(old) == cost && keyThrough(old) < through)) { break; }
+                            --tail;
+                        }
+                        w.queue[tail++] = add;
+                    }
+                    add += period;
+                }
+                while (head < tail && w.queue[head] < j-b) { ++head; }
+                if (head < tail) {
+                    auto from = w.queue[head];
+                    int64_t cost = src.cost[from] + base + int64_t((j-int(from)-a)/int(period))*slope;
+                    relax(dst, j, cost, src.throughput[from] + std::abs(j-int(from)));
+                }
+            }
         }
-    };
-    int64_t netWs = (static_cast<int64_t>(slot.loadW) - slot.pvW) * seconds;
-    breakpoint(-netWs);
-    if (c.flow.enabled) { breakpoint(-netWs - static_cast<int64_t>(c.flow.maxExportW) * seconds); }
-    return best;
-}
+        return true;
+    }
+    bool advance(Row const& src, Row& dst, size_t t, bool reverse) {
+        if (!clear(w,dst)) { return false; }
+        auto const& slot = plan.steps[t];
+        auto limits = w.limits[t];
+        // A translated state removes SoC saturation from the action kernel.
+        // The only non-translation-invariant Local First edges are handled
+        // explicitly at the real ceiling below, using the same feasibility rule.
+        auto kernelGoals = goals; kernelGoals.ceilingWh = UINT32_MAX;
+        uint32_t anchor = w.count;
+        auto action = [&](int delta) {
+            if (!w.spend()) { return Infinity; }
+            Flow f;
+            return transition(c,kernelGoals,in,slot,t,anchor,anchor+delta,f) ? f.cost : Infinity;
+        };
+        auto apply = [&](int a, int b, unsigned period, int64_t cost, int64_t slope) {
+            return reverse ? convolve(src,dst,-b,-a,period,cost+int64_t((b-a)/int(period))*slope,-slope)
+                : convolve(src,dst,a,b,period,cost,slope);
+        };
+        auto hold = action(0);
+        if (w.error) { return false; }
+        if (hold != Infinity && !apply(0,0,1,hold,0)) { return false; }
+        for (bool charging : {true,false}) {
+            unsigned period = charging ? c.chargePermille/std::gcd<unsigned>(c.chargePermille,1000)
+                : 1000/std::gcd<unsigned>(c.dischargePermille,1000);
+            int limit = std::min<uint32_t>(w.count-1,charging ? limits.chargeWh : limits.dischargeWh);
+            for (unsigned r = 1; r <= period && r <= unsigned(limit); ++r) {
+                int delta = charging ? int(r) : -limit + (limit-int(r))%int(period);
+                int end = charging ? limit : -1;
+                while (delta <= end) {
+                    auto cost = action(delta);
+                    if (w.error) { return false; }
+                    if (cost == Infinity) { delta += period; continue; }
+                    int first = delta, last = delta;
+                    int64_t slope = 0;
+                    if (delta+int(period) <= end) {
+                        auto next = action(delta+period);
+                        if (w.error) { return false; }
+                        if (next != Infinity) {
+                            slope = next-cost; last += period;
+                            int64_t previous = next;
+                            while (last+int(period) <= end) {
+                                auto value = action(last+period);
+                                if (w.error) { return false; }
+                                if (value == Infinity || value-previous != slope) { break; }
+                                previous = value; last += period;
+                            }
+                        }
+                    }
+                    if (!apply(first,last,period,cost,slope)) { return false; }
+                    delta = last+period;
+                }
+            }
+        }
+        if (c.flow.enabled && c.flow.preference == Hems::Flow::Preference::LocalFirst
+                && slot.pvW > int64_t(slot.loadW)) {
+            auto edge = [&](uint32_t from, uint32_t to) {
+                if (!w.spend()) { return false; }
+                uint32_t source = (reverse ? to : from)-w.lower, dest = (reverse ? from : to)-w.lower;
+                if (source < src.lo || source > src.hi || dest < dst.lo || dest > dst.hi || src.cost[source] == Infinity) { return true; }
+                Flow f;
+                if (transition(c,goals,in,slot,t,from,to,f)) { relax(dst,dest,src.cost[source]+f.cost,src.throughput[source]+std::abs(int64_t(to)-from)); }
+                return true;
+            };
+            auto ceiling = goals.ceilingWh;
+            if (ceiling >= w.lower && ceiling-w.lower < w.count) {
+                uint32_t start = ceiling-std::min(ceiling-w.lower,limits.chargeWh);
+                for (uint32_t from = start; from <= ceiling; ++from) if (!edge(from,ceiling)) { return false; }
+                start = ceiling-std::min(ceiling-w.lower,limits.dischargeWh);
+                for (uint32_t to = start; to <= ceiling; ++to) if (!edge(ceiling,to)) { return false; }
+            }
+        }
+        return true;
+    }
+    int sweep(unsigned a, unsigned b, uint32_t start, unsigned current, unsigned spare, int otherBoundary = -1, uint32_t otherEnergy = 0) {
+        auto& row = w.rows[current];
+        if (!clear(w,row)) { return -1; }
+        row.lo = row.hi = start-w.lower; row.cost[row.lo] = 0; row.throughput[row.lo] = 0;
+        bool reverse = a>b;
+        while (a != b) {
+            unsigned t = reverse ? a-1 : a;
+            unsigned boundary = reverse ? a-1 : a+1;
+            auto const& previous = w.rows[current]; auto& next = w.rows[spare];
+            auto limits = w.limits[t];
+            next.lo = previous.lo - std::min(previous.lo,reverse ? limits.chargeWh : limits.dischargeWh);
+            next.hi = previous.hi + std::min(w.count-1-previous.hi,reverse ? limits.dischargeWh : limits.chargeWh);
+            if (otherBoundary >= 0) {
+                unsigned lo = std::min<unsigned>(boundary,otherBoundary), hi = std::max<unsigned>(boundary,otherBoundary);
+                uint32_t charge = w.prefixCharge[hi]-w.prefixCharge[lo], discharge = w.prefixDischarge[hi]-w.prefixDischarge[lo];
+                uint32_t endpoint = otherEnergy-w.lower;
+                next.lo = std::max(next.lo, endpoint-std::min(endpoint,reverse ? discharge : charge));
+                next.hi = std::min(next.hi, endpoint+std::min(w.count-1-endpoint,reverse ? charge : discharge));
+            }
+            if (int(boundary) == targetBoundary) { next.lo = std::max(next.lo,goals.targetWh>w.lower ? goals.targetWh-w.lower : 0); }
+            if (next.lo > next.hi) { if (!clear(w,next)) { return -1; } return spare; }
+            if (!advance(previous,next,t,reverse)) { return -1; }
+            std::swap(current,spare); a = boundary;
+        }
+        return current;
+    }
+    bool reconstruct(uint32_t start, uint32_t end) {
+        unsigned pending = 1;
+        w.pending[0] = {0,plan.count,start,end};
+        while (pending) {
+            auto segment = w.pending[--pending];
+            if (segment.b-segment.a == 1) {
+                auto& slot = plan.steps[segment.a]; Flow f;
+                if (!transition(c,goals,in,slot,segment.a,segment.start,segment.end,f)) { return false; }
+                slot.startWh = segment.start; slot.endWh = segment.end; applyFlow(slot,f); continue;
+            }
+            unsigned mid = (segment.a+segment.b)/2;
+            int forward = sweep(segment.a,mid,segment.start,0,1,segment.b,segment.end);
+            if (forward < 0) { return false; }
+            int x = forward == 0 ? 1 : 0, y = 3-forward-x;
+            int backward = sweep(segment.b,mid,segment.end,x,y,segment.a,segment.start);
+            if (backward < 0) { return false; }
+            auto const& f = w.rows[forward]; auto const& b = w.rows[backward];
+            Score best; uint32_t selected = 0;
+            for (uint32_t e = std::max(f.lo,b.lo); e <= std::min(f.hi,b.hi); ++e) {
+                if (!w.spend()) { return false; }
+                if (f.cost[e] == Infinity || b.cost[e] == Infinity) { continue; }
+                Score candidate {f.cost[e]+b.cost[e],uint64_t(f.throughput[e])+b.throughput[e]};
+                if (better(candidate,best)) { best = candidate; selected = e+w.lower; }
+            }
+            if (best.cost == Infinity) { return false; }
+            if (pending+2 > std::size(w.pending)) { return false; }
+            w.pending[pending++] = {uint16_t(mid),segment.b,selected,segment.end};
+            w.pending[pending++] = {segment.a,uint16_t(mid),segment.start,selected};
+        }
+        return true;
+    }
+};
 } // namespace
 bool parseConfig(JsonVariantConst j, Config& out)
 {
@@ -304,7 +450,7 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     out.terminalFutureCovered = false; out.learnedSlots = 0; out.retainedByHysteresis = false;
     out.importNano = out.exportNano = out.degradationNano = out.bufferNano = out.terminalNano = out.curtailedWs = 0; out.internalAbsWh = 0;
     out.count = 0; out.pvIncluded = false; out.partial = false; out.states = 0;
-    out.initialWh = out.finalWh = 0; out.runtimeUs = 0;
+    out.initialWh = out.finalWh = 0; out.runtimeUs = out.workUnits = out.workspaceBytes = 0;
     out.baselineValid = true; out.negativeTerminalPrice = false; out.terminalPrice = out.terminalDemandWh = 0;
     out.baselineNano = out.optimizedNano = 0; out.generatedAt = in.now; out.state = "not_ready"; out.blocker = nullptr; out.partialReason = nullptr;
     auto fail = [&](char const* reason) { out.count = 0; out.blocker = reason; return false; };
@@ -398,14 +544,6 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     uint32_t sampleLower = out.initialWh - std::min<uint64_t>(out.initialWh - lower, dischargeReach);
     uint32_t sampleUpper = out.initialWh + std::min<uint64_t>(upper - out.initialWh, chargeReach);
     if (targetCovered && goals.targetWh > sampleUpper) { out.targetState = "target_unreachable"; return fail("target_unreachable"); }
-    // soc_step_pct remains a compatible upper bound on value-sample spacing,
-    // never a minimum physical action size. Reserve room for exact special knots.
-    uint32_t step = std::min<uint32_t>((static_cast<uint64_t>(c.capacityWh) * c.socStepPct + 99) / 100,
-        (sampleUpper - sampleLower + MaxStates - 7) / (MaxStates - 6));
-    step = std::max<uint32_t>(1, step);
-    for (uint32_t e = sampleLower; e < sampleUpper; e += step) { w->energy[out.states++] = e; }
-    w->energy[out.states++] = sampleUpper; w->energy[out.states++] = out.initialWh;
-    if (targetCovered && goals.targetWh >= sampleLower) { w->energy[out.states++] = goals.targetWh; }
     // A bounded continuation table replaces the moving start-energy floor.
     // Credible covered future tariffs cap inventory at its future refill value.
     // Missing tail tariffs use a transparent robust covered-price assumption,
@@ -434,74 +572,58 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     out.terminalPrice = c.terminalPriceConfigured ? c.terminalPriceMicros : std::max(0, assumedPrice);
     out.terminalDemandWh = std::min<uint64_t>(upper - lower,
         (loadWs / std::max<uint32_t>(1, duration)) * c.terminalHours * 1000 / c.dischargePermille);
-    w->energy[out.states++] = std::clamp(lower + out.terminalDemandWh, sampleLower, sampleUpper);
-    std::sort(w->energy, w->energy + out.states);
-    out.states = std::unique(w->energy, w->energy + out.states) - w->energy;
-    out.states += 2; // Exact lower/upper domain edges in each time layer.
-    chargeReach = dischargeReach = 0;
-    w->required[0] = w->reachableUpper[0] = out.initialWh;
+    // With nonnegative import/export prices and optional economic charging,
+    // stock beyond all possible future discharge, terminal demand and target
+    // has no value. Removing such extra charge cannot increase cost and reduces
+    // throughput. Keep measured stock; do not apply this dominance rule to
+    // negative prices or mandatory Local First/Export First semantics.
+    bool nonnegative = !c.exportConfigured || c.exportMicros >= 0;
+    for (size_t t = 0; t < out.count; ++t) { nonnegative = nonnegative && out.steps[t].usedPrice >= 0; }
+    if (nonnegative && (!c.flow.enabled || c.flow.preference == Hems::Flow::Preference::Economic)) {
+        uint64_t useful = uint64_t(lower)+dischargeReach+(out.terminalPrice ? out.terminalDemandWh : 0);
+        useful = std::max<uint64_t>(useful,std::max(out.initialWh,targetCovered ? goals.targetWh : 0));
+        sampleUpper = std::min<uint64_t>(sampleUpper,useful);
+    }
+    if (sampleUpper-sampleLower >= MaxStates) { return fail("optimizer_state_capacity_exceeded"); }
+    out.states = sampleUpper-sampleLower+1;
+    w->lower = sampleLower;
+    if (!w->init(out.states)) { return fail(w->error); }
+    out.workspaceBytes = sizeof(Workspace)+38*out.states;
+    ExactDp dp {c,goals,in,out,*w};
     for (size_t t = 0; t < out.count; ++t) {
-        auto limits = actionLimits(c, goals, in, out.steps[t], t);
-        chargeReach += limits.chargeWh; dischargeReach += limits.dischargeWh;
-        w->required[t + 1] = out.initialWh - std::min<uint64_t>(out.initialWh - lower, dischargeReach);
-        w->reachableUpper[t + 1] = out.initialWh + std::min<uint64_t>(upper - out.initialWh, chargeReach);
+        w->limits[t] = actionLimits(c,goals,in,out.steps[t],t);
+        w->prefixCharge[t+1] = w->prefixCharge[t]+w->limits[t].chargeWh;
+        w->prefixDischarge[t+1] = w->prefixDischarge[t]+w->limits[t].dischargeWh;
+        if (targetCovered && out.steps[t].end == goals.deadline) { dp.targetBoundary = t+1; }
     }
-    if (targetCovered && cursor == goals.deadline) { w->required[out.count] = std::max(w->required[out.count], goals.targetWh); }
-    for (size_t t = out.count; t-- > 0;) {
-        auto limits = actionLimits(c, goals, in, out.steps[t], t);
-        uint32_t required = w->required[t + 1];
-        if (targetCovered && out.steps[t].end == goals.deadline) { required = std::max(required, goals.targetWh); w->required[t + 1] = required; }
-        w->required[t] = std::max(w->required[t], required - std::min(required, limits.chargeWh));
+    int result = dp.sweep(0,out.count,out.initialWh,0,1);
+    if (result < 0) { out.workUnits = w->work; return fail(w->error); }
+    Score best; uint32_t selected = out.initialWh;
+    auto const& row = w->rows[result];
+    for (uint32_t e = row.lo; e <= row.hi; ++e) {
+        if (row.cost[e] == Infinity) { continue; }
+        Score candidate {row.cost[e]+2*terminalValue(c,out,e+sampleLower),row.throughput[e]};
+        if (better(candidate,best)) { best = candidate; selected = e+sampleLower; }
     }
-    if (out.initialWh < w->required[0]) {
+    if (best.cost == Infinity) {
         out.targetState = targetCovered ? "target_unreachable" : out.targetState;
         return fail(targetCovered ? "target_unreachable" : "no_feasible_plan");
     }
-    for (size_t n = 0; n < out.states; ++n) {
-        uint32_t wh = n + 1 == out.states ? w->required[out.count]
-            : n + 2 == out.states ? w->reachableUpper[out.count] : w->energy[n];
-        w->value[out.count][n] = wh < w->required[out.count] || wh > w->reachableUpper[out.count]
-            ? Score {} : Score {2 * terminalValue(c, out, wh), 0};
-    }
-    for (size_t t = out.count; t-- > 0;) {
-        for (size_t n = 0; n < out.states; ++n) {
-            uint32_t wh = n + 1 == out.states ? w->required[t]
-                : n + 2 == out.states ? w->reachableUpper[t] : w->energy[n];
-            w->value[t][n] = wh < w->required[t] || wh > w->reachableUpper[t] ? Score {} : choose(c, goals, in, out, *w, t, wh).score;
-        }
-    }
-    uint32_t energy = out.initialWh;
-    int64_t cost = 0;
+    if (!dp.reconstruct(out.initialWh,selected)) { out.workUnits = w->work; return fail(w->error ? w->error : "no_feasible_plan"); }
+    out.workUnits = w->work;
+    out.finalWh = selected;
+    out.terminalNano = terminalValue(c,out,selected)-terminalValue(c,out,out.initialWh);
+    int64_t actualCost = 0; uint64_t actualThroughput = 0;
     for (size_t t = 0; t < out.count; ++t) {
-        auto& slot = out.steps[t];
-        Flow baseline;
-        if (!transition(c, goals, in, slot, t, out.initialWh, out.initialWh, baseline)
+        auto const& slot = out.steps[t]; Flow actual, baseline;
+        if (!transition(c,goals,in,slot,t,slot.startWh,slot.endWh,actual)) { return fail("optimizer_reconstruction_failed"); }
+        actualCost += actual.cost; actualThroughput += std::abs(int64_t(slot.endWh)-slot.startWh);
+        if (!transition(c,goals,in,slot,t,out.initialWh,out.initialWh,baseline)
                 || (targetCovered && slot.end == goals.deadline && out.initialWh < goals.targetWh)) { out.baselineValid = false; }
-        if (out.baselineValid) { out.baselineNano += baseline.cost / 2; }
-        auto choice = choose(c, goals, in, out, *w, t, energy);
-        if (choice.score.cost == Infinity) {
-            out.targetState = targetCovered ? "target_unreachable" : out.targetState;
-            return fail(targetCovered ? "target_unreachable" : "no_feasible_plan");
-        }
-        Flow f;
-        if (!transition(c, goals, in, slot, t, energy, choice.energy, f)) { return fail("no_feasible_plan"); }
-        slot.startWh = energy; slot.endWh = choice.energy; applyFlow(slot, f);
-        cost += f.cost; energy = choice.energy;
+        if (out.baselineValid) { out.baselineNano += baseline.cost/2; }
     }
-    out.finalWh = energy;
-    out.terminalNano = terminalValue(c, out, energy) - terminalValue(c, out, out.initialWh);
-    out.optimizedNano = cost / 2 + out.terminalNano;
-    // Interpolation approximates future cost, never physical energy. Publish
-    // actual replayed costs, and retain the feasible hold benchmark if numerical
-    // approximation would otherwise make the resulting schedule more expensive.
-    if (out.baselineValid && out.optimizedNano > out.baselineNano) {
-        for (size_t t = 0; t < out.count; ++t) {
-            auto& slot = out.steps[t]; Flow hold;
-            transition(c, goals, in, slot, t, out.initialWh, out.initialWh, hold);
-            slot.startWh = slot.endWh = out.initialWh; applyFlow(slot, hold);
-        }
-        out.finalWh = out.initialWh; out.terminalNano = 0; out.optimizedNano = out.baselineNano;
-    }
+    if (actualCost+2*terminalValue(c,out,selected) != best.cost || actualThroughput != best.throughput) { return fail("optimizer_reconstruction_failed"); }
+    out.optimizedNano = actualCost/2+out.terminalNano;
     totals(c, out);
     if (targetCovered) { out.targetState = "target_planned"; }
     out.state = out.partial ? "partial" : "ready"; return true;
@@ -574,6 +696,7 @@ void serializePlan(Config const& c, Inputs const& in, Plan const& p, JsonObject 
     out["load_learned_slots"] = p.learnedSlots; out["load_total_slots"] = p.count;
     out["retained_by_hysteresis"] = p.retainedByHysteresis;
     out["soc_states"] = p.states; out["calculation_us"] = p.runtimeUs;
+    out["calculation_work_units"] = p.workUnits; out["workspace_bytes"] = p.workspaceBytes;
     out["price_basis"] = c.effectivePrice ? "effective_variable_import" : "source_market";
     out["tariff_source"] = static_cast<char const*>(p.tariffSource);
     out["forecast_source"] = p.pvIncluded ? static_cast<char const*>(p.forecastSource) : "excluded";

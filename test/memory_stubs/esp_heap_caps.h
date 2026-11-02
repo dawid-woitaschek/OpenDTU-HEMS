@@ -3,12 +3,12 @@
 #include <cstdlib>
 constexpr unsigned MALLOC_CAP_8BIT = 4, MALLOC_CAP_SPIRAM = 1024;
 inline bool hasPsram = true, memoryFailure = false;
-inline unsigned lastCaps = 0, attempts = 0;
+inline unsigned lastCaps = 0, attempts = 0, failAttempt = 0;
 inline size_t lastSize = 0;
 inline size_t heap_caps_get_total_size(unsigned) { return hasPsram ? 2097152 : 0; }
 inline void* heap_caps_malloc(size_t size, unsigned caps) {
-    lastCaps = caps; lastSize = size; ++attempts; return memoryFailure ? nullptr : std::malloc(size);
+    lastCaps = caps; lastSize = size; ++attempts; return memoryFailure || attempts == failAttempt ? nullptr : std::malloc(size);
 }
 inline void* heap_caps_realloc(void* pointer, size_t size, unsigned caps) {
-    lastCaps = caps; lastSize = size; ++attempts; return memoryFailure ? nullptr : std::realloc(pointer, size);
+    lastCaps = caps; lastSize = size; ++attempts; return memoryFailure || attempts == failAttempt ? nullptr : std::realloc(pointer, size);
 }

@@ -283,7 +283,7 @@ clean: clean-optimizer-known-defects
 clean-optimizer-known-defects:
 	rm -f test_optimizer_known_defects
 
-# KD01: action endpoints are independent of the bounded value-sample grid.
+# KD01: exact whole-Wh actions, independent of the legacy SoC-step setting.
 all: test_optimizer_actions
 test_optimizer_actions: test_optimizer_actions.cpp $(wildcard ../include/hems/optimizer/*.h) ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
@@ -294,3 +294,15 @@ optimizer-actions-test: test_optimizer_actions
 clean: clean-optimizer-actions
 clean-optimizer-actions:
 	rm -f test_optimizer_actions
+
+# Independent exhaustive whole-Wh comparisons at realistic battery capacities.
+all: test_optimizer_optimality
+test_optimizer_optimality: test_optimizer_optimality.cpp optimizer_reference.h ../include/hems/optimizer/Planner.h ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -O2 -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+.PHONY: optimizer-optimality-test clean-optimizer-optimality
+test: optimizer-optimality-test
+optimizer-optimality-test: test_optimizer_optimality
+	./test_optimizer_optimality
+clean: clean-optimizer-optimality
+clean-optimizer-optimality:
+	rm -f test_optimizer_optimality
