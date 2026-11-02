@@ -73,6 +73,39 @@ python3 test/test_hems_config.py work/ArduinoJson/src
 
 `test_provider_cleanup` compiles the production controller, policy, both provider workers, mailbox, planner and executor. Only external grid/PV inputs, tasks, configuration persistence, profile loading and wire I/O are deterministic seams. It covers all four permission combinations, Monitor manual commands, Active automatic gating/EV protection, debounce, transient failures, one-shot failed release, configuration generation races and same-ID capability reload. Identity/replay metadata is deliberately absent or ineligible and does not prevent control. Parser/catalog and separate semantic/readback tests validate bounded operations. Physical register/charging behavior remains a hardware test.
 
+## Optimizer known-defect reproducers
+
+Run only the deterministic unresolved-defect suite from the repository root:
+
+```sh
+make -C test optimizer-known-defects-test ARDUINOJSON=../work/ArduinoJson/src
+```
+
+Use ArduinoJson **v7.4.3**, as for the existing native tests (or omit the override
+to use the installed PlatformIO headers). No firmware build, network, hardware or
+wall-clock time is needed to run the suite. `make test` also includes it, and
+`make clean` removes its executable.
+
+`test_optimizer_known_defects.cpp` calls the unmodified production planner,
+retained-plan evaluator, forecast provider and live flow coordinator. Its nine
+cases cover eight **unresolved defects**: KD01 small charge/discharge actions,
+KD02 forbidden PV export leakage, KD03 policy-forbidden terminal use, KD04
+equivalent tariff segmentation, KD05 Local First planner/coordinator mismatch,
+KD06 future-target reachability, KD07 expired fulfilled targets and KD08 partial
+PV forecast loss. Fixed UTC input, unity efficiencies and feasibility/comparison
+controls keep each counterexample deterministic and independently reviewable.
+
+These tests assert **desired behavior**, not the defective output as a golden
+result. Only each case's final invariant can produce the expected `XFAIL`.
+Setup/control exceptions are hard failures; a crash also fails the executable.
+`XPASS` fails the target too: investigate changed behavior and move the desired
+assertion into ordinary regression coverage when the defect is fixed. All cases
+run even if another case fails. Exit zero with nine `XFAIL` lines means all nine
+counterexamples reproduced; it is not optimizer correctness, CI or hardware
+validation. No production fix is included. The [current status](../docs/HEMS_Current_Status.md#unresolved-optimizer-defects-2026-11-02)
+and [roadmap](../docs/HEMS_Roadmap.md#unresolved-optimizer-correctness-work-2026-11-02)
+track the unresolved work.
+
 ## Tariff / forecast and Admin regression coverage
 
 `make test ARDUINOJSON=../work/ArduinoJson/src` includes `test_energy` and

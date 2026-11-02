@@ -95,12 +95,41 @@ OpenDTU-HEMS is supervisory home-energy automation, not the primary hardware saf
 
 See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), [energy data](HEMS_Energy_Data.md), [native energy/optimizer](HEMS_Native_Energy.md), [dispatch](HEMS_Economic_Dispatch.md), [energy management](HEMS_Energy_Management.md) and [policies](HEMS_Policies.md).
 
+## Unresolved optimizer correctness work (2026-11-02)
+
+The test-only follow-up from `remote-telemetry-sender` head `998620bb` records
+eight unresolved adversarial findings. Production optimizer behavior and Remote
+Diagnostics / telemetry are unchanged. These require software corrections and
+normal regression assertions in later work; physical validation alone cannot
+resolve them.
+
+| ID | Unresolved work |
+|---|---|
+| KD01 | Represent feasible small battery charge/discharge actions that the current SoC/action lattice blocks. |
+| KD02 | Prevent PV export leakage when PV export is forbidden while battery export is allowed. |
+| KD03 | Make terminal future-use valuation respect persistent discharge policy. |
+| KD04 | Make terminal valuation invariant under equivalent tariff interval segmentation. |
+| KD05 | Reconcile planner and live coordinator Local First actions under identical flow inputs and limits. |
+| KD06 | Preserve physical reachability of future targets outside the current planning horizon. |
+| KD07 | Prevent an expired, fulfilled one-shot target from blocking later plans. |
+| KD08 | Preserve valid covered PV forecast data when another part of the horizon is uncovered, with explicit unknown coverage semantics. |
+
+The [known-defect suite](../test/test_optimizer_known_defects.cpp) has nine
+deterministic cases (small charge/discharge are separate). Its desired invariants
+currently `XFAIL`; setup/control failures and `XPASS` fail the target so changed
+behavior must be reviewed and promoted to normal regression coverage. Reproducing
+these defects is not evidence of correctness or a fix. See
+[current issue details](HEMS_Current_Status.md#unresolved-optimizer-defects-2026-11-02)
+and the [focused run instructions](../test/README.md#optimizer-known-defect-reproducers).
+This work claims local native reproduction only, with no new CI, firmware-build
+or physical validation.
+
 ## Next milestones
 
 1. **Physical WARP3 + Marstek validation:** on Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback. Use the [hardware validation runbook](HEMS_Hardware_Validation.md) and browser-only diagnostic snapshots before/after representative runs.
 2. **Correct actual WARP/Marstek mapping or lifecycle issues** found on hardware. Verify Marstek V148 power/SoC scaling, sign, persistence and command/watchdog behavior. Do not invent lifecycle architecture without hardware evidence.
 3. **Live provider/on-device validation:** Energy-Charts v2 HTTPS/parser/heap/stack and Forecast.Solar DNS/TLS/resources, scheduling/quota behavior and real multi-plane responses. Prior successful no-PSRAM runs do not establish long-term stability; the accepted PR #35 PSRAM run covers approximately 21 hours on Device A, with representative provider-specific live runs and retained diagnostics still useful for broader coverage.
-4. **Economic optimizer/dispatch real-input validation:** confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Merged PR #34 adds learned-load coverage/fallback, wear, terminal valuation and monetary hysteresis. Validate planned versus commanded versus measured flows, zero/changing export limits, stale telemetry, device failures and strict PV-only startup. Measure INTERNAL/PSRAM free/largest blocks, stack watermarks, planning latency, TLS headroom and DPL responsiveness on the combined PSRAM build. Physical charge/discharge and export transients remain gates.
+4. **Economic optimizer correctness and real-input validation:** resolve KD01–KD08 above with separate production fixes and regression tests. Confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Merged PR #34 adds learned-load coverage/fallback, wear, terminal valuation and monetary hysteresis; these implemented features retain the documented unresolved defects. Validate planned versus commanded versus measured flows, zero/changing export limits, stale telemetry, device failures and strict PV-only startup. Measure INTERNAL/PSRAM free/largest blocks, stack watermarks, planning latency, TLS headroom and DPL responsiveness on the combined PSRAM build. Physical charge/discharge and export transients remain gates.
 5. **Product UX / unified WebUI (`redesign-v1`, unmerged draft PR #37):** the first
    redesign and a focused UX/IA cleanup are implemented separately from `hems`,
    based on `6b45ebcd`. One concise Overview replaces the classic/HEMS split;
