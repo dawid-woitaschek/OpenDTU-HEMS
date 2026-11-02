@@ -86,25 +86,38 @@ to use the installed PlatformIO headers). No firmware build, network, hardware o
 wall-clock time is needed to run the suite. `make test` also includes it, and
 `make clean` removes its executable.
 
-`test_optimizer_known_defects.cpp` calls the unmodified production planner,
-retained-plan evaluator, forecast provider and live flow coordinator. Its nine
-cases cover eight **unresolved defects**: KD01 small charge/discharge actions,
-KD02 forbidden PV export leakage, KD03 policy-forbidden terminal use, KD04
-equivalent tariff segmentation, KD05 Local First planner/coordinator mismatch,
-KD06 future-target reachability, KD07 expired fulfilled targets and KD08 partial
-PV forecast loss. Fixed UTC input, unity efficiencies and feasibility/comparison
-controls keep each counterexample deterministic and independently reviewable.
+`test_optimizer_known_defects.cpp` calls the production planner, retained-plan
+evaluator, forecast provider and live flow coordinator. Its nine audit cases now
+require **three ordinary PASS results**: KD01 small charge, KD01 small discharge,
+and the original coupled KD05 Local First witness. The latter passes naturally
+from removal of the action lattice; it does not prove broader coordinator/policy
+consistency. The remaining six cases (KD02–KD04 and KD06–KD08) retain their original
+bodies and expected final-invariant `XFAIL` behavior.
 
-These tests assert **desired behavior**, not the defective output as a golden
-result. Only each case's final invariant can produce the expected `XFAIL`.
-Setup/control exceptions are hard failures; a crash also fails the executable.
-`XPASS` fails the target too: investigate changed behavior and move the desired
-assertion into ordinary regression coverage when the defect is fixed. All cases
-run even if another case fails. Exit zero with nine `XFAIL` lines means all nine
-counterexamples reproduced; it is not optimizer correctness, CI or hardware
-validation. No production fix is included. The [current status](../docs/HEMS_Current_Status.md#unresolved-optimizer-defects-2026-11-02)
-and [roadmap](../docs/HEMS_Roadmap.md#unresolved-optimizer-correctness-work-2026-11-02)
-track the unresolved work.
+Fixed cases fail on any invariant violation. Unresolved cases fail on unexpected
+`XPASS`; setup/control errors also fail. All cases run even if another fails.
+Exit zero means the three regressions passed and six unresolved counterexamples
+reproduced; XFAIL is not optimizer correctness or hardware validation.
+
+Additional focused KD01 checks:
+
+```sh
+make -C test optimizer-actions-test test_hems_memory ARDUINOJSON=../work/ArduinoJson/src
+(cd test && ./test_hems_memory)
+```
+
+`test_optimizer_actions` covers 1/3/25 Wh actions independent of SoC sample spacing,
+off-grid measured SoC, 10 kWh/1 MWh capacities, current/device permissions and power
+caps, efficiency losses, PV-only charge, repeated actions, future-price economics,
+split in-horizon targets, exact retained-plan replay and the 256-slot capacity.
+Sixteen independently enumerated small-battery cases compare the global objective
+against exhaustive whole-Wh search. `test_hems_memory` runs the actual production
+planner allocation through the ESP32 capability seam, checking the bounded PSRAM
+table, exhaustion without INTERNAL retry, recovery and absent-PSRAM refusal before
+any large INTERNAL allocation. Other HEMS allocations retain their compatibility
+fallback. The [status/resource review](../docs/HEMS_Current_Status.md#optimizer-audit-2026-11-02)
+and [roadmap](../docs/HEMS_Roadmap.md#optimizer-correctness-follow-up-2026-11-02)
+distinguish software results from pending Device A validation.
 
 ## Tariff / forecast and Admin regression coverage
 

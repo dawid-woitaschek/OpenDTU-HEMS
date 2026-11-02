@@ -126,8 +126,8 @@ void planningEnvelopes() {
     // A known zero global limit is not the old unknown-bound sentinel.
     f.in.observedPvAcLimitKnown=true; f.in.observedPvAcLimitW=0;
     f.in.flowTopologySupported=true; assert(f.run() && f.plan.steps[0].pvW==0);
-    // Local-first charges before curtailing, including an irregular exact initial
-    // state closer than one normal quantum. Disabled charge/at-full permit hold.
+    // Local-first charges before curtailing from actual whole-Wh inventory,
+    // including an irregular initial state. Disabled charge/at-full permit hold.
     Fixture local; local.c.horizonSeconds=900; local.c.flow.preference=Flow::Preference::LocalFirst;
     local.pv.intervals[0].value=1500; local.c.maxChargeW=1000; local.c.degradationMicros=10000000;
     assert(local.run() && local.plan.steps[0].batteryW>0 && !local.plan.baselineValid);
@@ -135,7 +135,7 @@ void planningEnvelopes() {
     assert(report["baseline_valid"]==false && report["baseline_cost_nano"].isNull() && report["modeled_savings_nano"].isNull()
         && report["projected_grid_bill_difference_nano"].isNull());
     local.in.storage.socPct.value=11.9; local.pv.intervals[0].value=530;
-    assert(local.run() && local.plan.steps[0].endWh==600); // 595 -> 600 Wh, below 100 Wh quantum
+    assert(local.run() && local.plan.steps[0].endWh==602); // 595 + floor(30 W * 900 s * .95 / 3600) Wh
     local.in.currentConstraints.chargeAllowed=false; assert(local.run() && local.plan.steps[0].batteryW==0 && local.plan.baselineValid);
     local.in.currentConstraints.chargeAllowed=true; local.in.storage.socPct.value=90;
     assert(local.run() && local.plan.steps[0].batteryW==0 && local.plan.baselineValid);
@@ -145,7 +145,7 @@ void planningEnvelopes() {
     partial.c.policies.gridChargingAllowed=false;
     partial.c.policies.targetEnabled=true; partial.c.policies.targetSoc=13;
     partial.c.policies.targetDeadline=Now+1800;
-    assert(partial.run() && partial.plan.steps[0].endWh==600 && partial.plan.partial);
+    assert(partial.run() && partial.plan.steps[0].endWh==690 && partial.plan.partial);
     // No grid/export permission: don't promise a future charge that cannot start
     // after DPL has curtailed PV to load. Fresh surplus or grid permission recovers.
     Fixture boot; boot.c.horizonSeconds=900; boot.pv.intervals[0].value=1500;

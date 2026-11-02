@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Desired-behavior assertions for UNRESOLVED defects, not golden tests for bad behavior.
-// Only the final invariant may XFAIL. Setup/control failures are hard failures;
-// XPASS is also a failure: review a fix and promote its assertion to a regression.
+// Audit regressions plus desired-behavior assertions for unresolved defects.
+// Fixed cases must PASS. Only unresolved final invariants may XFAIL; setup
+// failures and unexpected passes remain hard failures.
 #include <hems/flow/Coordinator.h>
 #include <hems/optimizer/Planner.h>
 #include <algorithm>
@@ -81,7 +81,7 @@ void smallAction(bool charge)
     require(evaluateRetained(f.c, f.in, f.plan, witness, evaluated), "small physical action rejected by production evaluator");
     require(evaluated.steps[0].batteryW == (charge ? 100 : -100), "witness must use exactly the permitted power");
     require(evaluated.optimizedNano < f.plan.baselineNano, "physical action must improve on hold");
-    expectFixed(f.plan.optimizedNano <= evaluated.optimizedNano,
+    require(f.plan.optimizedNano <= evaluated.optimizedNano,
         "DP cost=" + std::to_string(f.plan.optimizedNano) + ", feasible 25 Wh cost=" + std::to_string(evaluated.optimizedNano));
 }
 void smallCharge() { smallAction(true); }
@@ -166,7 +166,7 @@ void localFirstMismatch()
     f.c.flow.preference = Flow::Preference::LocalFirst; f.ready();
     auto coordinated = live(f.plan.steps[0].batteryW);
     require(coordinated.usable && coordinated.exportEnforcement, "fresh measured flow and DPL must be usable");
-    expectFixed(coordinated.batteryW == f.plan.steps[0].batteryW,
+    require(coordinated.batteryW == f.plan.steps[0].batteryW,
         "same Local First flow: planner W=" + std::to_string(f.plan.steps[0].batteryW)
         + ", coordinator W=" + std::to_string(coordinated.batteryW));
 }
@@ -237,29 +237,32 @@ void incompletePvForecast()
 
 int main()
 {
-    struct Case { char const* id; void (*run)(); };
+    struct Case { char const* id; void (*run)(); bool fixed = false; };
     Case const cases[] = {
-        {"KD01-small-charge", smallCharge}, {"KD01-small-discharge", smallDischarge},
+        {"KD01-small-charge", smallCharge, true}, {"KD01-small-discharge", smallDischarge, true},
         {"KD02-forbidden-PV-export", forbiddenPvExport}, {"KD03-forbidden-terminal-use", forbiddenTerminalUse},
-        {"KD04-tariff-segmentation", equivalentTariffSegmentation}, {"KD05-local-first-mismatch", localFirstMismatch},
+        {"KD04-tariff-segmentation", equivalentTariffSegmentation}, {"KD05-local-first-original-witness", localFirstMismatch, true},
         {"KD06-future-target-reachability", futureTargetReachability}, {"KD07-expired-fulfilled-target", expiredFulfilledTarget},
         {"KD08-incomplete-PV-forecast", incompletePvForecast},
     };
-    unsigned reproduced = 0, failures = 0;
+    unsigned passed = 0, reproduced = 0, failures = 0;
     for (auto const& test : cases) {
         try {
             test.run();
-            std::cerr << "XPASS " << test.id << ": review changed behavior and promote to a normal regression\n";
-            ++failures;
+            if (test.fixed) { std::cout << "PASS " << test.id << '\n'; ++passed; }
+            else {
+                std::cerr << "XPASS " << test.id << ": review changed behavior and promote to a normal regression\n";
+                ++failures;
+            }
         } catch (KnownDefect const& e) {
-            std::cout << "XFAIL " << test.id << ": " << e.what() << '\n';
-            ++reproduced;
+            if (test.fixed) { std::cerr << "FAIL " << test.id << ": " << e.what() << '\n'; ++failures; }
+            else { std::cout << "XFAIL " << test.id << ": " << e.what() << '\n'; ++reproduced; }
         } catch (std::exception const& e) {
             std::cerr << "FAIL " << test.id << ": " << e.what() << '\n';
             ++failures;
         }
     }
-    std::cout << reproduced << "/" << (sizeof(cases) / sizeof(cases[0]))
-              << " known-defect invariant failures reproduced; " << failures << " harness failures/XPASS\n";
+    std::cout << passed << " fixed regressions passed; " << reproduced
+              << " unresolved invariant failures reproduced; " << failures << " failures/XPASS\n";
     return failures ? 1 : 0;
 }

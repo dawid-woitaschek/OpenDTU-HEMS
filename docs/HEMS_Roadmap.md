@@ -95,41 +95,57 @@ OpenDTU-HEMS is supervisory home-energy automation, not the primary hardware saf
 
 See [current status](HEMS_Current_Status.md), [control model](HEMS_CONTROL.md), [energy data](HEMS_Energy_Data.md), [native energy/optimizer](HEMS_Native_Energy.md), [dispatch](HEMS_Economic_Dispatch.md), [energy management](HEMS_Energy_Management.md) and [policies](HEMS_Policies.md).
 
-## Unresolved optimizer correctness work (2026-11-02)
+## Optimizer correctness follow-up (2026-11-02)
 
-The test-only follow-up from `remote-telemetry-sender` head `998620bb` records
-eight unresolved adversarial findings. Production optimizer behavior and Remote
-Diagnostics / telemetry are unchanged. These require software corrections and
-normal regression assertions in later work; physical validation alone cannot
-resolve them.
+**KD01 is fixed in software** in the existing whole-Wh model. The bounded global
+DP separates physical actions from value samples: backward continuation-cost
+interpolation, exact physical forward reconstruction, horizon-reachable inventory
+and per-layer feasibility edges replace SoC-node-only transitions. Both original
+25 Wh audit witnesses now assert normal expected behavior. Additional focused
+checks cover smaller actions, losses, current/device limits, PV-only charging,
+repeated/future-price decisions, in-horizon targets and the 256-slot bound.
+This does not establish physical battery behavior or an exact continuous optimum.
 
-| ID | Unresolved work |
+| ID | Remaining work / correction status |
 |---|---|
-| KD01 | Represent feasible small battery charge/discharge actions that the current SoC/action lattice blocks. |
+| KD01 | Software regression fixed. Validate planning latency, resources and actual small charge/discharge execution on Device A. |
 | KD02 | Prevent PV export leakage when PV export is forbidden while battery export is allowed. |
 | KD03 | Make terminal future-use valuation respect persistent discharge policy. |
 | KD04 | Make terminal valuation invariant under equivalent tariff interval segmentation. |
-| KD05 | Reconcile planner and live coordinator Local First actions under identical flow inputs and limits. |
+| KD05 | The original 1200 W / 1500 W witness now passes solely from the action-space correction. Broader Local First planner/coordinator semantics remain open and require independent consistency validation; no separate coordinator/policy redesign was made. |
 | KD06 | Preserve physical reachability of future targets outside the current planning horizon. |
 | KD07 | Prevent an expired, fulfilled one-shot target from blocking later plans. |
 | KD08 | Preserve valid covered PV forecast data when another part of the horizon is uncovered, with explicit unknown coverage semantics. |
 
-The [known-defect suite](../test/test_optimizer_known_defects.cpp) has nine
-deterministic cases (small charge/discharge are separate). Its desired invariants
-currently `XFAIL`; setup/control failures and `XPASS` fail the target so changed
-behavior must be reviewed and promoted to normal regression coverage. Reproducing
-these defects is not evidence of correctness or a fix. See
-[current issue details](HEMS_Current_Status.md#unresolved-optimizer-defects-2026-11-02)
-and the [focused run instructions](../test/README.md#optimizer-known-defect-reproducers).
-This work claims local native reproduction only, with no new CI, firmware-build
-or physical validation.
+The [audit suite](../test/test_optimizer_known_defects.cpp) now requires three
+normal PASS results (KD01 charge/discharge and the original KD05 witness) and six
+XFAIL results. Other unresolved case bodies remain intact. Setup failures,
+regressions and unexpected passes fail the target; XFAIL is not correctness.
+See [current details and resource review](HEMS_Current_Status.md#optimizer-audit-2026-11-02)
+and [focused commands](../test/README.md#optimizer-known-defect-reproducers).
+Remote Diagnostics / telemetry functionality remains intact, including cached
+HEMS observation, preview, bounded spool/payload and sender behavior.
+
+**Resource gate:** at most 256 slots / 128 value samples, O(T × S²) work, a
+529,928 B native-measured workspace with a 520 KiB compile-time cap, exclusively
+in PSRAM on ESP32 and no INTERNAL fallback. No-PSRAM builds are compatibility-only
+and report `optimizer_requires_psram` for planning. Device A is the minimum Full
+HEMS reference: ESP32-S3, 8 MB flash, **2 MB quad PSRAM**,
+`generic_esp32s3_usb_quad_psram`. Allow approximately 1.39 MiB for the conservative
+planner/telemetry budget combination before other allocations; check actual free
+and largest PSRAM blocks, TLS/INTERNAL headroom and task watermarks on-device.
+Matched optimized native 48-hour timing was 10,576 µs (prior 3,291 µs); it does
+not establish ESP32 latency. The larger transient table is released before
+provider TLS on the existing shared worker. Local native, allocator failure,
+telemetry and sanitizer checks support the software conclusion only. No firmware
+build, Actions monitoring or physical validation was performed for this fix.
 
 ## Next milestones
 
 1. **Physical WARP3 + Marstek validation:** on Fusion v2.1 + Shield v1.1, ESP32-S3, 8 MB flash, 2 MB quad PSRAM, `generic_esp32s3_usb_quad_psram`. Exercise WARP current/stop/release and Marstek acquire/charge/discharge/stop/SoC/release; all four permission combinations; Monitor and Active; communication interruption and return; best-effort permission/configuration release. Record actual physical behavior separately from register readback. Use the [hardware validation runbook](HEMS_Hardware_Validation.md) and browser-only diagnostic snapshots before/after representative runs.
 2. **Correct actual WARP/Marstek mapping or lifecycle issues** found on hardware. Verify Marstek V148 power/SoC scaling, sign, persistence and command/watchdog behavior. Do not invent lifecycle architecture without hardware evidence.
 3. **Live provider/on-device validation:** Energy-Charts v2 HTTPS/parser/heap/stack and Forecast.Solar DNS/TLS/resources, scheduling/quota behavior and real multi-plane responses. Prior successful no-PSRAM runs do not establish long-term stability; the accepted PR #35 PSRAM run covers approximately 21 hours on Device A, with representative provider-specific live runs and retained diagnostics still useful for broader coverage.
-4. **Economic optimizer correctness and real-input validation:** resolve KD01–KD08 above with separate production fixes and regression tests. Confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Merged PR #34 adds learned-load coverage/fallback, wear, terminal valuation and monetary hysteresis; these implemented features retain the documented unresolved defects. Validate planned versus commanded versus measured flows, zero/changing export limits, stale telemetry, device failures and strict PV-only startup. Measure INTERNAL/PSRAM free/largest blocks, stack watermarks, planning latency, TLS headroom and DPL responsiveness on the combined PSRAM build. Physical charge/discharge and export transients remain gates.
+4. **Economic optimizer correctness and real-input validation:** resolve KD02–KD04 and KD06–KD08, independently validate broader KD05 consistency, and physically validate the KD01 software correction above. Confirm planner timing/resources and dispatch behavior on-device with live tariffs, forecast data and fresh battery telemetry. Merged PR #34 adds learned-load coverage/fallback, wear, terminal valuation and monetary hysteresis; these implemented features retain the documented unresolved defects. Validate planned versus commanded versus measured flows, zero/changing export limits, stale telemetry, device failures and strict PV-only startup. Measure INTERNAL/PSRAM free/largest blocks, stack watermarks, planning latency, TLS headroom and DPL responsiveness on the combined PSRAM build. Physical charge/discharge and export transients remain gates.
 5. **Product UX / unified WebUI (`redesign-v1`, unmerged draft PR #37):** the first
    redesign and a focused UX/IA cleanup are implemented separately from `hems`,
    based on `6b45ebcd`. One concise Overview replaces the classic/HEMS split;

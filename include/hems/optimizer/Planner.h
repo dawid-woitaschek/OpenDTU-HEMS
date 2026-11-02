@@ -7,7 +7,9 @@
 #include <hems/constraints/Constraints.h>
 #include <hems/policies/StorageEconomic.h>
 namespace Hems::Optimizer {
-constexpr size_t MaxSteps = 256, MaxStates = 54;
+// Value samples, not the admissible battery action set. Whole-Wh actions may
+// end between samples; the backward DP interpolates their continuation values.
+constexpr size_t MaxSteps = 256, MaxStates = 128;
 struct Config {
     bool socBoundsConfigured = false;
     bool enabled = false, effectivePrice = true, exportConfigured = false;

@@ -19,11 +19,18 @@ constexpr int64_t Infinity = std::numeric_limits<int64_t>::max() / 4;
 struct Score { int64_t cost = Infinity; uint64_t throughput = UINT64_MAX; };
 bool better(Score a, Score b) { return a.cost < b.cost || (a.cost == b.cost && a.throughput < b.throughput); }
 struct Workspace {
-    Score previous[MaxStates], next[MaxStates];
-    union { uint8_t parent[MaxSteps][MaxStates] {}; int32_t priceScratch[MaxSteps]; };
+    Score value[MaxSteps + 1][MaxStates];
     uint32_t energy[MaxStates] {};
-    int64_t terminal[MaxStates] {};
+    // Exact time-layer domain edges; never interpolate across unreachable stock.
+    uint32_t required[MaxSteps + 1] {}, reachableUpper[MaxSteps + 1] {};
+    int32_t priceScratch[MaxSteps] {};
 };
+static_assert(sizeof(Workspace) <= 520 * 1024, "Bound the PSRAM planning workspace");
+// Overflow-safe integer interpolation; monetary costs remain in half-nano units.
+int64_t interpolate(int64_t a, int64_t b, uint32_t offset, uint32_t width) {
+    int64_t delta = b - a;
+    return a + (delta / width) * offset + (delta % width) * offset / width;
+}
 // nano currency = price micro currency/kWh * Ws / 3600. Split before multiplication.
 int64_t money(int64_t ws, int32_t price) { return (ws / 3600) * price + ((ws % 3600) * price) / 3600; }
 struct Flow {
@@ -61,19 +68,9 @@ bool batteryExportAllowed(Config const& c) { return c.flow.enabled ? c.flow.batt
 bool pvChargeReachable(Config const& c, Inputs const& in) {
     return !c.flow.enabled || c.policies.gridChargingAllowed || (c.flow.pvExport && c.flow.maxExportW) || in.pvSurplusObserved;
 }
-uint32_t nextEnergy(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, uint32_t wh, bool targetCovered) {
-    uint32_t step = std::max<uint32_t>(1, (static_cast<uint64_t>(c.capacityWh) * c.socStepPct + 99) / 100);
-    uint32_t next = std::min(goals.ceilingWh, goals.reserveWh + ((wh - goals.reserveWh) / step + 1) * step);
-    uint32_t initial = std::llround(in.storage.socPct.value * c.capacityWh / 100.0);
-    if (initial > wh) { next = std::min(next, initial); }
-    if (targetCovered && goals.targetWh > wh) { next = std::min(next, goals.targetWh); }
-    return next;
-}
-bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, Step const& slot, size_t index, uint32_t from, uint32_t to, Flow& flow, bool targetCovered, uint32_t nextStateWh = UINT32_MAX)
+struct PowerLimits { uint32_t chargeW, dischargeW; };
+PowerLimits powerLimits(Config const& c, Inputs const& in, Step const& slot, size_t index)
 {
-    uint32_t seconds = slot.end - slot.start;
-    int64_t deltaWs = (static_cast<int64_t>(to) - from) * 3600;
-    int64_t netWs = (static_cast<int64_t>(slot.loadW) - slot.pvW) * seconds;
     uint32_t chargeW = c.maxChargeW, dischargeW = c.maxDischargeW;
     if (in.storageLimits.known) {
         chargeW = std::min(chargeW, in.storageLimits.chargeW);
@@ -91,6 +88,37 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
         auto ev = in.evRestrictions->current(slot.start);
         if (ev && ev->value > 0) { dischargeW = 0; }
     }
+    return {chargeW, dischargeW};
+}
+struct EnergyLimits { uint32_t chargeWh, dischargeWh; };
+EnergyLimits actionLimits(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, Step const& slot, size_t index)
+{
+    auto power = powerLimits(c, in, slot, index);
+    int64_t seconds = slot.end - slot.start;
+    int64_t netWs = (static_cast<int64_t>(slot.loadW) - slot.pvW) * seconds;
+    int64_t chargeWs = power.chargeW * seconds, dischargeWs = power.dischargeW * seconds;
+    if (!goals.gridChargingAllowed) {
+        int64_t surplus = std::max<int64_t>(0, -netWs);
+        if (c.flow.enabled && c.flow.preference == Hems::Flow::Preference::ExportFirst && c.flow.pvExport) {
+            surplus = std::max<int64_t>(0, surplus - c.flow.maxExportW * seconds);
+        }
+        chargeWs = std::min(chargeWs, surplus);
+    }
+    if (!goals.dischargeAllowed) { dischargeWs = 0; }
+    if (!batteryExportAllowed(c)) { dischargeWs = std::min(dischargeWs, std::max<int64_t>(0, netWs)); }
+    if (c.flow.enabled) { dischargeWs = std::min(dischargeWs, (slot.loadW + static_cast<int64_t>(c.flow.maxExportW)) * seconds); }
+    // Match transition's ceil on charge and floor on discharge exactly. A zero
+    // power/permission limit must never admit movement through integer rounding.
+    return {static_cast<uint32_t>(chargeWs * c.chargePermille / 3600000),
+        dischargeWs ? static_cast<uint32_t>(((dischargeWs + 1) * 1000 - 1) / (3600 * c.dischargePermille)) : 0};
+}
+bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in, Step const& slot, size_t index, uint32_t from, uint32_t to, Flow& flow)
+{
+    uint32_t seconds = slot.end - slot.start;
+    int64_t deltaWs = (static_cast<int64_t>(to) - from) * 3600;
+    int64_t netWs = (static_cast<int64_t>(slot.loadW) - slot.pvW) * seconds;
+    auto power = powerLimits(c, in, slot, index);
+    auto chargeW = power.chargeW, dischargeW = power.dischargeW;
     if (deltaWs < 0 && !goals.dischargeAllowed) { return false; }
     if (deltaWs > 0) {
         flow.batteryWs = (deltaWs * 1000 + c.chargePermille - 1) / c.chargePermille;
@@ -108,11 +136,10 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
             && deltaWs > 0 && !goals.gridChargingAllowed
             && flow.batteryWs > std::max<int64_t>(0, -netWs - static_cast<int64_t>(c.flow.maxExportW) * seconds)) { return false; }
     if (c.flow.enabled && c.flow.preference == Hems::Flow::Preference::LocalFirst && netWs < 0 && chargeW && from < goals.ceilingWh) {
-        // Allocate available (already physically capped) PV to eligible battery
-        // charging BEFORE export/curtailment. Test the actual next lattice state,
-        // including exact initial/target insertions, not an assumed fixed step.
+        // Allocate eligible PV before export/curtailment. Admission must depend
+        // on the next physical whole Wh, not the spacing of the value samples.
         if (deltaWs < 0) { return false; }
-        uint32_t next = nextStateWh == UINT32_MAX ? nextEnergy(c, goals, in, to, targetCovered) : nextStateWh;
+        uint32_t next = std::min(goals.ceilingWh, to + 1);
         int64_t nextAc = (static_cast<int64_t>(next - from) * 3600 * 1000 + c.chargePermille - 1) / c.chargePermille;
         if (next > to && nextAc <= std::min(-netWs, static_cast<int64_t>(chargeW) * seconds)) { return false; }
     }
@@ -136,6 +163,65 @@ bool transition(Config const& c, Policies::StorageEconomicGoals const& goals, In
     flow.buffer = absWh * c.bufferMicros;
     flow.cost = 2 * (flow.importCost - flow.exportRevenue) + flow.degradation + flow.buffer;
     return true;
+}
+// Interpolate continuation values only inside the physically feasible domain.
+// In particular, never interpolate across the unreachable side of a deadline.
+Score continuation(Workspace const& w, size_t layer, size_t states, uint32_t wh)
+{
+    if (wh < w.required[layer] || wh > w.reachableUpper[layer]) { return {}; }
+    auto begin = w.energy, end = begin + states - 2; // Two layer-specific edge samples.
+    auto hi = std::lower_bound(begin, end, wh);
+    if (hi != end && *hi == wh) { return w.value[layer][hi - begin]; }
+    uint32_t lower = w.required[layer], upper = w.reachableUpper[layer];
+    Score lo = w.value[layer][states - 1], high = w.value[layer][states - 2];
+    if (hi != end && *hi < upper) { upper = *hi; high = w.value[layer][hi - begin]; }
+    if (hi != begin && *(hi - 1) > lower) { lower = *(hi - 1); lo = w.value[layer][hi - begin - 1]; }
+    if (wh == lower) { return lo; }
+    if (wh == upper) { return high; }
+    if (lo.cost == Infinity || high.cost == Infinity || upper <= lower) { return {}; }
+    return {interpolate(lo.cost, high.cost, wh - lower, upper - lower),
+        static_cast<uint64_t>(interpolate(lo.throughput, high.throughput, wh - lower, upper - lower))};
+}
+struct Choice { Score score; uint32_t energy = 0; };
+Choice choose(Config const& c, Policies::StorageEconomicGoals const& goals, Inputs const& in,
+    Plan const& plan, Workspace const& w, size_t t, uint32_t from)
+{
+    Choice best;
+    auto const& slot = plan.steps[t];
+    auto limits = actionLimits(c, goals, in, slot, t);
+    uint32_t lower = std::max(w.required[t + 1], from - std::min(from - goals.reserveWh, limits.dischargeWh));
+    uint32_t upper = std::min(w.reachableUpper[t + 1], from + std::min(goals.ceilingWh - from, limits.chargeWh));
+    if (lower > upper) { return best; }
+    auto consider = [&](uint32_t to, Score const* sampled = nullptr) {
+        if (to < lower || to > upper) { return; }
+        auto future = sampled ? *sampled : continuation(w, t + 1, plan.states, to);
+        if (future.cost == Infinity) { return; }
+        Flow f;
+        if (!transition(c, goals, in, slot, t, from, to, f)) { return; }
+        Score candidate {f.cost + future.cost, future.throughput + static_cast<uint64_t>(std::abs(static_cast<int64_t>(to) - from))};
+        if (better(candidate, best.score)) { best = {candidate, to}; }
+    };
+    // Hold and physical endpoints are always candidates, even within ONE value
+    // cell. No snapping of the action, energy or reconstructed schedule occurs.
+    consider(from); consider(lower); consider(upper);
+    auto begin = std::lower_bound(w.energy, w.energy + plan.states - 2, lower);
+    for (auto e = begin; e != w.energy + plan.states - 2 && *e <= upper; ++e) { consider(*e, &w.value[t + 1][e - w.energy]); }
+    // Flow cost changes slope at zero import/export and the curtailment limit.
+    // Include adjacent integer Wh around each AC breakpoint (efficiencies round
+    // asymmetrically). This is a bounded action search, not a power-step lattice.
+    int64_t seconds = slot.end - slot.start;
+    auto breakpoint = [&](int64_t batteryWs) {
+        int64_t delta = batteryWs >= 0 ? batteryWs * c.chargePermille / 3600000
+            : -((-batteryWs * 1000) / (3600 * c.dischargePermille));
+        int64_t energy = from + delta;
+        for (int offset : {-1, 0, 1}) {
+            if (energy + offset >= lower && energy + offset <= upper) { consider(energy + offset); }
+        }
+    };
+    int64_t netWs = (static_cast<int64_t>(slot.loadW) - slot.pvW) * seconds;
+    breakpoint(-netWs);
+    if (c.flow.enabled) { breakpoint(-netWs - static_cast<int64_t>(c.flow.maxExportW) * seconds); }
+    return best;
 }
 } // namespace
 bool parseConfig(JsonVariantConst j, Config& out)
@@ -291,25 +377,39 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     }
     // Exclude PV from the whole plan if any slot is uncovered; never mix unknown PV with invented zero.
     if (!out.pvIncluded) { for (size_t i = 0; i < out.count; ++i) { out.steps[i].pvW = 0; } }
+#if defined(ESP32)
+    // Full HEMS targets PSRAM. Never ask the compatibility-only INTERNAL heap
+    // to absorb this table, even on a variant with enough free address space.
+    if (!heap_caps_get_total_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)) { return fail("optimizer_requires_psram"); }
+#endif
     auto w = Memory::make<Workspace>();
     if (!w) { return fail("insufficient_memory"); }
     uint32_t lower = goals.reserveWh, upper = goals.ceilingWh;
     out.initialWh = std::llround(storage.socPct.value * c.capacityWh / 100.0);
     if (out.initialWh < lower || out.initialWh > upper) { return fail("storage_soc_outside_configured_bounds"); }
-    uint32_t step = std::max(static_cast<uint32_t>(1), static_cast<uint32_t>((static_cast<uint64_t>(c.capacityWh) * c.socStepPct + 99) / 100));
-    for (uint32_t e = lower; e < upper; e += step) {
-        if (out.states >= MaxStates - 3) { return fail("too_many_soc_states"); }
-        w->energy[out.states++] = e;
+    // Ignore inventory unreachable from the measured start within this horizon.
+    // This also keeps future values useful for small actions on large batteries:
+    // a 1 MWh nameplate must not dilute a 100 Wh reachable economic opportunity.
+    uint64_t chargeReach = 0, dischargeReach = 0;
+    for (size_t t = 0; t < out.count; ++t) {
+        auto limits = actionLimits(c, goals, in, out.steps[t], t);
+        chargeReach += limits.chargeWh; dischargeReach += limits.dischargeWh;
     }
-    w->energy[out.states++] = upper; w->energy[out.states++] = out.initialWh;
-    if (targetCovered) { w->energy[out.states++] = goals.targetWh; }
-    std::sort(w->energy, w->energy + out.states);
-    out.states = std::unique(w->energy, w->energy + out.states) - w->energy;
-    size_t initial = std::lower_bound(w->energy, w->energy + out.states, out.initialWh) - w->energy;
+    uint32_t sampleLower = out.initialWh - std::min<uint64_t>(out.initialWh - lower, dischargeReach);
+    uint32_t sampleUpper = out.initialWh + std::min<uint64_t>(upper - out.initialWh, chargeReach);
+    if (targetCovered && goals.targetWh > sampleUpper) { out.targetState = "target_unreachable"; return fail("target_unreachable"); }
+    // soc_step_pct remains a compatible upper bound on value-sample spacing,
+    // never a minimum physical action size. Reserve room for exact special knots.
+    uint32_t step = std::min<uint32_t>((static_cast<uint64_t>(c.capacityWh) * c.socStepPct + 99) / 100,
+        (sampleUpper - sampleLower + MaxStates - 7) / (MaxStates - 6));
+    step = std::max<uint32_t>(1, step);
+    for (uint32_t e = sampleLower; e < sampleUpper; e += step) { w->energy[out.states++] = e; }
+    w->energy[out.states++] = sampleUpper; w->energy[out.states++] = out.initialWh;
+    if (targetCovered && goals.targetWh >= sampleLower) { w->energy[out.states++] = goals.targetWh; }
     // A bounded continuation table replaces the moving start-energy floor.
     // Credible covered future tariffs cap inventory at its future refill value.
     // Missing tail tariffs use a transparent robust covered-price assumption,
-    // independent of the current SoC. Scratch reuses the not-yet-used parents.
+    // independent of the current SoC. Price scratch is fixed and bounded.
     uint64_t loadWs = 0; uint32_t duration = 0;
     for (size_t n = 0; n < out.count; ++n) {
         loadWs += static_cast<uint64_t>(out.steps[n].loadW) * (out.steps[n].end - out.steps[n].start);
@@ -334,48 +434,73 @@ bool calculate(Config const& c, Inputs const& in, Plan& out)
     out.terminalPrice = c.terminalPriceConfigured ? c.terminalPriceMicros : std::max(0, assumedPrice);
     out.terminalDemandWh = std::min<uint64_t>(upper - lower,
         (loadWs / std::max<uint32_t>(1, duration)) * c.terminalHours * 1000 / c.dischargePermille);
-    for (size_t n = 0; n < out.states; ++n) { w->terminal[n] = terminalValue(c, out, w->energy[n]); }
-    w->previous[initial] = { 0, 0 };
+    w->energy[out.states++] = std::clamp(lower + out.terminalDemandWh, sampleLower, sampleUpper);
+    std::sort(w->energy, w->energy + out.states);
+    out.states = std::unique(w->energy, w->energy + out.states) - w->energy;
+    out.states += 2; // Exact lower/upper domain edges in each time layer.
+    chargeReach = dischargeReach = 0;
+    w->required[0] = w->reachableUpper[0] = out.initialWh;
     for (size_t t = 0; t < out.count; ++t) {
-        std::fill(std::begin(w->next), std::end(w->next), Score {});
-        auto& slot = out.steps[t];
-        Flow baseline;
-        if (!transition(c, goals, in, slot, t, out.initialWh, out.initialWh, baseline, targetCovered)
-                || (targetCovered && slot.end == goals.deadline && out.initialWh < goals.targetWh)) { out.baselineValid = false; }
-        if (out.baselineValid) { out.baselineNano += baseline.cost / 2; }
-        for (size_t from = 0; from < out.states; ++from) {
-            if (w->previous[from].cost == Infinity) { continue; }
-            for (size_t to = 0; to < out.states; ++to) {
-                // At the deadline the target is a lower bound, not a price-ranking heuristic.
-                if (targetCovered && slot.end == goals.deadline && w->energy[to] < goals.targetWh) { continue; }
-                Flow f;
-                if (!transition(c, goals, in, slot, t, w->energy[from], w->energy[to], f, targetCovered, w->energy[std::min<size_t>(to + 1, out.states - 1)])) { continue; }
-                Score candidate { w->previous[from].cost + f.cost,
-                    w->previous[from].throughput + static_cast<uint64_t>(std::abs(static_cast<int64_t>(w->energy[to]) - w->energy[from])) };
-                if (better(candidate, w->next[to])) { w->next[to] = candidate; w->parent[t][to] = from; }
-            }
-        }
-        std::copy(std::begin(w->next), std::end(w->next), std::begin(w->previous));
+        auto limits = actionLimits(c, goals, in, out.steps[t], t);
+        chargeReach += limits.chargeWh; dischargeReach += limits.dischargeWh;
+        w->required[t + 1] = out.initialWh - std::min<uint64_t>(out.initialWh - lower, dischargeReach);
+        w->reachableUpper[t + 1] = out.initialWh + std::min<uint64_t>(upper - out.initialWh, chargeReach);
     }
-    size_t selected = 0; Score best;
-    for (size_t i = 0; i < out.states; ++i) {
-        if (w->previous[i].cost == Infinity) { continue; }
-        Score candidate { w->previous[i].cost + 2 * w->terminal[i], w->previous[i].throughput };
-        if (better(candidate, best)) { best = candidate; selected = i; }
+    if (targetCovered && cursor == goals.deadline) { w->required[out.count] = std::max(w->required[out.count], goals.targetWh); }
+    for (size_t t = out.count; t-- > 0;) {
+        auto limits = actionLimits(c, goals, in, out.steps[t], t);
+        uint32_t required = w->required[t + 1];
+        if (targetCovered && out.steps[t].end == goals.deadline) { required = std::max(required, goals.targetWh); w->required[t + 1] = required; }
+        w->required[t] = std::max(w->required[t], required - std::min(required, limits.chargeWh));
     }
-    if (w->previous[selected].cost == Infinity) {
+    if (out.initialWh < w->required[0]) {
         out.targetState = targetCovered ? "target_unreachable" : out.targetState;
         return fail(targetCovered ? "target_unreachable" : "no_feasible_plan");
     }
-    out.finalWh = w->energy[selected];
-    out.terminalNano = w->terminal[selected] - terminalValue(c, out, out.initialWh);
-    out.optimizedNano = w->previous[selected].cost / 2 + out.terminalNano;
+    for (size_t n = 0; n < out.states; ++n) {
+        uint32_t wh = n + 1 == out.states ? w->required[out.count]
+            : n + 2 == out.states ? w->reachableUpper[out.count] : w->energy[n];
+        w->value[out.count][n] = wh < w->required[out.count] || wh > w->reachableUpper[out.count]
+            ? Score {} : Score {2 * terminalValue(c, out, wh), 0};
+    }
     for (size_t t = out.count; t-- > 0;) {
-        size_t from = w->parent[t][selected]; auto& slot = out.steps[t]; Flow flow;
-        transition(c, goals, in, slot, t, w->energy[from], w->energy[selected], flow, targetCovered);
-        slot.startWh = w->energy[from]; slot.endWh = w->energy[selected];
-        applyFlow(slot, flow);
-        selected = from;
+        for (size_t n = 0; n < out.states; ++n) {
+            uint32_t wh = n + 1 == out.states ? w->required[t]
+                : n + 2 == out.states ? w->reachableUpper[t] : w->energy[n];
+            w->value[t][n] = wh < w->required[t] || wh > w->reachableUpper[t] ? Score {} : choose(c, goals, in, out, *w, t, wh).score;
+        }
+    }
+    uint32_t energy = out.initialWh;
+    int64_t cost = 0;
+    for (size_t t = 0; t < out.count; ++t) {
+        auto& slot = out.steps[t];
+        Flow baseline;
+        if (!transition(c, goals, in, slot, t, out.initialWh, out.initialWh, baseline)
+                || (targetCovered && slot.end == goals.deadline && out.initialWh < goals.targetWh)) { out.baselineValid = false; }
+        if (out.baselineValid) { out.baselineNano += baseline.cost / 2; }
+        auto choice = choose(c, goals, in, out, *w, t, energy);
+        if (choice.score.cost == Infinity) {
+            out.targetState = targetCovered ? "target_unreachable" : out.targetState;
+            return fail(targetCovered ? "target_unreachable" : "no_feasible_plan");
+        }
+        Flow f;
+        if (!transition(c, goals, in, slot, t, energy, choice.energy, f)) { return fail("no_feasible_plan"); }
+        slot.startWh = energy; slot.endWh = choice.energy; applyFlow(slot, f);
+        cost += f.cost; energy = choice.energy;
+    }
+    out.finalWh = energy;
+    out.terminalNano = terminalValue(c, out, energy) - terminalValue(c, out, out.initialWh);
+    out.optimizedNano = cost / 2 + out.terminalNano;
+    // Interpolation approximates future cost, never physical energy. Publish
+    // actual replayed costs, and retain the feasible hold benchmark if numerical
+    // approximation would otherwise make the resulting schedule more expensive.
+    if (out.baselineValid && out.optimizedNano > out.baselineNano) {
+        for (size_t t = 0; t < out.count; ++t) {
+            auto& slot = out.steps[t]; Flow hold;
+            transition(c, goals, in, slot, t, out.initialWh, out.initialWh, hold);
+            slot.startWh = slot.endWh = out.initialWh; applyFlow(slot, hold);
+        }
+        out.finalWh = out.initialWh; out.terminalNano = 0; out.optimizedNano = out.baselineNano;
     }
     totals(c, out);
     if (targetCovered) { out.targetState = "target_planned"; }
@@ -398,7 +523,7 @@ bool evaluateRetained(Config const& c, Inputs const& in, Plan const& candidate, 
             int64_t delta = (static_cast<int64_t>(retained->endWh) - retained->startWh) * (slot.end - slot.start) / (retained->end - retained->start);
             int64_t next = static_cast<int64_t>(energy) + delta;
             if (next < goals.reserveWh || next > goals.ceilingWh || (goals.deadline == slot.end && next < goals.targetWh)) { return false; }
-            Flow f; if (!transition(c, goals, in, slot, n, energy, next, f, candidate.targetDeadline && candidate.targetDeadline <= candidate.steps[candidate.count - 1].end)) { return false; }
+            Flow f; if (!transition(c, goals, in, slot, n, energy, next, f)) { return false; }
             if (pass) { out.steps[n].startWh = energy; out.steps[n].endWh = next; applyFlow(out.steps[n], f); }
             cost += f.cost; energy = next;
         }
