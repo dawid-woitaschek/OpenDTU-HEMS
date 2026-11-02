@@ -97,6 +97,36 @@ Economic storage dispatch is implemented as a separate explicit default-off opt-
 
 Manual storage commands persist a reboot-safe pause before queueing. Only authenticated explicit Resume clears that pause and requests fresh planning. Economic command ownership and cleanup remain source-specific; reboot reconstructs no ownership or plan. Software validation covers current-slot authority, revocation, retry bounds, stale/unreachable conditions, manual precedence, EV Protection precedence and semantic-only actuation. Physical charging/discharging behavior remains to be validated on the actual Marstek installation.
 
+### Unresolved optimizer defects (2026-11-02)
+
+Deterministic adversarial reproducers based on `remote-telemetry-sender` head
+`998620bb` demonstrate the following **unresolved software defects**. The
+implemented features and historical validation records do not establish these
+invariants. This test-only follow-up changes no production optimizer behavior or
+Remote Diagnostics / telemetry functionality.
+
+| ID | Unresolved issue reproduced |
+|---|---|
+| KD01 | The SoC/action-state lattice blocks feasible small charge and discharge actions: a 25 Wh action fits the 100 W / 15-minute limit and is accepted by the production retained-plan evaluator, but the 500 Wh lattice cannot choose it. |
+| KD02 | With PV export forbidden and battery export allowed, simultaneous battery discharge permits PV export leakage; modeled export exceeds the energy supplied by the battery. |
+| KD03 | Terminal inventory receives a future-use credit and induces charging even while the persistent policy forbids discharge. |
+| KD04 | Equivalent pointwise tariffs with different future interval segmentation produce different terminal prices and planning results. |
+| KD05 | Under the same fresh Local First flow and limits, the planner requests 1200 W charge while the coordinator selects 1500 W. |
+| KD06 | A target beyond the planning horizon is marked incomplete, but current discharge can make it physically unreachable: 500 Wh remains with at most 500 Wh recharge before a 1400 Wh target. Holding the initial inventory preserves feasibility. |
+| KD07 | An expired, fulfilled one-shot target continues to block later planning with `target_deadline_passed`; disabling that target restores planning. |
+| KD08 | One uncovered later PV slot causes valid, fresh, planning-usable PV data in a covered current slot to be discarded from the entire plan. |
+
+[`test_optimizer_known_defects.cpp`](../test/test_optimizer_known_defects.cpp)
+contains nine cases for these eight findings (KD01 has charge/discharge variants).
+Each checks a desired invariant after feasibility/comparison controls. Expected
+invariant failures are reported as `XFAIL`; setup/control failures and unexpected
+passes fail the target. A successful reproducer run means the defects remain
+reproducible, **not that current behavior is correct or fixed**. See the
+[focused command and test semantics](../test/README.md#optimizer-known-defect-reproducers).
+These are local native software reproductions; no new CI, firmware-build or
+physical validation is claimed. Correctness fixes and their regression tests
+remain separate work.
+
 ## Merged PR #34 - coordinated energy management
 
 The existing bounded global DP (`T ≤ 256`, `S ≤ 54`, `O(T × S²)`) now includes

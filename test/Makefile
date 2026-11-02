@@ -270,3 +270,15 @@ clean-remote-hems:
 	rm -f test_remote_hems
 
 test_remote_hems test_remote_schedule: $(REMOTE_HEADERS)
+
+# Unresolved optimizer defects: desired invariants XFAIL; setup failures/XPASS fail.
+all: test_optimizer_known_defects
+test_optimizer_known_defects: test_optimizer_known_defects.cpp $(wildcard ../include/hems/optimizer/*.h ../include/hems/flow/*.h ../include/hems/energy/*.h ../include/hems/policies/*.h ../include/hems/load/*.h ../include/hems/model/*.h ../include/hems/constraints/*.h) ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+.PHONY: optimizer-known-defects-test clean-optimizer-known-defects
+test: optimizer-known-defects-test
+optimizer-known-defects-test: test_optimizer_known_defects
+	./test_optimizer_known_defects
+clean: clean-optimizer-known-defects
+clean-optimizer-known-defects:
+	rm -f test_optimizer_known_defects
