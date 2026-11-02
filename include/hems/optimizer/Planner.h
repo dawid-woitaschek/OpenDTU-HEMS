@@ -7,7 +7,10 @@
 #include <hems/constraints/Constraints.h>
 #include <hems/policies/StorageEconomic.h>
 namespace Hems::Optimizer {
-constexpr size_t MaxSteps = 256, MaxStates = 54;
+// Exact whole-Wh states in the horizon-reachable inventory range. Resource
+// limits fail explicitly; they never coarsen states or publish an approximation.
+constexpr size_t MaxSteps = 256, MaxStates = 32769;
+constexpr uint32_t MaxWorkUnits = 600000000;
 struct Config {
     bool socBoundsConfigured = false;
     bool enabled = false, effectivePrice = true, exportConfigured = false;
@@ -57,6 +60,7 @@ struct Plan {
     uint16_t count = 0, states = 0;
     bool pvIncluded = false, partial = false, terminalFutureCovered = false;
     uint32_t generatedAt = 0, initialWh = 0, finalWh = 0, runtimeUs = 0;
+    uint32_t workUnits = 0, workspaceBytes = 0;
     int64_t baselineNano = 0, optimizedNano = 0;
     int64_t importNano = 0, exportNano = 0, degradationNano = 0, bufferNano = 0, terminalNano = 0, curtailedWs = 0;
     uint64_t internalAbsWh = 0;

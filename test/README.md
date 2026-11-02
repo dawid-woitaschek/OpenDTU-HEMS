@@ -86,25 +86,48 @@ to use the installed PlatformIO headers). No firmware build, network, hardware o
 wall-clock time is needed to run the suite. `make test` also includes it, and
 `make clean` removes its executable.
 
-`test_optimizer_known_defects.cpp` calls the unmodified production planner,
-retained-plan evaluator, forecast provider and live flow coordinator. Its nine
-cases cover eight **unresolved defects**: KD01 small charge/discharge actions,
-KD02 forbidden PV export leakage, KD03 policy-forbidden terminal use, KD04
-equivalent tariff segmentation, KD05 Local First planner/coordinator mismatch,
-KD06 future-target reachability, KD07 expired fulfilled targets and KD08 partial
-PV forecast loss. Fixed UTC input, unity efficiencies and feasibility/comparison
-controls keep each counterexample deterministic and independently reviewable.
+`test_optimizer_known_defects.cpp` calls the production planner, retained-plan
+evaluator, forecast provider and live flow coordinator. Its nine audit cases now
+require **three ordinary PASS results**: KD01 small charge, KD01 small discharge,
+and the original coupled KD05 Local First witness. The latter passes naturally
+from removal of the action lattice; it does not prove broader coordinator/policy
+consistency. The remaining six cases (KD02–KD04 and KD06–KD08) retain their original
+bodies and expected final-invariant `XFAIL` behavior.
 
-These tests assert **desired behavior**, not the defective output as a golden
-result. Only each case's final invariant can produce the expected `XFAIL`.
-Setup/control exceptions are hard failures; a crash also fails the executable.
-`XPASS` fails the target too: investigate changed behavior and move the desired
-assertion into ordinary regression coverage when the defect is fixed. All cases
-run even if another case fails. Exit zero with nine `XFAIL` lines means all nine
-counterexamples reproduced; it is not optimizer correctness, CI or hardware
-validation. No production fix is included. The [current status](../docs/HEMS_Current_Status.md#unresolved-optimizer-defects-2026-11-02)
-and [roadmap](../docs/HEMS_Roadmap.md#unresolved-optimizer-correctness-work-2026-11-02)
-track the unresolved work.
+Fixed cases fail on any invariant violation. Unresolved cases fail on unexpected
+`XPASS`; setup/control errors also fail. All cases run even if another fails.
+Exit zero means the three regressions passed and six unresolved counterexamples
+reproduced; XFAIL is not optimizer correctness or hardware validation.
+
+Additional focused KD01 checks:
+
+```sh
+make -C test optimizer-actions-test optimizer-optimality-test test_hems_memory ARDUINOJSON=../work/ArduinoJson/src
+(cd test && ./test_hems_memory)
+```
+
+`test_optimizer_actions` covers 1/3/25 Wh actions independent of the legacy SoC
+step field, off-grid measured SoC, 10 kWh/1 MWh capacities with bounded reachable
+ranges, current/device limits, efficiency losses, PV-only charge, repeated/global
+price decisions, split in-horizon targets, exact replay and the 256-slot cap.
+
+`test_optimizer_optimality` uses an independent exhaustive whole-Wh oracle at
+5/10/15/20 kWh, not only tiny fixtures: 48 seeded mixed price/PV/export cases,
+targets and split deadlines, 85–99.9% efficiencies, negative prices/export prices,
+wear, Local First saturation and 24/96-slot accumulation regressions. It compares
+primary objective, secondary throughput and physical replay, records representative
+24/48-hour runtimes and tests explicit state/work exhaustion. The target uses `-O2`
+so exhaustive reference loops remain practical. `--quick` skips long-horizon/runtime
+and exhaustion checks for focused sanitizer runs; default runs retain them.
+
+`test_hems_memory` exercises the actual ESP32 allocator path for metadata and
+three-row/deque storage, both allocation-failure stages, recovery and absent-PSRAM
+refusal before any large INTERNAL allocation. Other HEMS allocations keep their
+compatibility fallback. See the [independent evidence and exactness proof](../docs/HEMS_Optimizer_Exactness.md),
+[status/resource review](../docs/HEMS_Current_Status.md#optimizer-audit-2026-11-02)
+and [roadmap](../docs/HEMS_Roadmap.md#optimizer-correctness-follow-up-2026-11-02).
+These are software checks; Device A timing/headroom and physical behavior remain
+separate acceptance gates.
 
 ## Tariff / forecast and Admin regression coverage
 

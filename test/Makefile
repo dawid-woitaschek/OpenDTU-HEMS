@@ -43,7 +43,7 @@ all: $(TEST_OVERSCALING) $(TEST_CHARGEDIST) $(TEST_WARP) $(TEST_EVSE) $(TEST_MOD
 
 all: test_hems_memory
 
-test_hems_memory: test_hems_memory.cpp ../include/hems/Memory.h ../include/hems/load/Profile.h ../include/hems/optimizer/Planner.h ../src/hems/profiles/Profile.cpp
+test_hems_memory: test_hems_memory.cpp memory_stubs/esp_heap_caps.h ../include/hems/Memory.h ../include/hems/load/Profile.h ../include/hems/optimizer/Planner.h ../src/hems/profiles/Profile.cpp ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
 	$(CXX) $(CXXFLAGS) -DESP32 -Imemory_stubs -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
 
 all: test_economic_dispatch test_economic_integration $(TEST_ENERGY_CHARTS_V2) test_cmt_rx_state
@@ -271,7 +271,7 @@ clean-remote-hems:
 
 test_remote_hems test_remote_schedule: $(REMOTE_HEADERS)
 
-# Unresolved optimizer defects: desired invariants XFAIL; setup failures/XPASS fail.
+# Audit suite: KD01 and the coupled KD05 witness must PASS; unresolved cases XFAIL.
 all: test_optimizer_known_defects
 test_optimizer_known_defects: test_optimizer_known_defects.cpp $(wildcard ../include/hems/optimizer/*.h ../include/hems/flow/*.h ../include/hems/energy/*.h ../include/hems/policies/*.h ../include/hems/load/*.h ../include/hems/model/*.h ../include/hems/constraints/*.h) ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
 	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
@@ -282,3 +282,27 @@ optimizer-known-defects-test: test_optimizer_known_defects
 clean: clean-optimizer-known-defects
 clean-optimizer-known-defects:
 	rm -f test_optimizer_known_defects
+
+# KD01: exact whole-Wh actions, independent of the legacy SoC-step setting.
+all: test_optimizer_actions
+test_optimizer_actions: test_optimizer_actions.cpp $(wildcard ../include/hems/optimizer/*.h) ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+.PHONY: optimizer-actions-test clean-optimizer-actions
+test: optimizer-actions-test
+optimizer-actions-test: test_optimizer_actions
+	./test_optimizer_actions
+clean: clean-optimizer-actions
+clean-optimizer-actions:
+	rm -f test_optimizer_actions
+
+# Independent exhaustive whole-Wh comparisons at realistic battery capacities.
+all: test_optimizer_optimality
+test_optimizer_optimality: test_optimizer_optimality.cpp optimizer_reference.h ../include/hems/optimizer/Planner.h ../src/hems/optimizer/Planner.cpp ../src/hems/policies/StorageEconomic.cpp ../src/hems/energy/Provider.cpp
+	$(CXX) $(CXXFLAGS) -O2 -I../include -I$(ARDUINOJSON) -o $@ $(filter %.cpp,$^)
+.PHONY: optimizer-optimality-test clean-optimizer-optimality
+test: optimizer-optimality-test
+optimizer-optimality-test: test_optimizer_optimality
+	./test_optimizer_optimality
+clean: clean-optimizer-optimality
+clean-optimizer-optimality:
+	rm -f test_optimizer_optimality

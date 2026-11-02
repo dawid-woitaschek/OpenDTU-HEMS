@@ -26,3 +26,7 @@ webapp_dist/
 /test/test_remote_hems
 /test/test_remote_schedule
 /test/test_optimizer_known_defects
+
+/test/test_optimizer_actions
+
+/test/test_optimizer_optimality

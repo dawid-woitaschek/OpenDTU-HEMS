@@ -97,39 +97,90 @@ Economic storage dispatch is implemented as a separate explicit default-off opt-
 
 Manual storage commands persist a reboot-safe pause before queueing. Only authenticated explicit Resume clears that pause and requests fresh planning. Economic command ownership and cleanup remain source-specific; reboot reconstructs no ownership or plan. Software validation covers current-slot authority, revocation, retry bounds, stale/unreachable conditions, manual precedence, EV Protection precedence and semantic-only actuation. Physical charging/discharging behavior remains to be validated on the actual Marstek installation.
 
-### Unresolved optimizer defects (2026-11-02)
+### Optimizer audit (2026-11-02)
 
-Deterministic adversarial reproducers based on `remote-telemetry-sender` head
-`998620bb` demonstrate the following **unresolved software defects**. The
-implemented features and historical validation records do not establish these
-invariants. This test-only follow-up changes no production optimizer behavior or
-Remote Diagnostics / telemetry functionality.
+The audit reproducers were introduced in PR #39 from `remote-telemetry-sender`
+head `998620bb`. **KD01 is fixed in software within the existing whole-Wh model**:
+both original 25 Wh charge/discharge witnesses now pass as ordinary regressions.
+No physical battery behavior, ESP32 planning latency or long-term stability is
+validated by this change. Remote Diagnostics / telemetry functionality is retained.
 
-| ID | Unresolved issue reproduced |
+| ID | Current software status |
 |---|---|
-| KD01 | The SoC/action-state lattice blocks feasible small charge and discharge actions: a 25 Wh action fits the 100 W / 15-minute limit and is accepted by the production retained-plan evaluator, but the 500 Wh lattice cannot choose it. |
-| KD02 | With PV export forbidden and battery export allowed, simultaneous battery discharge permits PV export leakage; modeled export exceeds the energy supplied by the battery. |
-| KD03 | Terminal inventory receives a future-use credit and induces charging even while the persistent policy forbids discharge. |
-| KD04 | Equivalent pointwise tariffs with different future interval segmentation produce different terminal prices and planning results. |
-| KD05 | Under the same fresh Local First flow and limits, the planner requests 1200 W charge while the coordinator selects 1500 W. |
-| KD06 | A target beyond the planning horizon is marked incomplete, but current discharge can make it physically unreachable: 500 Wh remains with at most 500 Wh recharge before a 1400 Wh target. Holding the initial inventory preserves feasibility. |
-| KD07 | An expired, fulfilled one-shot target continues to block later planning with `target_deadline_passed`; disabling that target restores planning. |
-| KD08 | One uncovered later PV slot causes valid, fresh, planning-usable PV data in a covered current slot to be discarded from the entire plan. |
+| KD01 | Fixed with exact global whole-Wh DP. The initial interpolated implementation was rejected after realistic reference comparisons exposed economic losses. Original charge/discharge witnesses and additional small-action, limit, loss and deadline regressions pass. |
+| KD02 | Unresolved: with PV export forbidden and battery export allowed, simultaneous battery discharge permits PV export leakage; modeled export exceeds the energy supplied by the battery. |
+| KD03 | Unresolved: terminal inventory receives a future-use credit and induces charging even while the persistent policy forbids discharge. |
+| KD04 | Unresolved: equivalent pointwise tariffs with different future interval segmentation produce different terminal prices and planning results. |
+| KD05 | Original 1200 W / 1500 W witness now passes naturally after removal of lattice-dependent Local First admission. **Broader planner/coordinator consistency remains open**; no coordinator or policy redesign or general consistency proof is included. |
+| KD06 | Unresolved: a target beyond the planning horizon is marked incomplete, but current discharge can make it physically unreachable. Holding the initial inventory preserves feasibility. |
+| KD07 | Unresolved: an expired, fulfilled one-shot target continues to block later planning with `target_deadline_passed`. |
+| KD08 | Unresolved: one uncovered later PV slot discards covered current PV from the entire plan. |
 
 [`test_optimizer_known_defects.cpp`](../test/test_optimizer_known_defects.cpp)
-contains nine cases for these eight findings (KD01 has charge/discharge variants).
-Each checks a desired invariant after feasibility/comparison controls. Expected
-invariant failures are reported as `XFAIL`; setup/control failures and unexpected
-passes fail the target. A successful reproducer run means the defects remain
-reproducible, **not that current behavior is correct or fixed**. See the
-[focused command and test semantics](../test/README.md#optimizer-known-defect-reproducers).
-These are local native software reproductions; no new CI, firmware-build or
-physical validation is claimed. Correctness fixes and their regression tests
-remain separate work.
+now requires **three PASS results** (two KD01 cases and the original coupled KD05
+witness) and **six XFAIL results** (KD02–KD04, KD06–KD08). Setup/control failures,
+regression failures and unexpected passes still fail the target. The unresolved
+case bodies are unchanged. XFAIL means reproducible defective behavior, not a fix.
+See [focused commands and semantics](../test/README.md#optimizer-known-defect-reproducers).
+
+#### KD01 exactness review and Device A resources
+
+PR #40's initial `633b9646` interpolation was **not exact**. Independent exhaustive
+whole-Wh comparisons found different, more expensive decisions at 5–20 kWh.
+For a 20 kWh alternating-price fixture, loss grew from zero at 8 slots to
+EUR 0.004639 at 24 slots and **EUR 0.013114886 at 96 slots** (approximately 2.95%
+of available modeled savings). These are observed losses, not a worst-case bound.
+No useful product approximation bound was established, so that design is replaced.
+See the [counterexample, exactness proof, resource limits and test evidence](HEMS_Optimizer_Exactness.md).
+
+The replacement preserves bounded global DP and computes the **exact minimum
+modeled half-nano objective, then minimum throughput, over feasible whole-Wh
+trajectories whenever it publishes a ready result**. Every whole-Wh inventory in
+the reachable range is represented. Exact periodic-affine action runs use sliding
+minima; iterative Hirschberg reconstruction uses three rows instead of T×S
+parents. Actual reconstructed cost/throughput must match the optimum. No future
+value interpolation, dropped economic breakpoints or approximate hold fallback
+remains. Legacy `soc_step_pct` round-trips but no longer selects resolution.
+Sub-Wh modeling and the separate unresolved policy semantics are unchanged.
+
+Bounds: 256 slots, **32,769 inventories / 32,768 Wh span**, **600 million counted
+work units including reconstruction**. State/work/memory exhaustion returns an
+explicit blocker and no ready plan, rather than changing resolution. This is an
+operation budget, not an ESP32 wall-clock deadline or a guarantee every parsed
+configuration fits. More expensive valid configurations can be unavailable.
+
+Device A remains ESP32-S3, 8 MB flash, **2 MB quad PSRAM**,
+`generic_esp32s3_usb_quad_psram`. Scratch is **38 bytes per inventory** plus native
+5,360 B metadata (compile-capped at 8 KiB), exclusively in PSRAM. Full 10–90%
+ranges need 157,398 / 309,398 / 613,398 B at 5 / 10 / 20 kWh. A 20 kWh 0–100%
+range needs 765,398 B, including a contiguous 760,038 B block. Conservative
+planner + unchanged telemetry ring/payload/JSON budget arithmetic is approximately
+**1.61 MiB** for that case before overhead/other allocations. The absolute state
+cap can need 1,250,582 B and cannot coexist with all telemetry maxima in 2 MB;
+allocation must fail without INTERNAL spill. No-PSRAM compatibility reports
+`optimizer_requires_psram` before a large allocation.
+
+Optimized native 20 kWh / 96-slot reference timing was approximately **464 ms**
+(111 million work units after exact pruning), substantially slower than sampling.
+The 20 kWh / 48-hour day/night fixture took approximately **2.316 seconds**
+natively (535 million units, about 89% of the budget), versus about 8 ms with
+sampling. The focused suite records 5/10/20 kWh 24/48-hour timings and explicit
+budget exhaustion. These are host results, **not Device A timing approval**.
+No new worker, task-stack reservation, recursive reconstruction stack or TLS policy
+is introduced. Work arrays are released before shared-worker provider TLS. Device A
+latency, watchdog/DPL/worker responsiveness, INTERNAL/TLS headroom, stack watermarks
+and PSRAM largest/free blocks remain acceptance gates. This draft establishes
+software/model correctness within explicit limits, not physical/runtime acceptance.
+
+Focused native checks cover the independent realistic-capacity exhaustive suite,
+audit/action/shadow/energy-management/service regressions, actual PSRAM allocation
+and both allocation-failure stages, plus remote sender and HEMS observations.
+The six unresolved case bodies and telemetry/diagnostics production code remain
+unchanged. No firmware build, Actions polling or physical validation is claimed.
 
 ## Merged PR #34 - coordinated energy management
 
-The existing bounded global DP (`T ≤ 256`, `S ≤ 54`, `O(T × S²)`) now includes
+The PR #34 bounded global DP (originally `T ≤ 256`, `S ≤ 54`) added
 independent PV/battery-export permissions and grid-export limits, local-first /
 economic / export-first preferences, marginal EFC-reference degradation costs,
 an optional conservative throughput margin, bounded terminal inventory valuation
@@ -147,14 +198,15 @@ wear is disclosed; active coordinated economics requires estimated or explicitly
 configured wear. Disable old WARP battery-writing rules before making HEMS the
 battery controller; WARP EV control can remain active.
 
-The expanded Result (including Plan), DP workspace, Series and optional learning
-snapshot use `hems/Memory.h`: PSRAM when present, no INTERNAL spill on PSRAM
-exhaustion, and ordinary 8-bit heap on no-PSRAM compatibility builds. The fixed
+The expanded Result (including Plan), Series and optional learning snapshot use `hems/Memory.h`: PSRAM when present, no INTERNAL spill on PSRAM
+exhaustion, and ordinary 8-bit heap on no-PSRAM compatibility builds. The KD01
+DP workspace above requires PSRAM. The fixed
 2,160-byte retained learner stays in the service's static storage, like retained
 provider Series. Constant-load mode allocates no learning snapshot. Stable Result
 publication, scratch release before provider TLS, task stacks, provider bounds,
-verified TLS and the refreshed CMT implementation are preserved. No optimizer
-redesign, new worker or Economic EV Charging implementation is included.
+verified TLS and the refreshed CMT implementation are preserved. The KD01
+follow-up above changes the DP representation and workspace budget; no new
+worker or Economic EV Charging implementation is included.
 
 See [energy-management behavior and integration evidence](HEMS_Energy_Management.md).
 Physical Marstek/WARP behavior, DPL/export transients, telemetry alignment, learned
